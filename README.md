@@ -1,4 +1,6 @@
-# This addon is currently potentially very buggy
+# This addon is currently potentially very buggy, and is still in development.
+ Expect changes frequently, or rarely.
+ 
  This is an update of the old motion trail addon by Bart Crouch.
  
  The features present in it before (basically, only motion trails for objects) work.<br>

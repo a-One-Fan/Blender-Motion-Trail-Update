@@ -11,4 +11,4 @@
  To get the addon, go to the src folder, click on the only python file there, click on raw, and save that.
  After installed, the addon is under the "Testing" tab.
  
- https://raw.githubusercontent.com/a-One-Fan/Blender-Motion-Trail-Update/one/src/animation_motion_trail_updated_0_1_0.py
+ https://raw.githubusercontent.com/a-One-Fan/Blender-Motion-Trail-Update/one/src/animation_motion_trail_updated.py

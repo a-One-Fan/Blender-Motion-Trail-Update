@@ -20,7 +20,7 @@
 bl_info = {
 	"name": "Motion Trail (update)",
 	"author": "Bart Crouch, Viktor_smg",
-	"version": (0, 1, 0),
+	"version": (0, 1, 1),
 	"blender": (3, 0, 0),
 	"location": "View3D > Toolbar > Motion Trail tab",
 	"warning": "Support for features not originally present is buggy",
@@ -286,7 +286,7 @@ def get_inverse_parents(frame, ob):
 		return get_matrix_bone_parents(ob, frame)
 	
 	if ob.parent is not None:
-		return get_matrix_obj_parents(ob.parent, frame).inverted()
+		return (ob.matrix_parent_inverse @ get_matrix_obj_parents(ob.parent, frame)).inverted()
 
 	return mathutils.Matrix()
 	
@@ -1041,20 +1041,16 @@ active_timebead, keyframes_ori, handles_ori, edit_bones):
 		#	mat = mathutils.Matrix()
 		mat = get_inverse_parents(frame, action_ob)
 
-		mouse_ori_world = screen_to_world(context, drag_mouse_ori[0],
-			drag_mouse_ori[1]) @ mat
-		vector = screen_to_world(context, event.mouse_region_x,
-			event.mouse_region_y) @ mat
+		mouse_ori_world = mat @ screen_to_world(context, drag_mouse_ori[0],
+			drag_mouse_ori[1])
+		vector = mat @ screen_to_world(context, event.mouse_region_x,
+			event.mouse_region_y)
 		d = vector - mouse_ori_world
 
 		loc_ori_ws = keyframes_ori[objectname][frame][1]
-		loc_ori_bs = loc_ori_ws @ mat
-		new_loc = loc_ori_bs + d
+		loc_ori_ls = mat @ loc_ori_ws
+		new_loc = loc_ori_ls + d
 		curves = get_curves(action_ob, child)
-		print("locs:")
-		print(loc_ori_ws)
-		print(loc_ori_bs)
-		print(new_loc)
 		for i, curve in enumerate(curves):
 			for kf in curve.keyframe_points:
 				if kf.co[0] == frame:

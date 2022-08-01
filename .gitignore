@@ -1,0 +1,5 @@
+*
+!.gitignore
+!/src/
+!*animation_motion_trail*.py
+!README.md

@@ -1062,16 +1062,17 @@ active_timebead, keyframes_ori, handles_ori, edit_bones):
 	# change 3d-location of handle
 	elif context.window_manager.motion_trail.mode == 'location' and active_handle:
 		objectname, frame, side, action_ob, child = active_handle
-		if child:
-			mat = action_ob.matrix_world.copy().inverted() @ \
-				edit_bones[child.name].copy().to_4x4()
-		else:
-			mat = mathutils.Matrix()
+		#if child:
+		#	mat = action_ob.matrix_world.copy().inverted() @ \
+		#		edit_bones[child.name].copy().to_4x4()
+		#else:
+		#	mat = mathutils.Matrix()
+		mat = get_inverse_parents(frame, action_ob)
 
-		mouse_ori_world = screen_to_world(context, drag_mouse_ori[0],
-			drag_mouse_ori[1]) @ mat
-		vector = screen_to_world(context, event.mouse_region_x,
-			event.mouse_region_y) @ mat
+		mouse_ori_world = mat @ screen_to_world(context, drag_mouse_ori[0],
+			drag_mouse_ori[1])
+		vector = mat @ screen_to_world(context, event.mouse_region_x,
+			event.mouse_region_y)
 		d = vector - mouse_ori_world
 		curves = get_curves(action_ob, child)
 
@@ -1183,16 +1184,17 @@ active_timebead, keyframes_ori, handles_ori, edit_bones):
 	elif context.window_manager.motion_trail.mode == 'timing' and \
 	active_keyframe:
 		objectname, frame, frame_ori, action_ob, child = active_keyframe
-		if child:
-			mat = action_ob.matrix_world.copy().inverted() * \
-				edit_bones[child.name].copy().to_4x4()
-		else:
-			mat = action_ob.matrix_world.copy().inverted()
+		#if child:
+		#	mat = action_ob.matrix_world.copy().inverted() * \
+		#		edit_bones[child.name].copy().to_4x4()
+		#else:
+		#	mat = action_ob.matrix_world.copy().inverted()
+		mat = get_inverse_parents(frame, action_ob)
 
-		mouse_ori_world = screen_to_world(context, drag_mouse_ori[0],
-			drag_mouse_ori[1]) * mat
-		vector = screen_to_world(context, event.mouse_region_x,
-			event.mouse_region_y) * mat
+		mouse_ori_world = mat @ screen_to_world(context, drag_mouse_ori[0],
+			drag_mouse_ori[1])
+		vector = mat @ screen_to_world(context, event.mouse_region_x,
+			event.mouse_region_y)
 		d = vector - mouse_ori_world
 
 		locs_ori = [[f_ori, coords] for f_mapped, [f_ori, coords] in
@@ -1258,16 +1260,17 @@ active_timebead, keyframes_ori, handles_ori, edit_bones):
 	elif context.window_manager.motion_trail.mode == 'speed' and \
 	active_timebead:
 		objectname, frame, frame_ori, action_ob, child = active_timebead
-		if child:
-			mat = action_ob.matrix_world.copy().inverted() * \
-				edit_bones[child.name].copy().to_4x4()
-		else:
-			mat = 1
+		#if child:
+		#	mat = action_ob.matrix_world.copy().inverted() * \
+		#		edit_bones[child.name].copy().to_4x4()
+		#else:
+		#	mat = 1
+		mat = get_inverse_parents(frame, action_ob)
 
-		mouse_ori_world = screen_to_world(context, drag_mouse_ori[0],
-			drag_mouse_ori[1]) * mat
-		vector = screen_to_world(context, event.mouse_region_x,
-			event.mouse_region_y) * mat
+		mouse_ori_world = mat @ screen_to_world(context, drag_mouse_ori[0],
+			drag_mouse_ori[1])
+		vector = mat @ screen_to_world(context, event.mouse_region_x,
+			event.mouse_region_y)
 		d = vector - mouse_ori_world
 
 		# determine direction (to next or previous keyframe)
@@ -1284,12 +1287,11 @@ active_timebead, keyframes_ori, handles_ori, edit_bones):
 		kf_prev = keyframes[frame_index - 1]
 		kf_next = keyframes[frame_index + 1]
 		vec_prev = (
-				mathutils.Vector(keyframes_ori[objectname][kf_prev][1]) *
-				mat - loc_ori
-				).normalized()
-		vec_next = (mathutils.Vector(keyframes_ori[objectname][kf_next][1]) *
-				mat - loc_ori
-				).normalized()
+				(mathutils.Matrix.Translation(-loc_ori) @ mat) @ \
+				mathutils.Vector(keyframes_ori[objectname][kf_prev][1])).normalized()
+		vec_next = (
+				(mathutils.Matrix.Translation(-loc_ori) @ mat) @ \
+				mathutils.Vector(keyframes_ori[objectname][kf_next][1])).normalized()
 		d_normal = d.copy().normalized()
 		dist_to_next = (d_normal - vec_next).length
 		dist_to_prev = (d_normal - vec_prev).length

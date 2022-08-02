@@ -182,6 +182,7 @@ def world_to_screen(context, vector):
 
 	return(x, y)
 
+# Turn location, rotation and scale in an action into a usable matrix
 def get_matrix_action(action, frame, locpath, rotpath, sclpath, quat,
 defaultLoc = None, defaultRot = None, defaultScale = None):
 	rotrange = 4
@@ -208,7 +209,9 @@ defaultLoc = None, defaultRot = None, defaultScale = None):
 		scale = mathutils.Vector([c.evaluate(frame) for c in sclcurves])
 		
 	return mathutils.Matrix.LocRotScale(loc, rot, scale)
-	
+
+# Get the locrotscale matrix from the fcurves for a given frame and action for an object
+# (or posebone, for which this works fine as well)
 def get_matrix_frame(obj, frame, action):
 	locpath = obj.path_from_id("location")
 	rotpath = ""
@@ -223,6 +226,7 @@ def get_matrix_frame(obj, frame, action):
 	return get_matrix_action(action, frame, locpath, rotpath, sclpath, quat,
 	obj.location, obj.rotation_quaternion if quat else obj.rotation_euler, obj.scale)
 	
+# Get the world-ish matrix for an object, factoring in its parents recursively, if any
 def get_matrix_obj_parents(obj, frame):
 	mat = None
 	if obj.animation_data:
@@ -236,6 +240,8 @@ def get_matrix_obj_parents(obj, frame):
 		
 	return parentMat @ mat
 
+# Get the world-ish matrix for a posebone, factoring in its parents recursively, if any
+# and then factoring in the armature object and its parents
 def get_matrix_bone_parents(pose_bone, frame, is_first = True):
 	mat = None
 	ob = pose_bone.id_data
@@ -259,25 +265,6 @@ def get_matrix_bone_parents(pose_bone, frame, is_first = True):
 
 # calculate location of display_ob in worldspace
 def get_location(frame, display_ob, offset_ob, curves, context):
-	#if offset_ob:
-		#context.scene.frame_set(frame)
-
-		#display_mat = getattr(display_ob, "matrix", False)
-
-		#if not display_mat:
-			# posebones have "matrix", objects have "matrix_world"
-			#display_mat = display_ob.matrix_world
-		#if offset_ob:
-			#loc = display_mat.to_translation() + \
-				#offset_ob.matrix_world.to_translation()
-		#else:
-			#loc = display_mat.to_translation()
-	#else:
-		#fcx, fcy, fcz = curves
-		#locx = fcx.evaluate(frame)
-		#locy = fcy.evaluate(frame)
-		#locz = fcz.evaluate(frame)
-	
 	if type(display_ob) is bpy_types.PoseBone:
 		return (get_matrix_bone_parents(display_ob, frame).to_translation())
 	
@@ -286,6 +273,8 @@ def get_location(frame, display_ob, offset_ob, curves, context):
 
 	return (mathutils.Vector([c.evaluate(frame) for c in curves]))
 
+# Calculate an inverse matrix for an object or bone, such that it's suitable for the addon's
+# manipulation of keyframes (IE without the very last animation applied)
 def get_inverse_parents(frame, ob):
 	if type(ob) is bpy_types.PoseBone:
 		return get_matrix_bone_parents(ob, frame)
@@ -414,14 +403,8 @@ def calc_callback(self, context):
 				if not child:
 					self.edit_bones[action_ob.name] = None
 				else:
-					#print("setting edit mode")
-					#bpy.ops.object.mode_set(mode='EDIT')
-					#print("set edit mode.")
-					#editbones = action_ob.data.edit_bones
 					editbones = action_ob.data.bones
 					mat = editbones[child.name].matrix.copy().to_3x3().inverted()
-					#print("setting pose mode")
-					#bpy.ops.object.mode_set(mode='POSE')
 					self.edit_bones[child.name] = mat
 			if not action_ob.animation_data:
 				continue
@@ -725,8 +708,6 @@ def draw_callback(self, context):
 	else:
 		limit_max = 1e6
 	# draw motion path
-	#bgl.glEnable(bgl.GL_BLEND)
-	#bgl.glLineWidth(context.window_manager.motion_trail.path_width)
 	width = context.window_manager.motion_trail.path_width
 	uniform_line_shader = gpu.shader.from_builtin('3D_POLYLINE_UNIFORM_COLOR')
 	colored_line_shader = gpu.shader.from_builtin('3D_POLYLINE_SMOOTH_COLOR')
@@ -737,19 +718,14 @@ def draw_callback(self, context):
 	cols = []
 	
 	if context.window_manager.motion_trail.path_style == 'simple':
-		#bgl.glColor4f(0.0, 0.0, 0.0, alpha)
 		uniform_line_shader.bind()
 		uniform_line_shader.uniform_float("color", (0.0, 0.0, 0.0, alpha))
 		uniform_line_shader.uniform_float("lineWidth", width)
-		#uniform_line_shader.uniform_float("ModelViewProjectionMatrix")
 		for objectname, path in self.paths.items():
-			#bgl.glBegin(bgl.GL_LINE_STRIP)
 			for x, y, color, frame, action_ob, child in path:
 				if frame < limit_min or frame > limit_max:
 					continue
-				#bgl.glVertex2i(x, y)
 				poss.append((x, y, 0))
-			#bgl.glEnd()
 			batch = batch_for_shader(uniform_line_shader, 'LINE_STRIP', {"pos": poss})
 			batch.draw(uniform_line_shader)
 			poss.clear()
@@ -764,13 +740,7 @@ def draw_callback(self, context):
 				if i != 0:
 					prev_path = path[i - 1]
 					halfway = [(x + prev_path[0]) / 2, (y + prev_path[1]) / 2]
-					
-					#bgl.glColor4f(r, g, b, alpha)
-					#bgl.glBegin(bgl.GL_LINE_STRIP)
-					#bgl.glVertex2i(int(halfway[0]), int(halfway[1]))
-					#bgl.glVertex2i(x, y)
-					#bgl.glEnd()
-					
+
 					cols.append((r, g, b, alpha))
 					poss.append((int(halfway[0]), int(halfway[1]), 0.0))
 					cols.append((r, g, b, alpha))
@@ -779,13 +749,7 @@ def draw_callback(self, context):
 				if i != len(path) - 1:
 					next_path = path[i + 1]
 					halfway = [(x + next_path[0]) / 2, (y + next_path[1]) / 2]
-					
-					#bgl.glColor4f(r, g, b, alpha)
-					#bgl.glBegin(bgl.GL_LINE_STRIP)
-					#bgl.glVertex2i(x, y)
-					#bgl.glVertex2i(int(halfway[0]), int(halfway[1]))
-					#bgl.glEnd()
-					
+
 					cols.append((r, g, b, alpha))
 					poss.append((x, y, 0.0))
 					cols.append((r, g, b, alpha))
@@ -798,9 +762,6 @@ def draw_callback(self, context):
 
 	# draw frames
 	if context.window_manager.motion_trail.frame_display:
-		#bgl.glColor4f(1.0, 1.0, 1.0, 1.0)
-		#bgl.glPointSize(1)
-		#bgl.glBegin(bgl.GL_POINTS)
 		colored_points_shader.bind()
 		point_poss = []
 		point_cols = []
@@ -810,24 +771,11 @@ def draw_callback(self, context):
 					continue
 				if self.active_frame and objectname == self.active_frame[0] \
 				and abs(frame - self.active_frame[1]) < 1e-4:
-					#bgl.glEnd()
-					#bgl.glColor4f(1.0, 0.5, 0.0, 1.0)
-					#bgl.glPointSize(3)
-					#bgl.glBegin(bgl.GL_POINTS)
-					#bgl.glVertex2i(x, y)
-					#bgl.glEnd()
-					#bgl.glColor4f(1.0, 1.0, 1.0, 1.0)
-					#bgl.glPointSize(1)
-					#bgl.glBegin(bgl.GL_POINTS)
-					
 					point_cols.append((1.0, 0.5, 0.0, 1.0))
 					point_poss.append((x, y))
-					#point_cols.append((1.0, 1.0, 1.0, 1.0))
 				else:
 					point_poss.append((x, y))
 					point_cols.append((1.0, 1.0, 1.0, 1.0))
-					#bgl.glVertex2i(x, y)
-		#bgl.glEnd()
 			batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
 			gpu.state.point_size_set(3.0)
 			batch.draw(colored_points_shader)
@@ -836,10 +784,6 @@ def draw_callback(self, context):
 
 	# time beads are shown in speed and timing modes
 	if context.window_manager.motion_trail.mode in ('speed', 'timing'):
-		#bgl.glColor4f(0.0, 1.0, 0.0, 1.0)
-		#bgl.glPointSize(4)
-		#bgl.glBegin(bgl.GL_POINTS)
-		
 		gpu.state.point_size_set(4.0)
 		point_poss = []
 		point_cols = []
@@ -850,20 +794,11 @@ def draw_callback(self, context):
 				if self.active_timebead and \
 				objectname == self.active_timebead[0] and \
 				abs(frame - self.active_timebead[1]) < 1e-4:
-					#bgl.glEnd()
-					#bgl.glColor4f(1.0, 0.5, 0.0, 1.0)
-					#bgl.glBegin(bgl.GL_POINTS)
-					#bgl.glVertex2i(coords[0], coords[1])
-					#bgl.glEnd()
-					#bgl.glColor4f(0.0, 1.0, 0.0, 1.0)
-					#bgl.glBegin(bgl.GL_POINTS)
 					point_cols.append((1.0, 0.5, 0.0, 1.0))
 					point_poss.append((coords[0], coords[1]))
 				else:
 					point_cols.append((0.0, 1.0, 0.0, 1.0))
 					point_poss.append((coords[0], coords[1]))
-					#bgl.glVertex2i(coords[0], coords[1])
-		#bgl.glEnd()
 			batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
 			gpu.state.point_size_set(3.0)
 			batch.draw(colored_points_shader)
@@ -872,11 +807,6 @@ def draw_callback(self, context):
 
 	# handles are only shown in location mode
 	if context.window_manager.motion_trail.mode == 'location':
-		# draw handle-lines
-		#bgl.glColor4f(0.0, 0.0, 0.0, 1.0)
-		#bgl.glLineWidth(1)
-		#bgl.glBegin(bgl.GL_LINES)
-		
 		colored_line_shader.bind()
 		colored_line_shader.uniform_float("lineWidth", 2)
 		poss = []
@@ -890,16 +820,6 @@ def draw_callback(self, context):
 					objectname == self.active_handle[0] and \
 					side == self.active_handle[2] and \
 					abs(frame - self.active_handle[1]) < 1e-4:
-						#bgl.glEnd()
-						#bgl.glColor4f(.75, 0.25, 0.0, 1.0)
-						#bgl.glBegin(bgl.GL_LINES)
-						#bgl.glVertex2i(self.keyframes[objectname][frame][0],
-						#	self.keyframes[objectname][frame][1])
-						#bgl.glVertex2i(coords[0], coords[1])
-						#bgl.glEnd()
-						#bgl.glColor4f(0.0, 0.0, 0.0, 1.0)
-						#bgl.glBegin(bgl.GL_LINES)
-						
 						cols.append((0.75, 0.25, 0.0, 1.0))
 						poss.append((self.keyframes[objectname][frame][0],
 							self.keyframes[objectname][frame][1], 0.0))
@@ -907,9 +827,6 @@ def draw_callback(self, context):
 						poss.append((coords[0], coords[1], 0.0))
 						
 					else:
-						#bgl.glVertex2i(self.keyframes[objectname][frame][0],
-						#	self.keyframes[objectname][frame][1])
-						#bgl.glVertex2i(coords[0], coords[1])
 						cols.append((0.0, 0.0, 0.0, 1.0))
 						poss.append((self.keyframes[objectname][frame][0],
 							self.keyframes[objectname][frame][1], 0.0))
@@ -919,12 +836,8 @@ def draw_callback(self, context):
 			batch.draw(colored_line_shader)
 			poss.clear()
 			cols.clear()
-		#bgl.glEnd()
 
 		# draw handles
-		#bgl.glColor4f(1.0, 1.0, 0.0, 1.0)
-		#bgl.glPointSize(4)
-		#bgl.glBegin(bgl.GL_POINTS)
 		colored_points_shader.bind()
 		gpu.state.point_size_set(4.0)
 		point_poss = []
@@ -938,32 +851,17 @@ def draw_callback(self, context):
 					objectname == self.active_handle[0] and \
 					side == self.active_handle[2] and \
 					abs(frame - self.active_handle[1]) < 1e-4:
-						pass
-						#bgl.glEnd()
-						#bgl.glColor4f(1.0, 0.5, 0.0, 1.0)
-						#bgl.glBegin(bgl.GL_POINTS)
-						#bgl.glVertex2i(coords[0], coords[1])
-						#bgl.glEnd()
-						#bgl.glColor4f(1.0, 1.0, 0.0, 1.0)
-						#bgl.glBegin(bgl.GL_POINTS)
-						
 						point_poss.append((coords[0], coords[1]))
 						point_cols.append((1.0, 0.5, 0.0, 1.0))
 					else:
-						#bgl.glVertex2i(coords[0], coords[1])
-						
 						point_poss.append((coords[0], coords[1]))
 						point_cols.append((1.0, 1.0, 0.0, 1.0))
 		batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
 		batch.draw(colored_points_shader)
 		point_poss.clear()
 		point_cols.clear()
-		#bgl.glEnd()
 
 	# draw keyframes
-	#bgl.glColor4f(1.0, 1.0, 0.0, 1.0)
-	#bgl.glPointSize(6)
-	#bgl.glBegin(bgl.GL_POINTS)
 	colored_points_shader.bind()
 	gpu.state.point_size_set(6.0)
 	point_poss = []
@@ -975,22 +873,11 @@ def draw_callback(self, context):
 			if self.active_keyframe and \
 			objectname == self.active_keyframe[0] and \
 			abs(frame - self.active_keyframe[1]) < 1e-4:
-				#bgl.glEnd()
-				#bgl.glColor4f(1.0, 0.5, 0.0, 1.0)
-				#bgl.glBegin(bgl.GL_POINTS)
-				#bgl.glVertex2i(coords[0], coords[1])
-				#bgl.glEnd()
-				#bgl.glColor4f(1.0, 1.0, 0.0, 1.0)
-				#bgl.glBegin(bgl.GL_POINTS)
-				
 				point_poss.append((coords[0], coords[1]))
 				point_cols.append((1.0, 0.5, 0.0, 1.0))
 			else:
-				#bgl.glVertex2i(coords[0], coords[1])
-				
 				point_poss.append((coords[0], coords[1]))
 				point_cols.append((1.0, 1.0, 0.0, 1.0))
-	#bgl.glEnd()
 	batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
 	batch.draw(colored_points_shader)
 	point_poss.clear()
@@ -999,7 +886,6 @@ def draw_callback(self, context):
 	# draw keyframe-numbers
 	if context.window_manager.motion_trail.keyframe_numbers:
 		blf.size(0, 12, 72)
-		#bgl.glColor4f(1.0, 1.0, 0.0, 1.0)
 		blf.color(0, 1.0, 1.0, 0.0, 1.0)
 		for objectname, values in self.keyframes.items():
 			for frame, coords in values.items():
@@ -1016,21 +902,14 @@ def draw_callback(self, context):
 				if self.active_keyframe and \
 				objectname == self.active_keyframe[0] and \
 				abs(frame - self.active_keyframe[1]) < 1e-4:
-					pass
-					#bgl.glColor4f(1.0, 0.5, 0.0, 1.0)
 					blf.color(0, 1.0, 0.5, 0.0, 1.0)
 					blf.draw(0, text)
-					#bgl.glColor4f(1.0, 1.0, 0.0, 1.0)
 				else:
 					blf.color(0, 1.0, 1.0, 0.0, 1.0)
 					blf.draw(0, text)
 
 	# restore opengl defaults
-	#bgl.glLineWidth(1)
-	#bgl.glDisable(bgl.GL_BLEND)
-	#bgl.glColor4f(0.0, 0.0, 0.0, 1.0)
-	#bgl.glPointSize(1)
-
+	gpu.state.point_size_set(1.0) # TODO: is this the correct value?
 
 # change data based on mouse movement
 def drag(context, event, drag_mouse_ori, active_keyframe, active_handle,
@@ -1039,11 +918,6 @@ active_timebead, keyframes_ori, handles_ori, edit_bones):
 	if context.window_manager.motion_trail.mode == 'location' and \
 	active_keyframe:
 		objectname, frame, frame_ori, action_ob, child = active_keyframe
-		#if child and False:
-		#	mat = action_ob.matrix_world.copy().inverted() @ \
-		#		edit_bones[child.name].copy().to_4x4()
-		#else:
-		#	mat = mathutils.Matrix()
 		mat = get_inverse_parents(frame, action_ob)
 
 		mouse_ori_world = mat @ screen_to_world(context, drag_mouse_ori[0],
@@ -1067,11 +941,6 @@ active_timebead, keyframes_ori, handles_ori, edit_bones):
 	# change 3d-location of handle
 	elif context.window_manager.motion_trail.mode == 'location' and active_handle:
 		objectname, frame, side, action_ob, child = active_handle
-		#if child:
-		#	mat = action_ob.matrix_world.copy().inverted() @ \
-		#		edit_bones[child.name].copy().to_4x4()
-		#else:
-		#	mat = mathutils.Matrix()
 		mat = get_inverse_parents(frame, action_ob)
 
 		mouse_ori_world = mat @ screen_to_world(context, drag_mouse_ori[0],
@@ -1189,11 +1058,6 @@ active_timebead, keyframes_ori, handles_ori, edit_bones):
 	elif context.window_manager.motion_trail.mode == 'timing' and \
 	active_keyframe:
 		objectname, frame, frame_ori, action_ob, child = active_keyframe
-		#if child:
-		#	mat = action_ob.matrix_world.copy().inverted() * \
-		#		edit_bones[child.name].copy().to_4x4()
-		#else:
-		#	mat = action_ob.matrix_world.copy().inverted()
 		mat = get_inverse_parents(frame, action_ob)
 
 		mouse_ori_world = mat @ screen_to_world(context, drag_mouse_ori[0],
@@ -1265,11 +1129,6 @@ active_timebead, keyframes_ori, handles_ori, edit_bones):
 	elif context.window_manager.motion_trail.mode == 'speed' and \
 	active_timebead:
 		objectname, frame, frame_ori, action_ob, child = active_timebead
-		#if child:
-		#	mat = action_ob.matrix_world.copy().inverted() * \
-		#		edit_bones[child.name].copy().to_4x4()
-		#else:
-		#	mat = 1
 		mat = get_inverse_parents(frame, action_ob)
 
 		mouse_ori_world = mat @ screen_to_world(context, drag_mouse_ori[0],

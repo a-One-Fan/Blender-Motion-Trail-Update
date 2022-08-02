@@ -20,7 +20,7 @@
 bl_info = {
 	"name": "Motion Trail (update)",
 	"author": "Bart Crouch, Viktor_smg",
-	"version": (0, 1, 1),
+	"version": (0, 2, 0),
 	"blender": (3, 0, 0),
 	"location": "View3D > Toolbar > Motion Trail tab",
 	"warning": "Support for features not originally present is buggy",
@@ -242,15 +242,20 @@ def get_matrix_bone_parents(pose_bone, frame, is_first = True):
 
 	mat = get_matrix_frame(pose_bone, frame, ob.animation_data.action)
 	
-	selfmat = pose_bone.bone.matrix_local if is_first else mathutils.Matrix()
-	#selfmat = mathutils.Matrix.Translation(pose_bone.bone.head) if is_first else mathutils.Matrix()
-	#selfmat = mathutils.Matrix()
-	#selfmat = mathutils.Matrix.Translation(pose_bone.bone.head)
+	selfmat = pose_bone.bone.matrix_local
+	
+	localmat = None
 	
 	if pose_bone.parent:
-		return get_matrix_bone_parents(pose_bone.parent, frame, False) @ selfmat @ mat
+		localmat = get_matrix_bone_parents(pose_bone.parent, frame, False) @ \
+		pose_bone.bone.parent.matrix_local.inverted() @ selfmat @ mat
 	else:
-		return get_matrix_obj_parents(ob, frame) @ selfmat @ mat
+		localmat = selfmat @ mat
+		
+	if is_first:
+		return get_matrix_obj_parents(ob, frame) @ localmat
+	
+	return localmat
 
 # calculate location of display_ob in worldspace
 def get_location(frame, display_ob, offset_ob, curves, context):

@@ -1804,12 +1804,12 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			update=internal_update
 			)
 	frame_display: BoolProperty(name="Frames",
-			description="Display frames, \n test",
+			description="Display individual frames as manipulateable dots.\nClick and drag on one to make a new keyframe",
 			default=True,
 			update=internal_update
 			)
 	handle_display: BoolProperty(name="Display",
-			description="Display handles",
+			description="Display keyframe handles",
 			default=True,
 			update=internal_update
 			)

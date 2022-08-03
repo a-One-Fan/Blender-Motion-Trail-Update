@@ -277,7 +277,17 @@ def get_location(frame, display_ob, offset_ob, curves, context):
 # manipulation of keyframes (IE without the very last animation applied)
 def get_inverse_parents(frame, ob):
 	if type(ob) is bpy_types.PoseBone:
-		return get_matrix_bone_parents(ob, frame)
+		selfmat = ob.bone.matrix_local
+	
+		localmat = None
+	
+		if ob.parent:
+			localmat = get_matrix_bone_parents(ob.parent, frame, False) @ \
+			ob.bone.parent.matrix_local.inverted() @ selfmat
+		else:
+			localmat = selfmat
+			
+		return (get_matrix_obj_parents(ob.id_data, frame) @ localmat).inverted()
 	
 	if ob.parent is not None:
 		return (ob.matrix_parent_inverse @ get_matrix_obj_parents(ob.parent, frame)).inverted()
@@ -918,8 +928,8 @@ active_timebead, keyframes_ori, handles_ori, edit_bones):
 	if context.window_manager.motion_trail.mode == 'location' and \
 	active_keyframe:
 		objectname, frame, frame_ori, action_ob, child = active_keyframe
-		mat = get_inverse_parents(frame, action_ob)
-
+		mat = get_inverse_parents(frame, child if child else action_ob)
+		
 		mouse_ori_world = mat @ screen_to_world(context, drag_mouse_ori[0],
 			drag_mouse_ori[1])
 		vector = mat @ screen_to_world(context, event.mouse_region_x,
@@ -941,7 +951,7 @@ active_timebead, keyframes_ori, handles_ori, edit_bones):
 	# change 3d-location of handle
 	elif context.window_manager.motion_trail.mode == 'location' and active_handle:
 		objectname, frame, side, action_ob, child = active_handle
-		mat = get_inverse_parents(frame, action_ob)
+		mat = get_inverse_parents(frame, child if child else action_ob)
 
 		mouse_ori_world = mat @ screen_to_world(context, drag_mouse_ori[0],
 			drag_mouse_ori[1])
@@ -1058,7 +1068,7 @@ active_timebead, keyframes_ori, handles_ori, edit_bones):
 	elif context.window_manager.motion_trail.mode == 'timing' and \
 	active_keyframe:
 		objectname, frame, frame_ori, action_ob, child = active_keyframe
-		mat = get_inverse_parents(frame, action_ob)
+		mat = get_inverse_parents(frame, child if child else action_ob)
 
 		mouse_ori_world = mat @ screen_to_world(context, drag_mouse_ori[0],
 			drag_mouse_ori[1])
@@ -1129,7 +1139,7 @@ active_timebead, keyframes_ori, handles_ori, edit_bones):
 	elif context.window_manager.motion_trail.mode == 'speed' and \
 	active_timebead:
 		objectname, frame, frame_ori, action_ob, child = active_timebead
-		mat = get_inverse_parents(frame, action_ob)
+		mat = get_inverse_parents(frame, child if child else action_ob)
 
 		mouse_ori_world = mat @ screen_to_world(context, drag_mouse_ori[0],
 			drag_mouse_ori[1])

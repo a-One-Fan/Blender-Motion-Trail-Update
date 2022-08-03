@@ -5,9 +5,9 @@
  
  The features present in it before (basically, only motion trails for objects) should work.<br>
  Selection may be a bit weird.<br>
- I'm attempting to add support for bones and parented objects (and it seems so did Crouch), support is there for trails for parented objects and bones, and for tweaking curves of parented objects.<br>
- Child of constraints are not supported, but might get added.<br>
- Moving the keyframes of any bones around will cause them to teleport initially as well as slightly break handles in the graph editor.<br>
+ I'm attempting to add support for bones and parented objects (and it seems so did Crouch). 
+ Trails and editing the trails for parented objects and bones should work!<br>
+ Child of constraints are not yet supported, but might get added.<br>
  **The addon tends to kill undos.** I'd say "save often", but that is something you should be doing anyways.
  Opening a blend file as the motion trail modal operator is running will spam your command line as the operator gets orphaned.
  

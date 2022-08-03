@@ -1404,6 +1404,8 @@ def set_handle_type(self, context):
 
 	context.window_manager.motion_trail.force_update = True
 
+def update_callback(self, context):
+	context.window_manager.motion_trail.force_update = True
 
 class MotionTrailOperator(bpy.types.Operator):
 	bl_idname = "view3d.motion_trail"
@@ -1412,6 +1414,7 @@ class MotionTrailOperator(bpy.types.Operator):
 
 	_handle_calc = None
 	_handle_draw = None
+	_handle_update = None
 
 	@staticmethod
 	def handle_add(self, context):
@@ -1419,6 +1422,8 @@ class MotionTrailOperator(bpy.types.Operator):
 			calc_callback, (self, context), 'WINDOW', 'POST_VIEW')
 		MotionTrailOperator._handle_draw = bpy.types.SpaceView3D.draw_handler_add(
 			draw_callback, (self, context), 'WINDOW', 'POST_PIXEL')
+		MotionTrailOperator._handle_update = bpy.types.SpaceGraphEditor.draw_handler_add(
+			update_callback, (self, context), 'WINDOW', 'POST_PIXEL')
 
 	@staticmethod
 	def handle_remove():
@@ -1426,8 +1431,12 @@ class MotionTrailOperator(bpy.types.Operator):
 			bpy.types.SpaceView3D.draw_handler_remove(MotionTrailOperator._handle_calc, 'WINDOW')
 		if MotionTrailOperator._handle_draw is not None:
 			bpy.types.SpaceView3D.draw_handler_remove(MotionTrailOperator._handle_draw, 'WINDOW')
+		if MotionTrailOperator._handle_update is not None:
+			bpy.types.SpaceGraphEditor.draw_handler_remove(MotionTrailOperator._handle_update, 'WINDOW')
+			
 		MotionTrailOperator._handle_calc = None
 		MotionTrailOperator._handle_draw = None
+		MotionTrailOperator._handle_update = None
 
 	def modal(self, context, event):
 		# XXX Required, or custom transform.translate will break!

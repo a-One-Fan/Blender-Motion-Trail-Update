@@ -1239,9 +1239,7 @@ keyframes_ori, handles_ori, edit_bones):
 		objectname, frame, frame_ori, active_ob, child = active_keyframe
 		curves = get_curves(active_ob, child)
 		loc_ori = keyframes_ori[objectname][frame][1]
-		if child:
-			loc_ori = loc_ori @ edit_bones[child.name] @ \
-				active_ob.matrix_world.copy().inverted()
+		loc_ori = get_inverse_parents(frame, child if child else active_ob) @ loc_ori
 		for i, curve in enumerate(curves):
 			for kf in curve.keyframe_points:
 				if kf.co[0] == frame:

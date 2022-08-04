@@ -20,7 +20,7 @@
 bl_info = {
 	"name": "Motion Trail (update)",
 	"author": "Bart Crouch, Viktor_smg",
-	"version": (0, 5, 1),
+	"version": (0, 6, 0),
 	"blender": (3, 3, 0),
 	"location": "View3D > Toolbar > Motion Trail tab",
 	"warning": "Support for features not originally present is buggy",
@@ -935,6 +935,7 @@ active_timebead, keyframes_ori, handles_ori, edit_bones):
 	active_keyframe:
 		objectname, frame, frame_ori, action_ob, child = active_keyframe
 		mat = get_inverse_parents(frame, child if child else action_ob)
+		mt = context.window_manager.motion_trail
 		
 		mouse_ori_world = mat @ screen_to_world(context, drag_mouse_ori[0],
 			drag_mouse_ori[1])
@@ -946,6 +947,15 @@ active_timebead, keyframes_ori, handles_ori, edit_bones):
 		loc_ori_ls = mat @ loc_ori_ws
 		new_loc = loc_ori_ls + d
 		curves = get_curves(action_ob, child)
+		
+		if not mt.backed_up_keyframes:
+			for i, curve in enumerate(curves):
+				for kf in curve.keyframe_points:
+					if kf.co[0] == frame:
+						mt.keyframe_backup[i] = kf.co[1]
+						break
+			mt.backed_up_keyframes = True
+		
 		for i, curve in enumerate(curves):
 			for kf in curve.keyframe_points:
 				if kf.co[0] == frame:
@@ -1238,15 +1248,14 @@ keyframes_ori, handles_ori, edit_bones):
 	active_keyframe:
 		objectname, frame, frame_ori, active_ob, child = active_keyframe
 		curves = get_curves(active_ob, child)
-		loc_ori = keyframes_ori[objectname][frame][1]
-		loc_ori = get_inverse_parents(frame, child if child else active_ob) @ loc_ori
 		for i, curve in enumerate(curves):
 			for kf in curve.keyframe_points:
 				if kf.co[0] == frame:
-					kf.co[1] = loc_ori[i]
+					kf.co[1] = context.window_manager.motion_trail.keyframe_backup[i]
 					kf.handle_left[1] = handles_ori[objectname][frame]["left"][i][1]
 					kf.handle_right[1] = handles_ori[objectname][frame]["right"][i][1]
 					break
+		context.window_manager.motion_trail.backed_up_keyframes = False
 
 	# revert change in 3d-location of active handle
 	elif context.window_manager.motion_trail.mode == 'location' and \
@@ -1465,6 +1474,7 @@ class MotionTrailOperator(bpy.types.Operator):
 				self.drag = False
 				self.lock = True
 				context.window_manager.motion_trail.force_update = True
+				context.window_manager.motion_trail.backed_up_keyframes = False
 			# default hotkeys should still work
 			if event.type == self.transform_key and event.value == 'PRESS':
 				if bpy.ops.transform.translate.poll():
@@ -1508,6 +1518,7 @@ class MotionTrailOperator(bpy.types.Operator):
 				self.drag = False
 				self.lock = True
 				context.window_manager.motion_trail.force_update = True
+				context.window_manager.motion_trail.backed_up_keyframes = False
 		elif event.type == self.transform_key and event.value == 'PRESS':
 			# call default translate()
 			if bpy.ops.transform.translate.poll():
@@ -1518,6 +1529,7 @@ class MotionTrailOperator(bpy.types.Operator):
 			self.drag = False
 			self.lock = True
 			context.window_manager.motion_trail.force_update = True
+			context.window_manager.motion_trail.backed_up_keyframes = False
 			self.active_keyframe, self.active_timebead = cancel_drag(context,
 				self.active_keyframe, self.active_handle,
 				self.active_timebead, self.keyframes_ori, self.handles_ori,
@@ -1607,6 +1619,7 @@ class MotionTrailOperator(bpy.types.Operator):
 			self.drag = False
 			self.lock = True
 			context.window_manager.motion_trail.force_update = True
+			context.window_manager.motion_trail.backed_up_keyframes = False
 		elif event.type == 'LEFTMOUSE' and event.value == 'PRESS' and not\
 		event.alt and not event.ctrl and not event.shift:
 			if eval("bpy.ops." + self.left_action + ".poll()"):
@@ -1669,6 +1682,7 @@ class MotionTrailOperator(bpy.types.Operator):
 			self.perspective = context.region_data.perspective_matrix
 			self.displayed = []
 			context.window_manager.motion_trail.force_update = True
+			context.window_manager.motion_trail.backed_up_keyframes = False
 			context.window_manager.motion_trail.handle_type_enabled = False
 			self.cached = {
 					"path": {}, "keyframes": {},
@@ -1817,6 +1831,9 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 	force_update: BoolProperty(name="internal use",
 		description="Force calc_callback to fully execute",
 		default=False)
+		
+	keyframe_backup: FloatVectorProperty()
+	backed_up_keyframes: BoolProperty(default=False)
 
 	handle_type_enabled: BoolProperty(default=False)
 	handle_type_frame: FloatProperty()

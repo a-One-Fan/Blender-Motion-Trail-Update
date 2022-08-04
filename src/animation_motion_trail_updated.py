@@ -20,7 +20,7 @@
 bl_info = {
 	"name": "Motion Trail (update)",
 	"author": "Bart Crouch, Viktor_smg",
-	"version": (0, 4, 0),
+	"version": (0, 5, 0),
 	"blender": (3, 3, 0),
 	"location": "View3D > Toolbar > Motion Trail tab",
 	"warning": "Support for features not originally present is buggy",
@@ -45,6 +45,7 @@ from bpy.props import (
 		BoolProperty,
 		EnumProperty,
 		FloatProperty,
+		FloatVectorProperty,
 		IntProperty,
 		StringProperty,
 		PointerProperty,
@@ -53,6 +54,9 @@ from bpy.props import (
 import sys
 import traceback
 
+# Linear interpolation for 4-element tuples
+def lerp4(fac, tup1, tup2):
+	return (* [tup1[i] * fac + tup2[i]*(1.0-fac) for i in range(4)],)
 
 # fake fcurve class, used if no fcurve is found for a path
 class fake_fcurve():
@@ -479,9 +483,9 @@ def calc_callback(self, context):
 				d_speed = max(d_speed, 1e-6)
 				for i, [x, y, d_loc, frame, action_ob, child] in enumerate(path):
 					relative_speed = (d_loc - min_speed) / d_speed # 0.0 to 1.0
-					red = min(1.0, 2.0 * relative_speed)
-					blue = min(1.0, 2.0 - (2.0 * relative_speed))
-					path[i][2] = [red, 0.0, blue]
+					fac = min(1.0, 2.0 * relative_speed)
+					path[i][2] = lerp4(fac, context.window_manager.motion_trail.speed_color_min, 
+					context.window_manager.motion_trail.speed_color_max)
 			elif context.window_manager.motion_trail.path_style == 'acceleration':
 				accelerations = []
 				prev_speed = 0.0
@@ -496,14 +500,16 @@ def calc_callback(self, context):
 				for i, [x, y, accel, frame, action_ob, child] in enumerate(path):
 					if accel < 0:
 						relative_accel = accel / min_accel  # values from 0.0 to 1.0
-						green = 1.0 - relative_accel
-						path[i][2] = [1.0, green, 0.0]
+						fac = 1.0 - relative_accel
+						path[i][2] = lerp4(fac, context.window_manager.motion_trail.accel_color_neg, 
+						context.window_manager.motion_trail.accel_color_static)
 					elif accel > 0:
-						relative_accel = accel / max_accel  # values from 0.0 to 1.0
-						red = 1.0 - relative_accel
-						path[i][2] = [red, 1.0, 0.0]
+						relative_accel = accel / max_accel  # values from 1.0 to 0.0
+						fac = 1.0 - relative_accel
+						path[i][2] = lerp4(fac, context.window_manager.motion_trail.accel_color_static, 
+						context.window_manager.motion_trail.accel_color_pos)
 					else:
-						path[i][2] = [1.0, 1.0, 0.0]
+						path[i][2] = context.window_manager.motion_trail.accel_color_static
 			self.paths[display_ob.name] = path
 			# get keyframes and handles
 			keyframes = {}
@@ -722,14 +728,13 @@ def draw_callback(self, context):
 	uniform_line_shader = gpu.shader.from_builtin('3D_POLYLINE_UNIFORM_COLOR')
 	colored_line_shader = gpu.shader.from_builtin('3D_POLYLINE_SMOOTH_COLOR')
 	colored_points_shader = gpu.shader.from_builtin('2D_FLAT_COLOR')
-	alpha = 1.0 - (context.window_manager.motion_trail.path_transparency / 100.0)
 	
 	poss = []
 	cols = []
 	
 	if context.window_manager.motion_trail.path_style == 'simple':
 		uniform_line_shader.bind()
-		uniform_line_shader.uniform_float("color", (0.0, 0.0, 0.0, alpha))
+		uniform_line_shader.uniform_float("color", context.window_manager.motion_trail.simple_color)
 		uniform_line_shader.uniform_float("lineWidth", width)
 		for objectname, path in self.paths.items():
 			for x, y, color, frame, action_ob, child in path:
@@ -746,23 +751,22 @@ def draw_callback(self, context):
 			for i, [x, y, color, frame, action_ob, child] in enumerate(path):
 				if frame < limit_min or frame > limit_max:
 					continue
-				r, g, b = color
 				if i != 0:
 					prev_path = path[i - 1]
 					halfway = [(x + prev_path[0]) / 2, (y + prev_path[1]) / 2]
 
-					cols.append((r, g, b, alpha))
+					cols.append(color)
 					poss.append((int(halfway[0]), int(halfway[1]), 0.0))
-					cols.append((r, g, b, alpha))
+					cols.append(color)
 					poss.append((x, y, 0.0))
 					
 				if i != len(path) - 1:
 					next_path = path[i + 1]
 					halfway = [(x + next_path[0]) / 2, (y + next_path[1]) / 2]
 
-					cols.append((r, g, b, alpha))
+					cols.append(color)
 					poss.append((x, y, 0.0))
-					cols.append((r, g, b, alpha))
+					cols.append(color)
 					poss.append((int(halfway[0]), int(halfway[1]), 0.0))
 			
 			batch = batch_for_shader(colored_line_shader, 'LINE_STRIP', {"pos": poss, "color": cols})
@@ -781,11 +785,11 @@ def draw_callback(self, context):
 					continue
 				if self.active_frame and objectname == self.active_frame[0] \
 				and abs(frame - self.active_frame[1]) < 1e-4:
-					point_cols.append((1.0, 0.5, 0.0, 1.0))
+					point_cols.append(context.window_manager.motion_trail.selection_color)
 					point_poss.append((x, y))
 				else:
 					point_poss.append((x, y))
-					point_cols.append((1.0, 1.0, 1.0, 1.0))
+					point_cols.append(context.window_manager.motion_trail.frame_color)
 			batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
 			gpu.state.point_size_set(3.0)
 			batch.draw(colored_points_shader)
@@ -804,10 +808,10 @@ def draw_callback(self, context):
 				if self.active_timebead and \
 				objectname == self.active_timebead[0] and \
 				abs(frame - self.active_timebead[1]) < 1e-4:
-					point_cols.append((1.0, 0.5, 0.0, 1.0))
+					point_cols.append(context.window_manager.motion_trail.selection_color)
 					point_poss.append((coords[0], coords[1]))
 				else:
-					point_cols.append((0.0, 1.0, 0.0, 1.0))
+					point_cols.append(context.window_manager.motion_trail.timebead_color)
 					point_poss.append((coords[0], coords[1]))
 			batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
 			gpu.state.point_size_set(3.0)
@@ -830,17 +834,17 @@ def draw_callback(self, context):
 					objectname == self.active_handle[0] and \
 					side == self.active_handle[2] and \
 					abs(frame - self.active_handle[1]) < 1e-4:
-						cols.append((0.75, 0.25, 0.0, 1.0))
+						cols.append(context.window_manager.motion_trail.selection_color_dark)
 						poss.append((self.keyframes[objectname][frame][0],
 							self.keyframes[objectname][frame][1], 0.0))
-						cols.append((0.75, 0.25, 0.0, 1.0))
+						cols.append(context.window_manager.motion_trail.selection_color_dark)
 						poss.append((coords[0], coords[1], 0.0))
 						
 					else:
-						cols.append((0.0, 0.0, 0.0, 1.0))
+						cols.append(context.window_manager.motion_trail.handle_line_color)
 						poss.append((self.keyframes[objectname][frame][0],
 							self.keyframes[objectname][frame][1], 0.0))
-						cols.append((0.0, 0.0, 0.0, 1.0))
+						cols.append(context.window_manager.motion_trail.handle_line_color)
 						poss.append((coords[0], coords[1], 0.0))
 			batch = batch_for_shader(colored_line_shader, 'LINES', {"pos": poss, "color": cols})
 			batch.draw(colored_line_shader)
@@ -862,10 +866,10 @@ def draw_callback(self, context):
 					side == self.active_handle[2] and \
 					abs(frame - self.active_handle[1]) < 1e-4:
 						point_poss.append((coords[0], coords[1]))
-						point_cols.append((1.0, 0.5, 0.0, 1.0))
+						point_cols.append(context.window_manager.motion_trail.selection_color)
 					else:
 						point_poss.append((coords[0], coords[1]))
-						point_cols.append((1.0, 1.0, 0.0, 1.0))
+						point_cols.append(context.window_manager.motion_trail.handle_color)
 		batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
 		batch.draw(colored_points_shader)
 		point_poss.clear()
@@ -884,10 +888,10 @@ def draw_callback(self, context):
 			objectname == self.active_keyframe[0] and \
 			abs(frame - self.active_keyframe[1]) < 1e-4:
 				point_poss.append((coords[0], coords[1]))
-				point_cols.append((1.0, 0.5, 0.0, 1.0))
+				point_cols.append(context.window_manager.motion_trail.selection_color)
 			else:
 				point_poss.append((coords[0], coords[1]))
-				point_cols.append((1.0, 1.0, 0.0, 1.0))
+				point_cols.append(context.window_manager.motion_trail.handle_color)
 	batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
 	batch.draw(colored_points_shader)
 	point_poss.clear()
@@ -912,10 +916,12 @@ def draw_callback(self, context):
 				if self.active_keyframe and \
 				objectname == self.active_keyframe[0] and \
 				abs(frame - self.active_keyframe[1]) < 1e-4:
-					blf.color(0, 1.0, 0.5, 0.0, 1.0)
+					c = context.window_manager.motion_trail.text_color
+					blf.color(0, * c)
 					blf.draw(0, text)
 				else:
-					blf.color(0, 1.0, 1.0, 0.0, 1.0)
+					c = context.window_manager.motion_trail.selected_text_color
+					blf.color(0, * c)
 					blf.draw(0, text)
 
 	# restore opengl defaults
@@ -1695,6 +1701,19 @@ class MotionTrailOperator(bpy.types.Operator):
 
 			return {'FINISHED'}
 
+def load_defaults(context):
+	prefs = context.preferences.addons[__name__].preferences
+	for p in configurable_props:
+		default = getattr(prefs.default_trail_settings, p)
+		setattr(context.window_manager.motion_trail, p, default)
+
+class MotionTrailLoadDefaults(bpy.types.Operator):
+	bl_idname="view3d.motion_trail_load_defaults"
+	bl_label="Load Defaults"
+	
+	def execute(self, context):
+		load_defaults(context)
+		return {'FINISHED'}
 
 class MotionTrailPanel(bpy.types.Panel):
 	bl_idname = "VIEW3D_PT_motion_trail"
@@ -1711,6 +1730,9 @@ class MotionTrailPanel(bpy.types.Panel):
 		return context.active_object.mode in ('OBJECT', 'POSE')
 
 	def draw(self, context):
+		if (not context.window_manager.motion_trail.loaded_defaults):
+			load_defaults(context)
+			context.window_manager.motion_trail.loaded_defaults = True
 		col = self.layout.column()
 		if not context.window_manager.motion_trail.enabled:
 			col.operator("view3d.motion_trail", text="Enable motion trail")
@@ -1739,11 +1761,20 @@ class MotionTrailPanel(bpy.types.Panel):
 		if context.window_manager.motion_trail.path_display:
 			col.prop(context.window_manager.motion_trail, "path_style",
 				text="Style")
+			
+			if context.window_manager.motion_trail.path_style == 'simple':
+				col.row().prop(context.window_manager.motion_trail, "simple_color")
+			elif context.window_manager.motion_trail.path_style == 'speed':
+				col.row().prop(context.window_manager.motion_trail, "speed_color_min")
+				col.row().prop(context.window_manager.motion_trail, "speed_color_max")
+			else:
+				col.row().prop(context.window_manager.motion_trail, "accel_color_neg")	
+				col.row().prop(context.window_manager.motion_trail, "accel_color_static")
+				col.row().prop(context.window_manager.motion_trail, "accel_color_pos")
+				
 			grouped = col.column(align=True)
 			grouped.prop(context.window_manager.motion_trail, "path_width",
 				text="Width")
-			grouped.prop(context.window_manager.motion_trail,
-				"path_transparency", text="Transparency")
 			grouped.prop(context.window_manager.motion_trail,
 				"path_resolution")
 			row = grouped.row(align=True)
@@ -1764,6 +1795,15 @@ class MotionTrailPanel(bpy.types.Panel):
 					handle_type_enabled
 				row.prop(context.window_manager.motion_trail, "handle_type")
 
+				col.row().prop(context.window_manager.motion_trail, "handle_color")
+				col.row().prop(context.window_manager.motion_trail, "handle_line_color")
+		else:
+			box = self.layout.box()
+			col = box.column()
+			col.row().prop(context.window_manager.motion_trail, "timebead_color")
+			
+		self.layout.column().operator("view3d.motion_trail_load_defaults")
+
 
 class MotionTrailProps(bpy.types.PropertyGroup):
 	def internal_update(self, context):
@@ -1773,6 +1813,8 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 
 	# internal use
 	enabled: BoolProperty(default=False)
+	
+	loaded_defaults: BoolProperty(default=False)
 
 	force_update: BoolProperty(name="internal use",
 		description="Force calc_callback to fully execute",
@@ -1870,14 +1912,6 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			default='simple',
 			update=internal_update
 			)
-	path_transparency: IntProperty(name="Path transparency",
-			description="Determines visibility of path",
-			default=0,
-			min=0,
-			max=100,
-			subtype='PERCENTAGE',
-			update=internal_update
-			)
 	path_width: IntProperty(name="Path width",
 			description="Width in pixels",
 			default=1,
@@ -1892,12 +1926,144 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			soft_max=10,
 			update=internal_update
 			)
-
+	handle_length: FloatProperty(name="Handle length",
+			description="Handle length multiplier",
+			default = 1.0,
+			update=internal_update
+			)
+			
+	#Colors
+	simple_color: FloatVectorProperty(name="Color",
+			description="Color when using simple drawing mode",
+			default=(0.0, 0.0, 0.0, 1.0),
+			min=0.0, soft_max=1.0,
+			size=4,
+			subtype='COLOR'
+			)
+	speed_color_min: FloatVectorProperty(name="Min color",
+			description="Color that lowest speed will be colored in",
+			default=(0.0, 0.0, 1.0, 1.0),
+			min=0.0, soft_max=1.0,
+			size=4,
+			subtype='COLOR'
+			)
+	speed_color_max: FloatVectorProperty(name="Max color",
+			description="Color that highest speed will be colored in",
+			default=(1.0, 0.0, 0.0, 1.0),
+			min=0.0, soft_max=1.0,
+			size=4,
+			subtype='COLOR'
+			)
+	accel_color_neg: FloatVectorProperty(name="Negative color",
+			description="Color that lowest (negative) acceleration will be colored in",
+			default=(0.0, 1.0, 0.0, 1.0),
+			min=0.0, soft_max=1.0,
+			size=4,
+			subtype='COLOR'
+			)
+	accel_color_static: FloatVectorProperty(name="Static color",
+			description="Color that 0 acceleration will be colored in",
+			default=(1.0, 1.0, 0.0, 1.0),
+			min=0.0, soft_max=1.0,
+			size=4,
+			subtype='COLOR'
+			)
+	accel_color_pos: FloatVectorProperty(name="Positive color",
+			description="Color that highest acceleration will be colored in",
+			default=(1.0, 0.0, 0.0, 1.0),
+			min=0.0, soft_max=1.0,
+			size=4,
+			subtype='COLOR'
+			)
+	keyframe_color: FloatVectorProperty(name="Keyframe color",
+			description="Color that unselected keyframes will be colored in",
+			default=(1.0, 0.0, 0.0, 1.0),
+			min=0.0, soft_max=1.0,
+			size=4,
+			subtype='COLOR'
+			)
+	selection_color: FloatVectorProperty(name="Selection color",
+			description="Color that selected frames, keyframes and timebeads will be colored in",
+			default=(1.0, 0.5, 0.0, 1.0),
+			min=0.0, soft_max=1.0,
+			size=4,
+			subtype='COLOR'
+			)
+	selection_color_dark: FloatVectorProperty(name="Dark selection color",
+			description="Color that selected handles will be colored in",
+			default=(0.75, 0.25, 0.0, 1.0),
+			min=0.0, soft_max=1.0,
+			size=4,
+			subtype='COLOR'
+			)
+	handle_color: FloatVectorProperty(name="Handle color",
+			description="Color that unselected handles will be colored in",
+			default=(1.0, 1.0, 0.0, 1.0),
+			min=0.0, soft_max=1.0,
+			size=4,
+			subtype='COLOR'
+			)
+	handle_line_color: FloatVectorProperty(name="Handle line color",
+			description="Color that unselected handle lines will be colored in",
+			default=(0.0, 0.0, 0.0, 1.0),
+			min=0.0, soft_max=1.0,
+			size=4,
+			subtype='COLOR'
+			)
+	frame_color: FloatVectorProperty(name="Frame color",
+			description="Color that unselected frames will be colored in",
+			default=(1.0, 1.0, 1.0, 1.0),
+			min=0.0, soft_max=1.0,
+			size=4,
+			subtype='COLOR'
+			)
+	timebead_color: FloatVectorProperty(name="Timebead color",
+			description="Color that timebeads (in speed/timing mode) will be colored in",
+			default=(0.0, 1.0, 0.0, 1.0),
+			min=0.0, soft_max=1.0,
+			size=4,
+			subtype='COLOR'
+			)
+	text_color: FloatVectorProperty(name="Text color",
+			description="Color that unselected frame numbers will be colored in",
+			default=(1.0, 1.0, 1.0, 1.0),
+			min=0.0, soft_max=1.0,
+			size=4,
+			subtype='COLOR'
+			)
+	selected_text_color: FloatVectorProperty(name="Selected text color",
+			description="Color that selected frame numbers will be colored in",
+			default=(1.0, 1.0, 0.5, 1.0),
+			min=0.0, soft_max=1.0,
+			size=4,
+			subtype='COLOR'
+			)
+			
+configurable_props = ["mode", "path_style", 
+"simple_color", "speed_color_min", "speed_color_max", "accel_color_neg", "accel_color_static", "accel_color_pos",
+"keyframe_color", "frame_color", "selection_color", "selection_color_dark", "handle_color", "handle_line_color", "timebead_color", 
+"text_color", "selected_text_color", "path_width", "path_resolution", "path_before", "path_after",
+"keyframe_numbers", "frame_display", "handle_display", "handle_length"]
+			
+class MotionTrailPreferences(bpy.types.AddonPreferences):
+	bl_idname = __name__
+	
+	default_trail_settings: PointerProperty(type=MotionTrailProps)
+	
+	def draw(self, context):
+		layout = self.layout
+		col = layout.column()
+		col.label(text="Default values for all settings:")
+		col.label(text="")
+		for p in configurable_props:
+			col.row().prop(self.default_trail_settings, p)
 
 classes = (
 		MotionTrailProps,
 		MotionTrailOperator,
 		MotionTrailPanel,
+		MotionTrailPreferences,
+		MotionTrailLoadDefaults,
 		)
 
 

@@ -20,7 +20,7 @@
 bl_info = {
 	"name": "Motion Trail (update)",
 	"author": "Bart Crouch, Viktor_smg",
-	"version": (0, 7, 0),
+	"version": (0, 7, 1),
 	"blender": (3, 3, 0),
 	"location": "View3D > Toolbar > Motion Trail tab",
 	"warning": "Support for features not originally present is buggy",
@@ -242,7 +242,7 @@ def get_matrix_obj_parents(obj, frame, do_anim=True):
 
 	parentMat = obj.matrix_parent_inverse
 	if obj.parent:
-		parentMat = parentMat @ get_matrix_obj_parents(obj.parent, frame)
+		parentMat = get_matrix_obj_parents(obj.parent, frame) @ parentMat
 		
 	res = parentMat @ mat
 	
@@ -272,14 +272,13 @@ def get_matrix_bone_parents(pose_bone, frame, is_first = True, do_anim = True):
 	else:
 		localmat = selfmat @ mat
 		
-	res = None
-	if is_first:
-		res = get_matrix_obj_parents(ob, frame) @ localmat
-	else:
-		res = localmat
+	res = localmat
 	
 	if pose_bone.constraints:
 		res = evaluate_constraints(res, pose_bone.constraints, frame, pose_bone)
+	
+	if is_first:
+		res = get_matrix_obj_parents(ob, frame) @ res
 	
 	return res
 

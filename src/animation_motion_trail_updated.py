@@ -338,7 +338,7 @@ def evaluate_constraints(mat, constraints, frame, ob):
 		if c.influence != 1.0:
 			constraintMat = constraintMat.lerp(mathutils.Matrix(), 1.0-c.influence)
 		accumulatedMat = accumulatedMat @ constraintMat
-	return mat @ accumulatedMat
+	return accumulatedMat @ mat
 
 # calculate location of display_ob in worldspace
 def get_location(frame, display_ob, offset_ob, curves, context):

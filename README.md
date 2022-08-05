@@ -5,9 +5,11 @@
  
  The features present in it before (basically, only motion trails for objects) should work.<br>
  Selection may be a bit weird.<br>
+ More customizable colors and a settings menu in the addons list have been added.<br>
  I'm attempting to add support for bones and parented objects (and it seems so did Crouch). 
  Trails and editing the trails for parented objects and bones should work!<br>
- Child of constraints are not yet supported, but might get added.<br>
+ There is initial support for child of constraints, and should work for objects, but not bones yet.<br>
+ Rotation and scale's effects on motion trails are slightly broken for everything.<br>
  **The addon tends to kill undos.** I'd say "save often", but that is something you should be doing anyways.
  Opening a blend file as the motion trail modal operator is running will spam your command line as the operator gets orphaned.
  

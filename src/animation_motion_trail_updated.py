@@ -53,6 +53,7 @@ from bpy.props import (
 		
 import sys
 import traceback
+from functools import reduce
 
 # Linear interpolation for 4-element tuples
 def lerp4(fac, tup1, tup2):
@@ -231,27 +232,36 @@ def get_matrix_frame(obj, frame, action):
 	obj.location, obj.rotation_quaternion if quat else obj.rotation_euler, obj.scale)
 	
 # Get the world-ish matrix for an object, factoring in its parents recursively, if any
-def get_matrix_obj_parents(obj, frame):
+def get_matrix_obj_parents(obj, frame, do_anim=True):
 	mat = None
-	if obj.animation_data:
+	
+	if do_anim:
 		mat = get_matrix_frame(obj, frame, obj.animation_data.action)
 	else:
-		mat = obj.matrix_basis
-	
+		mat = mathutils.Matrix()
+
 	parentMat = obj.matrix_parent_inverse
 	if obj.parent:
 		parentMat = parentMat @ get_matrix_obj_parents(obj.parent, frame)
 		
-	return parentMat @ mat
+	res = parentMat @ mat
+	
+	if obj.constraints:
+		res = evaluate_constraints(res, obj.constraints, frame, obj)
+		
+	return res
 
 # Get the world-ish matrix for a posebone, factoring in its parents recursively, if any
 # and then factoring in the armature object and its parents
-def get_matrix_bone_parents(pose_bone, frame, is_first = True):
+def get_matrix_bone_parents(pose_bone, frame, is_first = True, do_anim = True):
 	mat = None
 	ob = pose_bone.id_data
-
-	mat = get_matrix_frame(pose_bone, frame, ob.animation_data.action)
 	
+	if do_anim:
+		mat = get_matrix_frame(pose_bone, frame, ob.animation_data.action)
+	else:
+		mat = mathutils.Matrix()
+		
 	selfmat = pose_bone.bone.matrix_local
 	
 	localmat = None
@@ -262,41 +272,83 @@ def get_matrix_bone_parents(pose_bone, frame, is_first = True):
 	else:
 		localmat = selfmat @ mat
 		
+	res = None
 	if is_first:
-		return get_matrix_obj_parents(ob, frame) @ localmat
+		res = get_matrix_obj_parents(ob, frame) @ localmat
+	else:
+		res = localmat
 	
-	return localmat
+	if pose_bone.constraints:
+		res = evaluate_constraints(res, pose_bone.constraints, frame, pose_bone)
+	
+	return res
+
+# Get the world-ish matrix of a bone or object
+def get_matrix_any_parents(thing, frame, do_anim = True):
+	if type(thing) is bpy.types.PoseBone:
+		return get_matrix_bone_parents(thing, frame, True, do_anim)
+	return get_matrix_obj_parents(thing, frame, do_anim)
+
+# Get matrix for child of constraint
+def evaluate_childof(constraint, frame):
+	mat = mathutils.Matrix()
+	try:
+		if constraint.subtarget:
+			mat = get_matrix_bone_parents(constraint.target.\
+			pose.bones[constraint.subtarget], frame)
+		else:
+			mat = get_matrix_obj_parents(constraint.target, frame)
+			
+		mat = mat @ constraint.inverse_matrix
+			
+		bool_names = ["use_location_x", "use_location_y", "use_location_z", "use_rotation_x", "use_rotation_y",
+		"use_rotation_z", "use_scale_x", "use_scale_y", "use_scale_z"]
+		bools = [getattr(constraint, bool_names[i]) for i in range(len(bool_names))]
+		if not reduce((lambda a, b: a and b), bools, True):
+			zeros = [0, 0, 0, 0, 0, 0, 1, 1, 1]
+			(disassembledLoc, disassembledRot, disassembledScl) = mat.decompose()
+			for i in range(3):
+				if not bools[i]:
+					disassembledLoc[i] = zeros[i]
+			for i in range(3, 6):
+				if not bools[i]:
+					disassembledRot[i-3] = zeros[i]
+			for i in range(6, 9):
+				if not bools[i]:
+					disassembledScl[i-6] = zeros[i]
+			mat = mathutils.Matrix.LocRotScale(disassembledLoc, disassembledRot, disassembledScl)
+	
+	except Exception as e:
+		print(e)
+		tb = sys.exc_info()[-1]
+		print(traceback.extract_tb(tb))
+	
+	finally:
+		return mat
+			
+constraint_funcs = {'CHILD_OF': evaluate_childof}
+
+# Get matrices from all constraints?
+def evaluate_constraints(mat, constraints, frame, ob):
+	accumulatedMat = mathutils.Matrix()
+	for c in constraints:
+		f = constraint_funcs.get(c.type)
+		if f is None or not c.enabled or c.influence == 0.0:
+			continue
+		constraintMat = f(c, frame)
+		if c.influence != 1.0:
+			constraintMat = constraintMat.lerp(mathutils.Matrix(), 1.0-c.influence)
+		accumulatedMat = accumulatedMat @ constraintMat
+	return mat @ accumulatedMat
 
 # calculate location of display_ob in worldspace
 def get_location(frame, display_ob, offset_ob, curves, context):
-	if type(display_ob) is bpy_types.PoseBone:
-		return (get_matrix_bone_parents(display_ob, frame).to_translation())
-	
-	if display_ob.parent is not None:
-		return (get_matrix_obj_parents(display_ob, frame).to_translation())
-
-	return (mathutils.Vector([c.evaluate(frame) for c in curves]))
+	return (get_matrix_any_parents(display_ob, frame).to_translation())
 
 # Calculate an inverse matrix for an object or bone, such that it's suitable for the addon's
 # manipulation of keyframes (IE without the very last animation applied)
 def get_inverse_parents(frame, ob):
-	if type(ob) is bpy_types.PoseBone:
-		selfmat = ob.bone.matrix_local
-	
-		localmat = None
-	
-		if ob.parent:
-			localmat = get_matrix_bone_parents(ob.parent, frame, False) @ \
-			ob.bone.parent.matrix_local.inverted() @ selfmat
-		else:
-			localmat = selfmat
-			
-		return (get_matrix_obj_parents(ob.id_data, frame) @ localmat).inverted()
-	
-	if ob.parent is not None:
-		return (ob.matrix_parent_inverse @ get_matrix_obj_parents(ob.parent, frame)).inverted()
-
-	return mathutils.Matrix()
+	return get_matrix_any_parents(ob, frame, False).inverted()
 	
 
 # get position of keyframes and handles at the start of dragging

@@ -7,7 +7,7 @@
  Selection may be a bit weird.<br>
  More customizable colors and a settings menu in the addons list have been added.<br>
  I'm attempting to add support for bones and parented objects (and it seems so did Crouch). 
- Trails and editing the trails for parented objects and bones should work!<br>
+ Trails and editing the trails for parented objects should work! There was a regression for bones that I'll hopefully fix now.<br>
  There is initial support for child of constraints, and should work for objects, but not bones yet.<br>
  Rotation and scale's effects on motion trails are slightly broken for everything.<br>
  **The addon tends to kill undos.** I'd say "save often", but that is something you should be doing anyways.

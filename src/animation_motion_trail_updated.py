@@ -23,11 +23,8 @@ bl_info = {
 	"version": (0, 9, 2),
 	"blender": (3, 2, 0),
 	"location": "View3D > Toolbar > Motion Trail tab",
-	"warning": "Support for features not originally present is buggy",
+	"warning": "Support for features not originally present is buggy; NO UNDO!!!",
 	"description": "Display and edit motion trails in the 3D View",
-	"doc_url": "https://wiki.blender.org/index.php/Extensions:2.6/Py/"
-			   "Scripts/Animation/Motion_Trail",
-	"tracker_url": "https://developer.blender.org/maniphest/task/edit/form/2/",
 	"category": "Animation",
 }
 

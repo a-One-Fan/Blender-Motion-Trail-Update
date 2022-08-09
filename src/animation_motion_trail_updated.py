@@ -551,8 +551,8 @@ def calc_callback(self, context):
 				for i, [x, y, d_loc, frame, action_ob, child] in enumerate(path):
 					relative_speed = (d_loc - min_speed) / d_speed # 0.0 to 1.0
 					fac = min(1.0, 2.0 * relative_speed)
-					path[i][2] = lerp4(fac, context.window_manager.motion_trail.speed_color_min, 
-					context.window_manager.motion_trail.speed_color_max)
+					path[i][2] = lerp4(fac, context.window_manager.motion_trail.speed_color_max, 
+					context.window_manager.motion_trail.speed_color_min)
 			elif context.window_manager.motion_trail.path_style == 'acceleration':
 				accelerations = []
 				prev_speed = 0.0

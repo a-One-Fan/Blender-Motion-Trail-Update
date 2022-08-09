@@ -20,7 +20,7 @@
 bl_info = {
 	"name": "Motion Trail (update)",
 	"author": "Bart Crouch, Viktor_smg",
-	"version": (0, 10, 0),
+	"version": (0, 11, 0),
 	"blender": (3, 2, 0),
 	"location": "View3D > Toolbar > Motion Trail tab",
 	"warning": "Support for features not originally present is buggy; NO UNDO!!!",
@@ -583,12 +583,31 @@ def calc_callback(self, context):
 						if kf.co[0] not in handle_difs:
 							handle_difs[kf.co[0]] = {"left": mathutils.Vector(),
 								"right": mathutils.Vector(), "keyframe_loc": None}
-						handle_difs[kf.co[0]]["left"][fc.array_index] = \
-							(mathutils.Vector(kf.handle_left[:]) -
-							mathutils.Vector(kf.co[:])).normalized()[1]
-						handle_difs[kf.co[0]]["right"][fc.array_index] = \
-							(mathutils.Vector(kf.handle_right[:]) -
-							mathutils.Vector(kf.co[:])).normalized()[1]
+								
+						ldiff = mathutils.Vector(kf.handle_left[:]) - mathutils.Vector(kf.co[:])
+						rdiff = mathutils.Vector(kf.handle_right[:]) - mathutils.Vector(kf.co[:])
+						hdir = context.window_manager.motion_trail.handle_direction
+						lco = 0.0
+						rco = 0.0
+						
+						if hdir == 'time':
+							lco = ldiff.normalized()[1]
+							rco = rdiff.normalized()[1]
+						elif hdir == 'wtime':
+							lco = sum(ldiff.normalized() * mathutils.Vector((0.25, 0.75)))
+							rco = sum(rdiff.normalized() * mathutils.Vector((0.25, 0.75)))
+						elif hdir == 'location':
+							lco = ldiff.normalized()[0]
+							rco = rdiff.normalized()[0]
+						elif hdir == 'wloc':
+							lco = sum(ldiff.normalized() * mathutils.Vector((0.75, 0.25)))
+							rco = sum(rdiff.normalized() * mathutils.Vector((0.75, 0.25)))
+						elif hdir == 'len':
+							lco = -ldiff.length
+							rco = rdiff.length
+						
+						handle_difs[kf.co[0]]["left"][fc.array_index] = lco
+						handle_difs[kf.co[0]]["right"][fc.array_index] = rco
 					# keyframes
 					if kf.co[0] in kf_time:
 						continue
@@ -1916,7 +1935,7 @@ class MotionTrailPanel(bpy.types.Panel):
 				row.enabled = context.window_manager.motion_trail.\
 					handle_type_enabled
 				row.prop(context.window_manager.motion_trail, "handle_type")
-				
+				col.prop(context.window_manager.motion_trail, "handle_direction")
 				col.prop(context.window_manager.motion_trail, "handle_length")
 				
 				col.row().prop(context.window_manager.motion_trail, "handle_color")
@@ -2059,9 +2078,17 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 	handle_length: FloatProperty(name="Handle length",
 			description="Handle length multiplier",
 			default = 1.0,
-			soft_min = 0.1,
 			step = 0.15,
 			update=internal_update
+			)
+	handle_direction: EnumProperty(name="Handle direction",
+			items=(
+			("time", "Time", "Use only the time coordinate of the handles"),
+			("wtime", "Weighted Time", "0.75*time + 0.25*location"),
+			("location", "Location", "Use only the location coordinate of the handles"),
+			("wloc", "Weighted Location", "0.25*time + 0.75*location"),
+			("len", "Directional length", "Use the length of the handle, positive for right and negative for left")),
+			default='wtime'
 			)
 			
 	#Colors
@@ -2175,7 +2202,7 @@ configurable_props = ["mode", "path_style",
 "simple_color", "speed_color_min", "speed_color_max", "accel_color_neg", "accel_color_static", "accel_color_pos",
 "keyframe_color", "frame_color", "selection_color", "selection_color_dark", "handle_color", "handle_line_color", "timebead_color", 
 "text_color", "selected_text_color", "path_width", "path_resolution", "path_before", "path_after",
-"keyframe_numbers", "frame_display", "handle_display", "handle_length"]
+"keyframe_numbers", "frame_display", "handle_display", "handle_length", "handle_direction"]
 			
 class MotionTrailPreferences(bpy.types.AddonPreferences):
 	bl_idname = __name__

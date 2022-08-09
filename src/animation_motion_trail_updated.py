@@ -987,11 +987,11 @@ def draw_callback(self, context):
 				if self.active_keyframe and \
 				objectname == self.active_keyframe[0] and \
 				abs(frame - self.active_keyframe[1]) < 1e-4:
-					c = context.window_manager.motion_trail.text_color
+					c = context.window_manager.motion_trail.selected_text_color
 					blf.color(0, * c)
 					blf.draw(0, text)
 				else:
-					c = context.window_manager.motion_trail.selected_text_color
+					c = context.window_manager.motion_trail.text_color
 					blf.color(0, * c)
 					blf.draw(0, text)
 

@@ -583,12 +583,25 @@ def calc_callback(self, context):
 						if kf.co[0] not in handle_difs:
 							handle_difs[kf.co[0]] = {"left": mathutils.Vector(),
 								"right": mathutils.Vector(), "keyframe_loc": None}
-						handle_difs[kf.co[0]]["left"][fc.array_index] = \
-							(mathutils.Vector(kf.handle_left[:]) -
-							mathutils.Vector(kf.co[:])).normalized()[1]
-						handle_difs[kf.co[0]]["right"][fc.array_index] = \
-							(mathutils.Vector(kf.handle_right[:]) -
-							mathutils.Vector(kf.co[:])).normalized()[1]
+								
+						ldiff = mathutils.Vector(kf.handle_left[:]) - mathutils.Vector(kf.co[:])
+						rdiff = mathutils.Vector(kf.handle_right[:]) - mathutils.Vector(kf.co[:])
+						hdir = context.window_manager.motion_trail.handle_direction
+						lco = 0.0
+						rco = 0.0
+						
+						if hdir == 'time':
+							lco = ldiff.normalized()[1]
+							rco = rdiff.normalized()[1]
+						elif hdir == 'location':
+							lco = ldiff.normalized()[0]
+							rco = rdiff.normalized()[0]
+						elif hdir == 'len':
+							lco = -ldiff.length
+							rco = rdiff.length
+						
+						handle_difs[kf.co[0]]["left"][fc.array_index] = lco
+						handle_difs[kf.co[0]]["right"][fc.array_index] = rco
 					# keyframes
 					if kf.co[0] in kf_time:
 						continue

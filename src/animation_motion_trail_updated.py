@@ -625,6 +625,10 @@ def calc_callback(self, context):
 					else:
 						vec_left = vecs["left"]
 						vec_right = vecs["right"]
+						
+					hlen = context.window_manager.motion_trail.handle_length
+					vec_left = vec_left * hlen
+					vec_right = vec_right * hlen
 					if vecs["keyframe_loc"] is not None:
 						vec_keyframe = vecs["keyframe_loc"]
 					else:
@@ -1912,7 +1916,9 @@ class MotionTrailPanel(bpy.types.Panel):
 				row.enabled = context.window_manager.motion_trail.\
 					handle_type_enabled
 				row.prop(context.window_manager.motion_trail, "handle_type")
-
+				
+				col.prop(context.window_manager.motion_trail, "handle_length")
+				
 				col.row().prop(context.window_manager.motion_trail, "handle_color")
 				col.row().prop(context.window_manager.motion_trail, "handle_line_color")
 				col.row().prop(context.window_manager.motion_trail, "selection_color_dark")

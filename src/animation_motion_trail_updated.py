@@ -797,7 +797,7 @@ def draw_callback(self, context):
 		limit_max = 1e6
 	# draw motion path
 	width = context.window_manager.motion_trail.path_width
-	uniform_line_shader = gpu.shader.from_builtin('3D_POLYLINE_UNIFORM_COLOR')
+	#uniform_line_shader = gpu.shader.from_builtin('3D_POLYLINE_UNIFORM_COLOR')
 	colored_line_shader = gpu.shader.from_builtin('3D_POLYLINE_SMOOTH_COLOR')
 	colored_points_shader = gpu.shader.from_builtin('2D_FLAT_COLOR')
 	
@@ -805,17 +805,24 @@ def draw_callback(self, context):
 	cols = []
 	
 	if context.window_manager.motion_trail.path_style == 'simple':
-		uniform_line_shader.bind()
-		uniform_line_shader.uniform_float("color", context.window_manager.motion_trail.simple_color)
-		uniform_line_shader.uniform_float("lineWidth", width)
+		#uniform_line_shader.bind()
+		#uniform_line_shader.uniform_float("color", context.window_manager.motion_trail.simple_color)
+		#uniform_line_shader.uniform_float("lineWidth", width)
+		
+		colored_line_shader.bind()
+		colored_line_shader.uniform_float("lineWidth", width)
+		simple_color = context.window_manager.motion_trail.simple_color
 		for objectname, path in self.paths.items():
 			for x, y, color, frame, action_ob, child in path:
 				if frame < limit_min or frame > limit_max:
 					continue
 				poss.append((x, y, 0))
-			batch = batch_for_shader(uniform_line_shader, 'LINE_STRIP', {"pos": poss})
-			batch.draw(uniform_line_shader)
+				cols.append(simple_color)
+			#batch = batch_for_shader(uniform_line_shader, 'LINE_STRIP', {"pos": poss})
+			batch = batch_for_shader(colored_line_shader, 'LINE_STRIP', {"pos": poss, "color": cols})
+			batch.draw(colored_line_shader)
 			poss.clear()
+			cols.clear()
 	else:
 		colored_line_shader.bind()
 		colored_line_shader.uniform_float("lineWidth", width)

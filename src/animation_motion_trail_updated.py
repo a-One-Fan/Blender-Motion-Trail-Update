@@ -1916,7 +1916,7 @@ class MotionTrailPanel(bpy.types.Panel):
 				row.enabled = context.window_manager.motion_trail.\
 					handle_type_enabled
 				row.prop(context.window_manager.motion_trail, "handle_type")
-				
+				col.prop(context.window_manager.motion_trail, "handle_direction")
 				col.prop(context.window_manager.motion_trail, "handle_length")
 				
 				col.row().prop(context.window_manager.motion_trail, "handle_color")

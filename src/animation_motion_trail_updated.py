@@ -212,7 +212,7 @@ defaultLoc = None, defaultRot = None, defaultScale = None):
 	scale = defaultScale
 	if sclcurves[0] is not None:
 		scale = mathutils.Vector([c.evaluate(frame) for c in sclcurves])
-		
+	
 	return mathutils.Matrix.LocRotScale(loc, rot, scale)
 
 # Get the locrotscale matrix from the fcurves for a given frame and action for an object
@@ -220,6 +220,7 @@ defaultLoc = None, defaultRot = None, defaultScale = None):
 def get_matrix_frame(obj, frame, action):
 	locpath = obj.path_from_id("location")
 	rotpath = ""
+	
 	quat = True
 	if obj.rotation_mode == 'QUATERNION':
 		rotpath = obj.path_from_id("rotation_quaternion")
@@ -251,41 +252,40 @@ def get_matrix_obj_parents(obj, frame, do_anim=True):
 		
 	return res
 
-# Get the world-ish matrix for a posebone, factoring in its parents recursively, if any
-# and then factoring in the armature object and its parents
-def get_matrix_bone_parents(pose_bone, frame, is_first = True, do_anim = True):
-	mat = None
+# Get the armature space matrix for a bone
+def get_matrix_bone_parents_as(pose_bone, frame, do_anim = True):
+	animMat = None
 	ob = pose_bone.id_data
 	
 	if do_anim:
-		mat = get_matrix_frame(pose_bone, frame, ob.animation_data.action)
+		animMat = get_matrix_frame(pose_bone, frame, ob.animation_data.action)
 	else:
-		mat = mathutils.Matrix()
+		animMat = mathutils.Matrix()
 		
-	selfmat = pose_bone.bone.matrix_local
-	
-	localmat = None
-	
+	parentMat = None
+	parentOffsetMat = None
 	if pose_bone.parent:
-		localmat = get_matrix_bone_parents(pose_bone.parent, frame, False) @ \
-		pose_bone.bone.parent.matrix_local.inverted() @ selfmat @ mat
+		parentMat = get_matrix_bone_parents_as(pose_bone.parent, frame)
+		parentOffsetMat = pose_bone.parent.bone.matrix_local.inverted() @ pose_bone.bone.matrix_local
 	else:
-		localmat = selfmat @ mat
+		parentMat = mathutils.Matrix()
+		parentOffsetMat = pose_bone.bone.matrix_local
 		
-	res = localmat
-	
+	res = parentMat @ parentOffsetMat @ animMat
+		
 	if pose_bone.constraints:
 		res = evaluate_constraints(res, pose_bone.constraints, frame, pose_bone)
 	
-	if is_first:
-		res = get_matrix_obj_parents(ob, frame) @ res
-	
 	return res
+
+def get_matrix_bone_parents(pose_bone, frame, do_anim = True):
+	return get_matrix_obj_parents(pose_bone.id_data, frame) @ \
+	get_matrix_bone_parents_as(pose_bone, frame, do_anim)
 
 # Get the world-ish matrix of a bone or object
 def get_matrix_any_parents(thing, frame, do_anim = True):
 	if type(thing) is bpy.types.PoseBone:
-		return get_matrix_bone_parents(thing, frame, True, do_anim)
+		return get_matrix_bone_parents(thing, frame, do_anim)
 	return get_matrix_obj_parents(thing, frame, do_anim)
 
 # Get matrix for child of constraint

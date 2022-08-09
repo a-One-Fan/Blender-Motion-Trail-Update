@@ -2063,6 +2063,13 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			step = 0.15,
 			update=internal_update
 			)
+	handle_direction: EnumProperty(name="Handle direction",
+			items=(
+			("time", "Time", "Use only the time coordinate of the handles"),
+			("location", "Location", "Use only the location coordinate of the handles"),
+			("len", "Directional length", "Use the length of the handle, positive for right and negative for left"),
+			default='time'
+			)
 			
 	#Colors
 	simple_color: FloatVectorProperty(name="Color",
@@ -2175,7 +2182,7 @@ configurable_props = ["mode", "path_style",
 "simple_color", "speed_color_min", "speed_color_max", "accel_color_neg", "accel_color_static", "accel_color_pos",
 "keyframe_color", "frame_color", "selection_color", "selection_color_dark", "handle_color", "handle_line_color", "timebead_color", 
 "text_color", "selected_text_color", "path_width", "path_resolution", "path_before", "path_after",
-"keyframe_numbers", "frame_display", "handle_display", "handle_length"]
+"keyframe_numbers", "frame_display", "handle_display", "handle_length", "handle_direction"]
 			
 class MotionTrailPreferences(bpy.types.AddonPreferences):
 	bl_idname = __name__

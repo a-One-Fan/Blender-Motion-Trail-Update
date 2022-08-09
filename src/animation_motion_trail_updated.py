@@ -419,6 +419,18 @@ def get_original_animation_data(context, keyframes):
 
 # callback function that calculates positions of all things that need be drawn
 def calc_callback(self, context):
+	# Remove handler if file was changed and we lose access to self
+	# I'm all ears for a better solution, as __del__ for the modal operator does not call on file change
+	# and there is no special event emitted to the operator for that
+	# (besides "TIMER" which gets emitted other not so opportune times as well)
+	# Also, this might have the tendency to get called twice? So, that's what the extra if is for.
+	try:
+		self.properties
+	except:
+		if global_mtrail_handler_calc:
+			bpy.types.SpaceView3D.draw_handler_remove(global_mtrail_handler_calc, 'WINDOW')
+		return
+	
 	if context.active_object and context.active_object.mode == 'POSE':
 		armature_ob = context.active_object
 		objects = [
@@ -758,6 +770,14 @@ def calc_callback(self, context):
 
 # draw in 3d-view
 def draw_callback(self, context):
+	# Remove handler if file was changed and we lose access to self
+	try:
+		self.properties
+	except:
+		if global_mtrail_handler_draw:
+			bpy.types.SpaceView3D.draw_handler_remove(global_mtrail_handler_draw, 'WINDOW')
+		return
+	
 	# polling
 	if (context.mode not in ('OBJECT', 'POSE') or
 			not context.window_manager.motion_trail.enabled):
@@ -1469,7 +1489,20 @@ def set_handle_type(self, context):
 	context.window_manager.motion_trail.force_update = True
 
 def update_callback(self, context):
+	# Remove handler if file was changed and we lose access to self
+	try:
+		self.proeprties
+	except:
+		if global_mtrail_handler_update:
+			bpy.types.SpaceGraphEditor.draw_handler_remove(global_mtrail_handler_update, 'WINDOW')
+		return
+	
 	context.window_manager.motion_trail.force_update = True
+	
+
+global_mtrail_handler_calc = None
+global_mtrail_handler_draw = None
+global_mtrail_handler_update = None
 
 class MotionTrailOperator(bpy.types.Operator):
 	bl_idname = "view3d.motion_trail"
@@ -1482,10 +1515,18 @@ class MotionTrailOperator(bpy.types.Operator):
 
 	@staticmethod
 	def handle_add(self, context):
+		global global_mtrail_handler_calc
+		global_mtrail_handler_calc = \
 		MotionTrailOperator._handle_calc = bpy.types.SpaceView3D.draw_handler_add(
 			calc_callback, (self, context), 'WINDOW', 'POST_VIEW')
+		
+		global global_mtrail_handler_draw
+		global_mtrail_handler_draw = \
 		MotionTrailOperator._handle_draw = bpy.types.SpaceView3D.draw_handler_add(
 			draw_callback, (self, context), 'WINDOW', 'POST_PIXEL')
+		
+		global global_mtrail_handler_update
+		global_mtrail_handler_update = \
 		MotionTrailOperator._handle_update = bpy.types.SpaceGraphEditor.draw_handler_add(
 			update_callback, (self, context), 'WINDOW', 'POST_PIXEL')
 

@@ -454,7 +454,6 @@ def calc_callback(self, context):
 	self.click = {} 	 # value: list of lists with frame, type, loc-vector
 	if selection_change:
 		# value: editbone inverted rotation matrix or None
-		self.edit_bones = {}
 		self.active_keyframe = False
 		self.active_handle = False
 		self.active_timebead = False
@@ -477,13 +476,6 @@ def calc_callback(self, context):
 		global_undo = context.preferences.edit.use_global_undo
 		context.preferences.edit.use_global_undo = False
 		for action_ob, child, offset_ob in objects:
-			if selection_change:
-				if not child:
-					self.edit_bones[action_ob.name] = None
-				else:
-					editbones = action_ob.data.bones
-					mat = editbones[child.name].matrix.copy().to_3x3().inverted()
-					self.edit_bones[child.name] = mat
 			if not action_ob.animation_data:
 				continue
 			curves = get_curves(action_ob, child)
@@ -627,7 +619,7 @@ def calc_callback(self, context):
 				for frame, vecs in handle_difs.items():
 					if child:
 						# bone space to world space
-						mat = self.edit_bones[child.name].copy().inverted()
+						mat = get_inverse_parents(frame, child)
 						vec_left = vecs["left"] @ mat
 						vec_right = vecs["right"] @ mat
 					else:
@@ -1008,7 +1000,7 @@ def draw_callback(self, context):
 
 # change data based on mouse movement
 def drag(context, event, drag_mouse_ori, active_keyframe, active_handle,
-active_timebead, keyframes_ori, handles_ori, edit_bones):
+active_timebead, keyframes_ori, handles_ori):
 	# change 3d-location of keyframe
 	if context.window_manager.motion_trail.mode == 'location' and \
 	active_keyframe:
@@ -1321,7 +1313,7 @@ active_timebead, keyframes_ori, handles_ori, edit_bones):
 
 # revert changes made by dragging
 def cancel_drag(context, active_keyframe, active_handle, active_timebead,
-keyframes_ori, handles_ori, edit_bones):
+keyframes_ori, handles_ori):
 	# revert change in 3d-location of active keyframe and its handles
 	if context.window_manager.motion_trail.mode == 'location' and \
 	active_keyframe:
@@ -1642,15 +1634,13 @@ class MotionTrailOperator(bpy.types.Operator):
 			context.window_manager.motion_trail.backed_up_keyframes = False
 			self.active_keyframe, self.active_timebead = cancel_drag(context,
 				self.active_keyframe, self.active_handle,
-				self.active_timebead, self.keyframes_ori, self.handles_ori,
-				self.edit_bones)
+				self.active_timebead, self.keyframes_ori, self.handles_ori)
 		elif event.type == 'MOUSEMOVE' and self.drag:
 			# drag
 			self.active_keyframe, self.active_timebead, self.keyframes_ori = \
 				drag(context, event, self.drag_mouse_ori,
 				self.active_keyframe, self.active_handle,
-				self.active_timebead, self.keyframes_ori, self.handles_ori,
-				self.edit_bones)
+				self.active_timebead, self.keyframes_ori, self.handles_ori)
 		elif event.type == select + 'MOUSE' and event.value == 'PRESS' and \
 		not self.drag and not event.shift and not event.alt and not \
 		event.ctrl:

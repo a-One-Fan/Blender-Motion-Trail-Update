@@ -593,9 +593,15 @@ def calc_callback(self, context):
 						if hdir == 'time':
 							lco = ldiff.normalized()[1]
 							rco = rdiff.normalized()[1]
+						elif hdir == 'wtime':
+							lco = sum(ldiff.normalized() * mathutils.Vector((0.25, 0.75)))
+							rco = sum(rdiff.normalized() * mathutils.Vector((0.25, 0.75)))
 						elif hdir == 'location':
 							lco = ldiff.normalized()[0]
 							rco = rdiff.normalized()[0]
+						elif hdir == 'wloc':
+							lco = sum(ldiff.normalized() * mathutils.Vector((0.75, 0.25)))
+							rco = sum(rdiff.normalized() * mathutils.Vector((0.75, 0.25)))
 						elif hdir == 'len':
 							lco = -ldiff.length
 							rco = rdiff.length
@@ -2079,9 +2085,11 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 	handle_direction: EnumProperty(name="Handle direction",
 			items=(
 			("time", "Time", "Use only the time coordinate of the handles"),
+			("wtime", "Weighted Time", "0.75*time + 0.25*location"),
 			("location", "Location", "Use only the location coordinate of the handles"),
+			("wloc", "Weighted Location", "0.25*time + 0.75*location"),
 			("len", "Directional length", "Use the length of the handle, positive for right and negative for left")),
-			default='time'
+			default='wtime'
 			)
 			
 	#Colors

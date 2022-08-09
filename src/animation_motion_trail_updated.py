@@ -1824,6 +1824,7 @@ def load_defaults(context):
 class MotionTrailLoadDefaults(bpy.types.Operator):
 	bl_idname="view3d.motion_trail_load_defaults"
 	bl_label="Load Defaults"
+	bl_description="Reset all the current settings to match what's in the addon's preferences"
 	
 	def execute(self, context):
 		load_defaults(context)

@@ -11,7 +11,6 @@
  There is initial support for child of constraints. Interpolation and disabling location/rotation/scale doesn't seem to work properly. No idea why.<br>
  Rotation and scale's effects on motion trails are slightly broken for everything.<br>
  **The addon tends to kill undos.** I'd say "save often", but that is something you should be doing anyways.
- Opening a blend file as the motion trail modal operator is running will spam your command line as the operator gets orphaned.
  
  To get the addon, go to the `src` folder, click on the only python file there, click on raw, and save that.
  After installed, the addon is under the "Testing" tab.

@@ -20,7 +20,7 @@
 bl_info = {
 	"name": "Motion Trail (update)",
 	"author": "Bart Crouch, Viktor_smg",
-	"version": (0, 10, 0),
+	"version": (0, 11, 0),
 	"blender": (3, 2, 0),
 	"location": "View3D > Toolbar > Motion Trail tab",
 	"warning": "Support for features not originally present is buggy; NO UNDO!!!",

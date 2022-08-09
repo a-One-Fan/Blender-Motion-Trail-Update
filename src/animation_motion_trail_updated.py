@@ -1533,11 +1533,20 @@ class MotionTrailOperator(bpy.types.Operator):
 	@staticmethod
 	def handle_remove():
 		if MotionTrailOperator._handle_calc is not None:
-			bpy.types.SpaceView3D.draw_handler_remove(MotionTrailOperator._handle_calc, 'WINDOW')
+			try:
+				bpy.types.SpaceView3D.draw_handler_remove(MotionTrailOperator._handle_calc, 'WINDOW')
+			except:
+				pass
 		if MotionTrailOperator._handle_draw is not None:
-			bpy.types.SpaceView3D.draw_handler_remove(MotionTrailOperator._handle_draw, 'WINDOW')
+			try:
+				bpy.types.SpaceView3D.draw_handler_remove(MotionTrailOperator._handle_draw, 'WINDOW')
+			except:
+				pass
 		if MotionTrailOperator._handle_update is not None:
-			bpy.types.SpaceGraphEditor.draw_handler_remove(MotionTrailOperator._handle_update, 'WINDOW')
+			try:
+				bpy.types.SpaceGraphEditor.draw_handler_remove(MotionTrailOperator._handle_update, 'WINDOW')
+			except:
+				pass
 			
 		MotionTrailOperator._handle_calc = None
 		MotionTrailOperator._handle_draw = None
@@ -1549,11 +1558,12 @@ class MotionTrailOperator(bpy.types.Operator):
 		# XXX default translate op will unintentionally get called, followed by custom translate.
 		if not context.window_manager.motion_trail.enabled:
 			MotionTrailOperator.handle_remove()
-			context.area.tag_redraw()
+			if context.area:
+				context.area.tag_redraw()
 			return {'FINISHED'}
 
 		if not context.area or not context.region or event.type == 'NONE':
-			context.area.tag_redraw()
+			#context.area.tag_redraw()
 			return {'PASS_THROUGH'}
 
 		wm = context.window_manager

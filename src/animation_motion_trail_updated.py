@@ -1897,11 +1897,16 @@ class MotionTrailPanel(bpy.types.Panel):
 			row.prop(context.window_manager.motion_trail, "path_after")
 			col = col.column(align=True)
 			col.prop(context.window_manager.motion_trail, "keyframe_numbers")
+			if context.window_manager.motion_trail.keyframe_numbers:
+				col.row().prop(context.window_manager.motion_trail, "text_color")
+				col.row().prop(context.window_manager.motion_trail, "selected_text_color")
 			col.prop(context.window_manager.motion_trail, "frame_display")
+			if context.window_manager.motion_trail.frame_display:
+				col.row().prop(context.window_manager.motion_trail, "frame_color")
 
+		box = self.layout.box()
+		col = box.column(align=True)
 		if context.window_manager.motion_trail.mode == 'location':
-			box = self.layout.box()
-			col = box.column(align=True)
 			col.prop(context.window_manager.motion_trail, "handle_display",
 				text="Handles")
 			if context.window_manager.motion_trail.handle_display:
@@ -1912,10 +1917,13 @@ class MotionTrailPanel(bpy.types.Panel):
 
 				col.row().prop(context.window_manager.motion_trail, "handle_color")
 				col.row().prop(context.window_manager.motion_trail, "handle_line_color")
+				col.row().prop(context.window_manager.motion_trail, "selection_color_dark")
 		else:
-			box = self.layout.box()
-			col = box.column()
 			col.row().prop(context.window_manager.motion_trail, "timebead_color")
+			
+		box = self.layout.box()
+		col = box.column(align=True)
+		col.row().prop(context.window_manager.motion_trail, "selection_color")
 			
 		self.layout.column().operator("view3d.motion_trail_load_defaults")
 

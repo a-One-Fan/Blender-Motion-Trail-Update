@@ -2115,7 +2115,7 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			size=4,
 			subtype='COLOR'
 			)
-	selection_color_dark: FloatVectorProperty(name="Dark selection color",
+	selection_color_dark: FloatVectorProperty(name="Handle selection color",
 			description="Color that selected handles will be colored in",
 			default=(0.75, 0.25, 0.0, 1.0),
 			min=0.0, soft_max=1.0,

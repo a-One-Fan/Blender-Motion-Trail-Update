@@ -2078,7 +2078,6 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 	handle_length: FloatProperty(name="Handle length",
 			description="Handle length multiplier",
 			default = 1.0,
-			soft_min = 0.1,
 			step = 0.15,
 			update=internal_update
 			)

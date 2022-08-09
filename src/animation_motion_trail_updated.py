@@ -458,6 +458,10 @@ def calc_callback(self, context):
 	if selection_change:
 		# value: editbone inverted rotation matrix or None
 		self.edit_bones = {}
+		self.active_keyframe = False
+		self.active_handle = False
+		self.active_timebead = False
+		self.active_frame = False
 	if selection_change or not self.lock or context.window_manager.\
 	motion_trail.force_update:
 		# contains locations of path, keyframes and timebeads

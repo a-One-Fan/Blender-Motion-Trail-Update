@@ -2067,7 +2067,7 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			items=(
 			("time", "Time", "Use only the time coordinate of the handles"),
 			("location", "Location", "Use only the location coordinate of the handles"),
-			("len", "Directional length", "Use the length of the handle, positive for right and negative for left"),
+			("len", "Directional length", "Use the length of the handle, positive for right and negative for left")),
 			default='time'
 			)
 			

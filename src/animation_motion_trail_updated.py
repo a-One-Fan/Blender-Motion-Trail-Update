@@ -1491,7 +1491,7 @@ def set_handle_type(self, context):
 def update_callback(self, context):
 	# Remove handler if file was changed and we lose access to self
 	try:
-		self.proeprties
+		self.properties
 	except:
 		if global_mtrail_handler_update:
 			bpy.types.SpaceGraphEditor.draw_handler_remove(global_mtrail_handler_update, 'WINDOW')

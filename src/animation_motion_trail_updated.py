@@ -20,7 +20,7 @@
 bl_info = {
 	"name": "Motion Trail (update)",
 	"author": "Bart Crouch, Viktor_smg",
-	"version": (0, 11, 0),
+	"version": (0, 12, 0),
 	"blender": (3, 2, 0),
 	"location": "View3D > Toolbar > Motion Trail tab",
 	"warning": "Support for features not originally present is buggy; NO UNDO!!!",
@@ -473,8 +473,8 @@ def calc_callback(self, context):
 	self.displayed = objects  # store, so it can be checked next time
 	context.window_manager.motion_trail.force_update = False
 	try:
-		global_undo = context.preferences.edit.use_global_undo
-		context.preferences.edit.use_global_undo = False
+		#global_undo = context.preferences.edit.use_global_undo
+		#context.preferences.edit.use_global_undo = False
 		for action_ob, child, offset_ob in objects:
 			if not action_ob.animation_data:
 				continue
@@ -775,14 +775,14 @@ def calc_callback(self, context):
 			if context.scene.frame_current != frame_old:
 				context.scene.frame_set(frame_old)
 
-		context.preferences.edit.use_global_undo = global_undo
+		#context.preferences.edit.use_global_undo = global_undo
 
 	except Exception as e:
 		print(e)
 		tb = sys.exc_info()[-1]
 		print(traceback.extract_tb(tb))
 		# restore global undo in case of failure (see T52524)
-		context.preferences.edit.use_global_undo = global_undo
+		#context.preferences.edit.use_global_undo = global_undo
 
 # draw in 3d-view
 def draw_callback(self, context):
@@ -1531,6 +1531,7 @@ class MotionTrailOperator(bpy.types.Operator):
 	bl_idname = "view3d.motion_trail"
 	bl_label = "Motion Trail"
 	bl_description = "Edit motion trails in 3d-view"
+	bl_options = {'REGISTER'}
 
 	_handle_calc = None
 	_handle_draw = None
@@ -1743,6 +1744,7 @@ class MotionTrailOperator(bpy.types.Operator):
 			self.lock = True
 			context.window_manager.motion_trail.force_update = True
 			context.window_manager.motion_trail.backed_up_keyframes = False
+			bpy.ops.ed.undo_push(message="Confirmed Motion Trail drag")
 		elif event.type == 'LEFTMOUSE' and event.value == 'PRESS' and not\
 		event.alt and not event.ctrl and not event.shift:
 			if eval("bpy.ops." + self.left_action + ".poll()"):
@@ -1822,6 +1824,7 @@ class MotionTrailOperator(bpy.types.Operator):
 				context.area.tag_redraw()
 
 			context.window_manager.modal_handler_add(self)
+			bpy.ops.ed.undo_push(message="Started Motion Trail modal operator")
 			return {'RUNNING_MODAL'}
 
 		else:

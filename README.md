@@ -10,7 +10,7 @@
  Trails and editing the trails for parented objects should work! Bones should work well if there is no rotation, and for some reason unknown to me will be slightly offset if there is rotation.<br>
  There is initial support for child of constraints. Interpolation and disabling location/rotation/scale doesn't seem to work properly. No idea why.<br>
  Rotation and scale's effects on motion trails are slightly broken for everything.<br>
- **The addon tends to kill undos.** I'd say "save often", but that is something you should be doing anyways.
+ **SAVE OFTEN**, though the addon should have undos now, I'm not sure how well they work just yet. Nonetheless, I've pushed this change to the main branch as some undos is substantially better than none. Only tested with global undo enabled.
  
  To get the addon, go to the `src` folder, click on the only python file there, click on raw, and save that.
  After installed, the addon is under the "Testing" tab.

@@ -1953,6 +1953,8 @@ class MotionTrailPanel(bpy.types.Panel):
 		col.row().prop(context.window_manager.motion_trail, "select_key")
 		col.row().prop(context.window_manager.motion_trail, "deselect_nohit_key")
 		col.row().prop(context.window_manager.motion_trail, "deselect_always_key")
+		col.label(text="For the time being, confirm/cancel")
+		col.label(text="is LMB/RMB or Esc")
 			
 		self.layout.column().operator("view3d.motion_trail_load_defaults")
 

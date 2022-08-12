@@ -20,7 +20,7 @@
 bl_info = {
 	"name": "Motion Trail (update)",
 	"author": "Bart Crouch, Viktor_smg",
-	"version": (0, 13, 0),
+	"version": (0, 13, 1),
 	"blender": (3, 2, 0),
 	"location": "View3D > Toolbar > Motion Trail tab",
 	"warning": "Support for features not originally present is buggy; NO UNDO!!!",
@@ -1663,7 +1663,7 @@ class MotionTrailOperator(bpy.types.Operator):
 		not self.drag and not event.shift and not event.alt and not \
 		event.ctrl:
 			# select
-			treshold = 10
+			threshold = mt.select_threshold
 			clicked = mathutils.Vector([event.mouse_region_x,
 				event.mouse_region_y])
 
@@ -1693,7 +1693,7 @@ class MotionTrailOperator(bpy.types.Operator):
 				for frame, type, coord, action_ob, child in values:
 					if frame < frame_min or frame > frame_max:
 						continue
-					if (coord - clicked).length <= treshold:
+					if (coord - clicked).length <= threshold:
 						found = True
 
 						if event.type == select:
@@ -1943,14 +1943,12 @@ class MotionTrailPanel(bpy.types.Panel):
 				col.row().prop(context.window_manager.motion_trail, "selection_color_dark")
 		else:
 			col.row().prop(context.window_manager.motion_trail, "timebead_color")
-			
-		box = self.layout.box()
-		col = box.column(align=True)
-		col.row().prop(context.window_manager.motion_trail, "selection_color")
 
 		box = self.layout.box()
 		col = box.column(align=True)
+		col.row().prop(context.window_manager.motion_trail, "selection_color")
 		col.row().prop(context.window_manager.motion_trail, "select_key")
+		col.row().prop(context.window_manager.motion_trail, "select_threshold")
 		col.row().prop(context.window_manager.motion_trail, "deselect_nohit_key")
 		col.row().prop(context.window_manager.motion_trail, "deselect_always_key")
 		col.label(text="For the time being, confirm/cancel")
@@ -2126,6 +2124,12 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			("NONE", "None", ""),),
 			default="NONE"
 			)
+	select_threshold: FloatProperty(name="Selection distance",
+			description="Distance in pixels for selecting something",
+			default=10.0,
+			step=2,
+			min=0.0
+			)
 
 	#Colors
 	simple_color: FloatVectorProperty(name="Color",
@@ -2234,7 +2238,7 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			subtype='COLOR'
 			)
 			
-configurable_props = ["select_key", "deselect_nohit_key", "deselect_always_key", "mode", "path_style", 
+configurable_props = ["select_key", "select_threshold", "deselect_nohit_key", "deselect_always_key", "mode", "path_style", 
 "simple_color", "speed_color_min", "speed_color_max", "accel_color_neg", "accel_color_static", "accel_color_pos",
 "keyframe_color", "frame_color", "selection_color", "selection_color_dark", "handle_color", "handle_line_color", "timebead_color", 
 "text_color", "selected_text_color", "path_width", "path_resolution", "path_before", "path_after",

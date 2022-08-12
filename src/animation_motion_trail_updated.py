@@ -20,7 +20,7 @@
 bl_info = {
 	"name": "Motion Trail (update)",
 	"author": "Bart Crouch, Viktor_smg",
-	"version": (0, 12, 0),
+	"version": (0, 13, 0),
 	"blender": (3, 2, 0),
 	"location": "View3D > Toolbar > Motion Trail tab",
 	"warning": "Support for features not originally present is buggy; NO UNDO!!!",
@@ -1590,9 +1590,7 @@ class MotionTrailOperator(bpy.types.Operator):
 			#context.area.tag_redraw()
 			return {'PASS_THROUGH'}
 
-		wm = context.window_manager
-		keyconfig = wm.keyconfigs.active
-		select = getattr(keyconfig.preferences, "select_mouse", "LEFT")
+		no_passthrough = False
 
 		if (not context.active_object or
 				context.active_object.mode not in ('OBJECT', 'POSE')):
@@ -1605,15 +1603,6 @@ class MotionTrailOperator(bpy.types.Operator):
 			if event.type == self.transform_key and event.value == 'PRESS':
 				if bpy.ops.transform.translate.poll():
 					bpy.ops.transform.translate('INVOKE_DEFAULT')
-			elif event.type == select + 'MOUSE' and event.value == 'PRESS' \
-			and not self.drag and not event.shift and not event.alt \
-			and not event.ctrl:
-				if bpy.ops.view3d.select.poll():
-					bpy.ops.view3d.select('INVOKE_DEFAULT')
-			elif event.type == 'LEFTMOUSE' and event.value == 'PRESS' and not\
-			event.alt and not event.ctrl and not event.shift:
-				if eval("bpy.ops." + self.left_action + ".poll()"):
-					eval("bpy.ops." + self.left_action + "('INVOKE_DEFAULT')")
 			return {'PASS_THROUGH'}
 		# check if event was generated within 3d-window, dragging is exception
 		if not self.drag:
@@ -1621,6 +1610,10 @@ class MotionTrailOperator(bpy.types.Operator):
 			not (0 < event.mouse_region_y < context.region.height):
 				return {'PASS_THROUGH'}
 
+		mt = context.window_manager.motion_trail
+		select = mt.select_key
+		deselect_nohit = mt.deselect_nohit_key
+		deselect_always = mt.deselect_always_key
 		if (event.type == self.transform_key and event.value == 'PRESS' and
 			   (self.active_keyframe or
 				self.active_handle or
@@ -1665,19 +1658,16 @@ class MotionTrailOperator(bpy.types.Operator):
 				drag(context, event, self.drag_mouse_ori,
 				self.active_keyframe, self.active_handle,
 				self.active_timebead, self.keyframes_ori, self.handles_ori)
-		elif event.type == select + 'MOUSE' and event.value == 'PRESS' and \
+			no_passthrough = True
+		elif event.type in [select, deselect_nohit] and event.value == 'PRESS' and \
 		not self.drag and not event.shift and not event.alt and not \
 		event.ctrl:
 			# select
 			treshold = 10
 			clicked = mathutils.Vector([event.mouse_region_x,
 				event.mouse_region_y])
-			self.active_keyframe = False
-			self.active_handle = False
-			self.active_timebead = False
-			self.active_frame = False
+
 			context.window_manager.motion_trail.force_update = True
-			context.window_manager.motion_trail.handle_type_enabled = True
 			found = False
 
 			if context.window_manager.motion_trail.path_before == 0:
@@ -1705,27 +1695,43 @@ class MotionTrailOperator(bpy.types.Operator):
 						continue
 					if (coord - clicked).length <= treshold:
 						found = True
-						if type == "keyframe":
-							self.active_keyframe = [objectname, frame, frame,
-								action_ob, child]
-						elif type == "handle_left":
-							self.active_handle = [objectname, frame, "left",
-								action_ob, child]
-						elif type == "handle_right":
-							self.active_handle = [objectname, frame, "right",
-								action_ob, child]
-						elif type == "timebead":
-							self.active_timebead = [objectname, frame, frame,
-								action_ob, child]
-						elif type == "frame":
-							self.active_frame = [objectname, frame, frame,
-								action_ob, child]
-						break
+
+						if event.type == select:
+							self.active_keyframe = False
+							self.active_handle = False
+							self.active_timebead = False
+							self.active_frame = False
+							context.window_manager.motion_trail.handle_type_enabled = True
+							no_passthrough = True
+
+							if type == "keyframe":
+								self.active_keyframe = [objectname, frame, frame,
+									action_ob, child]
+							elif type == "handle_left":
+								self.active_handle = [objectname, frame, "left",
+									action_ob, child]
+							elif type == "handle_right":
+								self.active_handle = [objectname, frame, "right",
+									action_ob, child]
+							elif type == "timebead":
+								self.active_timebead = [objectname, frame, frame,
+									action_ob, child]
+							elif type == "frame":
+								self.active_frame = [objectname, frame, frame,
+									action_ob, child]
+							break
 			if not found:
-				context.window_manager.motion_trail.handle_type_enabled = False
-				# no motion trail selections, so pass on to normal select()
-				if bpy.ops.view3d.select.poll():
-					bpy.ops.view3d.select('INVOKE_DEFAULT')
+				if event.type == deselect_nohit:
+					attrs = ["active_keyframe", "active_handle", "active_timebead", "active_frame"]
+					# If a change happens, then no passthrough
+					gotten = [getattr(self, attr) for attr in attrs]
+					no_passthrough = not reduce(lambda accum, next: accum and not next, gotten, True)
+					
+					for attr in attrs:
+						setattr(self, attr, False)
+					context.window_manager.motion_trail.handle_type_enabled = False
+					
+				pass
 			else:
 				handle_type = get_handle_type(self.active_keyframe,
 					self.active_handle)
@@ -1745,13 +1751,22 @@ class MotionTrailOperator(bpy.types.Operator):
 			context.window_manager.motion_trail.force_update = True
 			context.window_manager.motion_trail.backed_up_keyframes = False
 			bpy.ops.ed.undo_push(message="Confirmed Motion Trail drag")
-		elif event.type == 'LEFTMOUSE' and event.value == 'PRESS' and not\
-		event.alt and not event.ctrl and not event.shift:
-			if eval("bpy.ops." + self.left_action + ".poll()"):
-				eval("bpy.ops." + self.left_action + "('INVOKE_DEFAULT')")
+			no_passthrough = True
+
+		elif event.type == deselect_always and event.value == 'PRESS' and \
+		not self.drag and not event.shift and not event.alt and not \
+		event.ctrl:
+			self.active_keyframe = False
+			self.active_handle = False
+			self.active_timebead = False
+			self.active_frame = False
+			context.window_manager.motion_trail.handle_type_enabled = False
 
 		if context.area:  # not available if other window-type is fullscreen
 			context.area.tag_redraw()
+
+		if no_passthrough:
+			return {'RUNNING_MODAL'}
 
 		return {'PASS_THROUGH'}
 
@@ -1763,14 +1778,12 @@ class MotionTrailOperator(bpy.types.Operator):
 		# get clashing keymap items
 		wm = context.window_manager
 		keyconfig = wm.keyconfigs.active
-		select = getattr(keyconfig.preferences, "select_mouse", "LEFT")
+		select = wm.motion_trail.select_key
 		kms = [
 			bpy.context.window_manager.keyconfigs.active.keymaps['3D View'],
 			bpy.context.window_manager.keyconfigs.active.keymaps['Object Mode']
 			]
 		kmis = []
-		self.left_action = None
-		self.right_action = None
 		for km in kms:
 			for kmi in km.keymap_items:
 				if kmi.idname == "transform.translate" and \
@@ -1778,22 +1791,6 @@ class MotionTrailOperator(bpy.types.Operator):
 				kmi.properties.texture_space:
 					kmis.append(kmi)
 					self.transform_key = kmi.type
-				elif (kmi.type == 'ACTIONMOUSE' and select == 'RIGHT') \
-				and not kmi.alt and not kmi.any and not kmi.ctrl \
-				and not kmi.shift:
-					kmis.append(kmi)
-					self.left_action = kmi.idname
-				elif kmi.type == 'SELECTMOUSE' and not kmi.alt and not \
-				kmi.any and not kmi.ctrl and not kmi.shift:
-					kmis.append(kmi)
-					if select == 'RIGHT':
-						self.right_action = kmi.idname
-					else:
-						self.left_action = kmi.idname
-				elif kmi.type == 'LEFTMOUSE' and not kmi.alt and not \
-				kmi.any and not kmi.ctrl and not kmi.shift:
-					kmis.append(kmi)
-					self.left_action = kmi.idname
 
 		if not context.window_manager.motion_trail.enabled:
 			# enable
@@ -1950,9 +1947,19 @@ class MotionTrailPanel(bpy.types.Panel):
 		box = self.layout.box()
 		col = box.column(align=True)
 		col.row().prop(context.window_manager.motion_trail, "selection_color")
+
+		box = self.layout.box()
+		col = box.column(align=True)
+		col.row().prop(context.window_manager.motion_trail, "select_key")
+		col.row().prop(context.window_manager.motion_trail, "deselect_nohit_key")
+		col.row().prop(context.window_manager.motion_trail, "deselect_always_key")
+		col.label(text="For the time being, confirm/cancel")
+		col.label(text="is LMB/RMB or Esc")
 			
 		self.layout.column().operator("view3d.motion_trail_load_defaults")
 
+DESELECT_WARNING = "Deselection will happen before your click registers to the rest of Blender.\n" +\
+	"This can prevent you from changing the handle type if it's set to left click"
 
 class MotionTrailProps(bpy.types.PropertyGroup):
 	def internal_update(self, context):
@@ -2094,6 +2101,32 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			default='wtime'
 			)
 			
+	#Key stuff
+	select_key: EnumProperty(name="Selection key",
+			description="Pressing this key will only either select something if nothing is selected, or override an existing selection",
+			items=(
+			("LEFTMOUSE", "Left Mouse Button", ""),
+			("RIGHTMOUSE", "Right Mouse Button", ""),),
+			default='LEFTMOUSE'
+			)
+	deselect_nohit_key: EnumProperty(name="Deselect miss key",
+			description="When your mouse is not over a selectable thing, " +\
+				"pressing this key will deselect.\n" + DESELECT_WARNING,
+			items=(
+			("LEFTMOUSE", "Left Mouse Button", ""),
+			("RIGHTMOUSE", "Right Mouse Button", ""),
+			("NONE", "None", ""),),
+			default='RIGHTMOUSE'
+			)
+	deselect_always_key: EnumProperty(name="Deselect always key",
+			description="Pressing this key will always deselect\n" + DESELECT_WARNING,
+			items=(
+			("LEFTMOUSE", "Left Mouse Button", ""),
+			("RIGHTMOUSE", "Right Mouse Button", ""),
+			("NONE", "None", ""),),
+			default="NONE"
+			)
+
 	#Colors
 	simple_color: FloatVectorProperty(name="Color",
 			description="Color when using simple drawing mode",
@@ -2201,7 +2234,7 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			subtype='COLOR'
 			)
 			
-configurable_props = ["mode", "path_style", 
+configurable_props = ["select_key", "deselect_nohit_key", "deselect_always_key", "mode", "path_style", 
 "simple_color", "speed_color_min", "speed_color_max", "accel_color_neg", "accel_color_static", "accel_color_pos",
 "keyframe_color", "frame_color", "selection_color", "selection_color_dark", "handle_color", "handle_line_color", "timebead_color", 
 "text_color", "selected_text_color", "path_width", "path_resolution", "path_before", "path_after",
@@ -2215,6 +2248,7 @@ class MotionTrailPreferences(bpy.types.AddonPreferences):
 	def draw(self, context):
 		layout = self.layout
 		col = layout.column()
+		col.label(text=DESELECT_WARNING)
 		col.label(text="Default values for all settings:")
 		col.label(text="")
 		for p in configurable_props:

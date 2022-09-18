@@ -438,6 +438,11 @@ def get_original_animation_data(context, keyframes, location_getter):
 
 	return(keyframes_ori, handles_ori)
 
+def get_original_animation_data_dg(context, keyframes):
+	return get_original_animation_data(context, keyframes, get_location_depsgraph)
+
+def get_original_animation_data_ce(context, keyframes):
+	return get_original_animation_data(context, keyframes, get_location)
 
 # callback function that calculates positions of all things that need be drawn
 def calc_callback(self, context, inverse_getter, location_getter):
@@ -808,6 +813,15 @@ def calc_callback(self, context, inverse_getter, location_getter):
 		print(traceback.extract_tb(tb))
 		# restore global undo in case of failure (see T52524)
 		#context.preferences.edit.use_global_undo = global_undo
+
+# calc_callback using depsgraph functions
+def calc_callback_dg(self, context):
+	return calc_callback(self, context, get_inverse_parents_depsgraph, get_location_depsgraph)
+
+# calc_callback using custom evaluation functions
+def calc_callback_ce(self, context):
+	return calc_callback(self, context, get_inverse_parents, get_location_depsgraph)
+
 
 # draw in 3d-view
 def draw_callback(self, context):

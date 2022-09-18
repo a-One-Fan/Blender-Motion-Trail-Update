@@ -367,7 +367,7 @@ def get_inverse_parents_depsgraph(frame, ob, context):
 	mat = ''
 	if type(ob) is bpy.types.PoseBone:
 		mat = get_matrix_frame(ob, frame, ob.id_data.animation_data.action)
-	else
+	else:
 		mat = get_matrix_frame(ob, frame, ob.animation_data.action)
 		
 	return (get_location_depsgraph(frame, ob, context) @ mat.inverted()).inverted()

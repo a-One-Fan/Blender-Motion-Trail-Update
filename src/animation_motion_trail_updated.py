@@ -1581,7 +1581,7 @@ class MotionTrailOperator(bpy.types.Operator):
 		global global_mtrail_handler_calc
 		global_mtrail_handler_calc = \
 		MotionTrailOperator._handle_calc = bpy.types.SpaceView3D.draw_handler_add(
-			calc_callback, (self, context), 'WINDOW', 'POST_VIEW')
+			calc_callback_ce, (self, context), 'WINDOW', 'POST_VIEW')
 		
 		global global_mtrail_handler_draw
 		global_mtrail_handler_draw = \
@@ -1666,7 +1666,7 @@ class MotionTrailOperator(bpy.types.Operator):
 					self.active_keyframe = self.active_frame
 					self.active_frame = False
 				self.keyframes_ori, self.handles_ori = \
-					get_original_animation_data(context, self.keyframes)
+					get_original_animation_data_ce(context, self.keyframes)
 				self.drag_mouse_ori = mathutils.Vector([event.mouse_region_x,
 					event.mouse_region_y])
 				self.drag = True

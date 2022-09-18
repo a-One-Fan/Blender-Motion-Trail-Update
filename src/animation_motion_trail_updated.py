@@ -337,18 +337,43 @@ def evaluate_constraints(mat, constraints, frame, ob):
 		accumulatedMat = accumulatedMat @ constraintMat
 	return accumulatedMat @ mat
 
-# calculate location of display_ob in worldspace
+# calculate location of display_ob in worldspace using our own, draw handler-safe methods
 def get_location(frame, display_ob, offset_ob, curves, context):
 	return (get_matrix_any_parents(display_ob, frame).to_translation())
 
+# calculate location of display_ob in worldspace using the depsgraph
+def get_location_depsgraph(frame, display_ob, context):
+	ct_otherframe = context.copy()
+	ct_otherframe["frame"] = frame
+	
+	dg = ct_otherframe.evaluated_depsgraph_get()
+	boneMat = mathutils.Matrix()
+	ob = display_ob
+	
+	if type(display_ob) is bpy.types.PoseBone:
+		evalledBone = display_ob.evaluated_get(dg)
+		boneMat = evalledBone.matrix
+		ob = display_ob.id_data
+		
+	return (ob.evaluated_get(dg).matrix_world @ boneMat).location()
+
 # Calculate an inverse matrix for an object or bone, such that it's suitable for the addon's
 # manipulation of keyframes (IE without the very last animation applied)
-def get_inverse_parents(frame, ob):
+# using our own, draw handler-safe methods
+def get_inverse_parents(frame, ob, context):
 	return get_matrix_any_parents(ob, frame, False).inverted()
-	
+
+def get_inverse_parents_depsgraph(frame, ob, context):
+	mat = ''
+	if type(ob) is bpy.types.PoseBone:
+		mat = get_matrix_frame(ob, frame, ob.id_data.animation_data.action)
+	else
+		mat = get_matrix_frame(ob, frame, ob.animation_data.action)
+		
+	return (get_location_depsgraph(frame, ob, context) @ mat.inverted()).inverted()
 
 # get position of keyframes and handles at the start of dragging
-def get_original_animation_data(context, keyframes):
+def get_original_animation_data(context, keyframes, location_getter):
 	keyframes_ori = {}
 	handles_ori = {}
 
@@ -375,7 +400,7 @@ def get_original_animation_data(context, keyframes):
 		frame_old = context.scene.frame_current
 		keyframes_ori[display_ob.name] = {}
 		for frame in keyframes[display_ob.name]:
-			loc = get_location(frame, display_ob, offset_ob, curves, context)
+			loc = location_getter(frame, display_ob, offset_ob, curves, context)
 			keyframes_ori[display_ob.name][frame] = [frame, loc]
 
 		# get handle positions
@@ -415,7 +440,7 @@ def get_original_animation_data(context, keyframes):
 
 
 # callback function that calculates positions of all things that need be drawn
-def calc_callback(self, context):
+def calc_callback(self, context, inverse_getter, location_getter):
 	# Remove handler if file was changed and we lose access to self
 	# I'm all ears for a better solution, as __del__ for the modal operator does not call on file change
 	# and there is no special event emitted to the operator for that
@@ -513,13 +538,13 @@ def calc_callback(self, context):
 			if use_cache and range_min - 1 in self.cached["path"][display_ob.name]:
 				prev_loc = self.cached["path"][display_ob.name][range_min - 1]
 			else:
-				prev_loc = get_location(range_min - 1, display_ob, offset_ob, curves, context)
+				prev_loc = location_getter(range_min - 1, display_ob, offset_ob, curves, context)
 				self.cached["path"][display_ob.name][range_min - 1] = prev_loc
 			for frame in range(range_min, range_max + 1, step):
 				if use_cache and frame in self.cached["path"][display_ob.name]:
 					loc = self.cached["path"][display_ob.name][frame]
 				else:
-					loc = get_location(frame, display_ob, offset_ob, curves, context)
+					loc = location_getter(frame, display_ob, offset_ob, curves, context)
 					self.cached["path"][display_ob.name][frame] = loc
 				if not context.region or not context.space_data:
 					continue
@@ -618,7 +643,7 @@ def calc_callback(self, context):
 					self.cached["keyframes"][display_ob.name]:
 						loc = self.cached["keyframes"][display_ob.name][co]
 					else:
-						loc = get_location(co, display_ob, offset_ob, curves, context)
+						loc = location_getter(co, display_ob, offset_ob, curves, context)
 						self.cached["keyframes"][display_ob.name][co] = loc
 					if handle_difs:
 						handle_difs[co]["keyframe_loc"] = loc
@@ -638,7 +663,7 @@ def calc_callback(self, context):
 				for frame, vecs in handle_difs.items():
 					if child:
 						# bone space to world space
-						mat = get_inverse_parents(frame, child)
+						mat = inverse_getter(frame, child, context)
 						vec_left = vecs["left"] @ mat
 						vec_right = vecs["right"] @ mat
 					else:
@@ -651,7 +676,7 @@ def calc_callback(self, context):
 					if vecs["keyframe_loc"] is not None:
 						vec_keyframe = vecs["keyframe_loc"]
 					else:
-						vec_keyframe = get_location(frame, display_ob, offset_ob,
+						vec_keyframe = location_getter(frame, display_ob, offset_ob,
 							curves, context)
 					x_left, y_left = world_to_screen(
 											context, vec_left * 2 + vec_keyframe
@@ -682,7 +707,7 @@ def calc_callback(self, context):
 							self.cached["timebeads_timing"][display_ob.name]:
 						loc = self.cached["timebeads_timing"][display_ob.name][frame]
 					else:
-						loc = get_location(frame, display_ob, offset_ob, curves, context)
+						loc = location_getter(frame, display_ob, offset_ob, curves, context)
 						self.cached["timebeads_timing"][display_ob.name][frame] = loc
 					x, y = world_to_screen(context, loc)
 					timebeads[frame] = [x, y]
@@ -729,7 +754,7 @@ def calc_callback(self, context):
 						self.cached["timebeads_speed"][display_ob.name]:
 							loc = self.cached["timebeads_speed"][display_ob.name][bead_frame]
 						else:
-							loc = get_location(bead_frame, display_ob, offset_ob,
+							loc = location_getter(bead_frame, display_ob, offset_ob,
 								curves, context)
 							self.cached["timebeads_speed"][display_ob.name][bead_frame] = loc
 						x, y = world_to_screen(context, loc)
@@ -749,7 +774,7 @@ def calc_callback(self, context):
 						self.cached["timebeads_speed"][display_ob.name]:
 							loc = self.cached["timebeads_speed"][display_ob.name][bead_frame]
 						else:
-							loc = get_location(bead_frame, display_ob, offset_ob,
+							loc = location_getter(bead_frame, display_ob, offset_ob,
 								curves, context)
 							self.cached["timebeads_speed"][display_ob.name][bead_frame] = loc
 						x, y = world_to_screen(context, loc)
@@ -1023,12 +1048,12 @@ def draw_callback(self, context):
 
 # change data based on mouse movement
 def drag(context, event, drag_mouse_ori, active_keyframe, active_handle,
-active_timebead, keyframes_ori, handles_ori):
+active_timebead, keyframes_ori, handles_ori, inverse_getter):
 	# change 3d-location of keyframe
 	if context.window_manager.motion_trail.mode == 'location' and \
 	active_keyframe:
 		objectname, frame, frame_ori, action_ob, child = active_keyframe
-		mat = get_inverse_parents(frame, child if child else action_ob)
+		mat = inverse_getter(frame, child if child else action_ob, context)
 		mt = context.window_manager.motion_trail
 		
 		mouse_ori_world = mat @ screen_to_world(context, drag_mouse_ori[0],
@@ -1061,7 +1086,7 @@ active_timebead, keyframes_ori, handles_ori):
 	# change 3d-location of handle
 	elif context.window_manager.motion_trail.mode == 'location' and active_handle:
 		objectname, frame, side, action_ob, child = active_handle
-		mat = get_inverse_parents(frame, child if child else action_ob)
+		mat = inverse_getter(frame, child if child else action_ob, context)
 
 		mouse_ori_world = mat @ screen_to_world(context, drag_mouse_ori[0],
 			drag_mouse_ori[1])
@@ -1178,7 +1203,7 @@ active_timebead, keyframes_ori, handles_ori):
 	elif context.window_manager.motion_trail.mode == 'timing' and \
 	active_keyframe:
 		objectname, frame, frame_ori, action_ob, child = active_keyframe
-		mat = get_inverse_parents(frame, child if child else action_ob)
+		mat = inverse_getter(frame, child if child else action_ob, context)
 
 		mouse_ori_world = mat @ screen_to_world(context, drag_mouse_ori[0],
 			drag_mouse_ori[1])
@@ -1249,7 +1274,7 @@ active_timebead, keyframes_ori, handles_ori):
 	elif context.window_manager.motion_trail.mode == 'speed' and \
 	active_timebead:
 		objectname, frame, frame_ori, action_ob, child = active_timebead
-		mat = get_inverse_parents(frame, child if child else action_ob)
+		mat = inverse_getter(frame, child if child else action_ob, context)
 
 		mouse_ori_world = mat @ screen_to_world(context, drag_mouse_ori[0],
 			drag_mouse_ori[1])

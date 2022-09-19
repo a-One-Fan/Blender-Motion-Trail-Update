@@ -342,20 +342,23 @@ def get_location(frame, display_ob, offset_ob, curves, context):
 	return (get_matrix_any_parents(display_ob, frame).to_translation())
 
 # calculate location of display_ob in worldspace using the depsgraph
-def get_location_depsgraph(frame, display_ob, context):
-	ct_otherframe = context.copy()
-	ct_otherframe["frame"] = frame
-	
-	dg = ct_otherframe.evaluated_depsgraph_get()
+def get_location_depsgraph(frame, display_ob, offset_ob, curves, context):
+	oldframe = context.scene.frame_current
+	isBone = type(display_ob) is bpy.types.PoseBone
+
+	context.scene.frame_set(frame)
+	dg = context.evaluated_depsgraph_get()
 	boneMat = mathutils.Matrix()
-	ob = display_ob
 	
-	if type(display_ob) is bpy.types.PoseBone:
-		evalledBone = display_ob.evaluated_get(dg)
-		boneMat = evalledBone.matrix
-		ob = display_ob.id_data
+	ob = display_ob.id_data if isBone else display_ob
 		
-	return (ob.evaluated_get(dg).matrix_world @ boneMat).location()
+	evalledOb = ob.evaluated_get(dg)
+
+	if isBone:
+		boneMat = evalledOb.pose.bones[display_ob.name].matrix
+
+	context.scene.frame_set(oldframe)
+	return (ob.evaluated_get(dg).matrix_world @ boneMat).to_translation()
 
 # Calculate an inverse matrix for an object or bone, such that it's suitable for the addon's
 # manipulation of keyframes (IE without the very last animation applied)
@@ -820,7 +823,7 @@ def calc_callback_dg(self, context):
 
 # calc_callback using custom evaluation functions
 def calc_callback_ce(self, context):
-	return calc_callback(self, context, get_inverse_parents, get_location_depsgraph)
+	return calc_callback(self, context, get_inverse_parents, get_location)
 
 
 # draw in 3d-view
@@ -1624,6 +1627,8 @@ class MotionTrailOperator(bpy.types.Operator):
 			if context.area:
 				context.area.tag_redraw()
 			return {'FINISHED'}
+
+		#calc_callback_ce(self, context)
 
 		if not context.area or not context.region or event.type == 'NONE':
 			#context.area.tag_redraw()

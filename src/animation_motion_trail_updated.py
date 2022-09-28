@@ -1712,7 +1712,7 @@ class MotionTrailOperator(bpy.types.Operator):
 			self.active_keyframe, self.active_timebead, self.keyframes_ori = \
 				drag(context, event, self.drag_mouse_ori,
 				self.active_keyframe, self.active_handle,
-				self.active_timebead, self.keyframes_ori, self.handles_ori)
+				self.active_timebead, self.keyframes_ori, self.handles_ori, get_inverse_parents_depsgraph)
 			no_passthrough = True
 		elif event.type in [select, deselect_nohit] and event.value == 'PRESS' and \
 		not self.drag and not event.shift and not event.alt and not \

@@ -346,7 +346,7 @@ def get_location_depsgraph(frame, display_ob, offset_ob, curves, context):
 	oldframe = context.scene.frame_current
 	isBone = type(display_ob) is bpy.types.PoseBone
 
-	context.scene.frame_set(frame)
+	context.scene.frame_set(int(frame))
 	dg = context.evaluated_depsgraph_get()
 	boneMat = mathutils.Matrix()
 	
@@ -357,8 +357,9 @@ def get_location_depsgraph(frame, display_ob, offset_ob, curves, context):
 	if isBone:
 		boneMat = evalledOb.pose.bones[display_ob.name].matrix
 
+	resMat = evalledOb.matrix_world @ boneMat
 	context.scene.frame_set(oldframe)
-	return (ob.evaluated_get(dg).matrix_world @ boneMat).to_translation()
+	return resMat.to_translation()
 
 # Calculate an inverse matrix for an object or bone, such that it's suitable for the addon's
 # manipulation of keyframes (IE without the very last animation applied)
@@ -1584,7 +1585,7 @@ class MotionTrailOperator(bpy.types.Operator):
 		global global_mtrail_handler_calc
 		global_mtrail_handler_calc = \
 		MotionTrailOperator._handle_calc = bpy.types.SpaceView3D.draw_handler_add(
-			calc_callback_ce, (self, context), 'WINDOW', 'POST_VIEW')
+			update_callback, (self, context), 'WINDOW', 'POST_VIEW')
 		
 		global global_mtrail_handler_draw
 		global_mtrail_handler_draw = \
@@ -1628,7 +1629,7 @@ class MotionTrailOperator(bpy.types.Operator):
 				context.area.tag_redraw()
 			return {'FINISHED'}
 
-		#calc_callback_ce(self, context)
+		calc_callback_dg(self, context)
 
 		if not context.area or not context.region or event.type == 'NONE':
 			#context.area.tag_redraw()

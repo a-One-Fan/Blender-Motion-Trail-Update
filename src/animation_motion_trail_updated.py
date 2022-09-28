@@ -341,25 +341,29 @@ def evaluate_constraints(mat, constraints, frame, ob):
 def get_location(frame, display_ob, offset_ob, curves, context):
 	return (get_matrix_any_parents(display_ob, frame).to_translation())
 
-# calculate location of display_ob in worldspace using the depsgraph
-def get_location_depsgraph(frame, display_ob, offset_ob, curves, context):
+def get_matrix_any_depsgraph(frame, target, context):
 	oldframe = context.scene.frame_current
-	isBone = type(display_ob) is bpy.types.PoseBone
+	isBone = type(target) is bpy.types.PoseBone
 
 	context.scene.frame_set(int(frame))
 	dg = context.evaluated_depsgraph_get()
 	boneMat = mathutils.Matrix()
 	
-	ob = display_ob.id_data if isBone else display_ob
+	ob = target.id_data if isBone else target
 		
 	evalledOb = ob.evaluated_get(dg)
 
 	if isBone:
-		boneMat = evalledOb.pose.bones[display_ob.name].matrix
+		boneMat = evalledOb.pose.bones[target.name].matrix
 
 	resMat = evalledOb.matrix_world @ boneMat
 	context.scene.frame_set(oldframe)
-	return resMat.to_translation()
+
+	return resMat
+
+# calculate location of display_ob in worldspace using the depsgraph
+def get_location_depsgraph(frame, display_ob, offset_ob, curves, context):
+	return get_matrix_any_depsgraph(frame, display_ob, context).to_translation()
 
 # Calculate an inverse matrix for an object or bone, such that it's suitable for the addon's
 # manipulation of keyframes (IE without the very last animation applied)
@@ -374,7 +378,7 @@ def get_inverse_parents_depsgraph(frame, ob, context):
 	else:
 		mat = get_matrix_frame(ob, frame, ob.animation_data.action)
 		
-	return (get_location_depsgraph(frame, ob, context) @ mat.inverted()).inverted()
+	return (get_matrix_any_depsgraph(frame, ob, context) @ mat.inverted()).inverted()
 
 # get position of keyframes and handles at the start of dragging
 def get_original_animation_data(context, keyframes, location_getter):
@@ -877,10 +881,11 @@ def draw_callback(self, context):
 				poss.append((x, y, 0))
 				cols.append(simple_color)
 			#batch = batch_for_shader(uniform_line_shader, 'LINE_STRIP', {"pos": poss})
-			batch = batch_for_shader(colored_line_shader, 'LINE_STRIP', {"pos": poss, "color": cols})
-			batch.draw(colored_line_shader)
-			poss.clear()
-			cols.clear()
+			if(not (poss == []) and not (cols == [])):
+				batch = batch_for_shader(colored_line_shader, 'LINE_STRIP', {"pos": poss, "color": cols})
+				batch.draw(colored_line_shader)
+				poss.clear()
+				cols.clear()
 	else:
 		colored_line_shader.bind()
 		colored_line_shader.uniform_float("lineWidth", width)
@@ -905,11 +910,11 @@ def draw_callback(self, context):
 					poss.append((x, y, 0.0))
 					cols.append(color)
 					poss.append((int(halfway[0]), int(halfway[1]), 0.0))
-			
-			batch = batch_for_shader(colored_line_shader, 'LINE_STRIP', {"pos": poss, "color": cols})
-			batch.draw(colored_line_shader)
-			poss.clear()
-			cols.clear()
+			if(not (poss == []) and not (cols == [])):
+				batch = batch_for_shader(colored_line_shader, 'LINE_STRIP', {"pos": poss, "color": cols})
+				batch.draw(colored_line_shader)
+				poss.clear()
+				cols.clear()
 
 	# draw frames
 	if context.window_manager.motion_trail.frame_display:
@@ -927,11 +932,12 @@ def draw_callback(self, context):
 				else:
 					point_poss.append((x, y))
 					point_cols.append(context.window_manager.motion_trail.frame_color)
-			batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
-			gpu.state.point_size_set(3.0)
-			batch.draw(colored_points_shader)
-			point_poss.clear()
-			point_cols.clear()
+			if(not (point_poss == []) and not (point_cols == [])):
+				batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
+				gpu.state.point_size_set(3.0)
+				batch.draw(colored_points_shader)
+				point_poss.clear()
+				point_cols.clear()
 
 	# time beads are shown in speed and timing modes
 	if context.window_manager.motion_trail.mode in ('speed', 'timing'):
@@ -950,11 +956,12 @@ def draw_callback(self, context):
 				else:
 					point_cols.append(context.window_manager.motion_trail.timebead_color)
 					point_poss.append((coords[0], coords[1]))
-			batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
-			gpu.state.point_size_set(3.0)
-			batch.draw(colored_points_shader)
-			point_poss.clear()
-			point_cols.clear()
+			if(not (point_poss == []) and not (point_cols == [])):
+				batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
+				gpu.state.point_size_set(3.0)
+				batch.draw(colored_points_shader)
+				point_poss.clear()
+				point_cols.clear()
 
 	# handles are only shown in location mode
 	if context.window_manager.motion_trail.mode == 'location':
@@ -983,10 +990,11 @@ def draw_callback(self, context):
 							self.keyframes[objectname][frame][1], 0.0))
 						cols.append(context.window_manager.motion_trail.handle_line_color)
 						poss.append((coords[0], coords[1], 0.0))
-			batch = batch_for_shader(colored_line_shader, 'LINES', {"pos": poss, "color": cols})
-			batch.draw(colored_line_shader)
-			poss.clear()
-			cols.clear()
+			if(not (cols == []) and not (poss == [])):
+				batch = batch_for_shader(colored_line_shader, 'LINES', {"pos": poss, "color": cols})
+				batch.draw(colored_line_shader)
+				poss.clear()
+				cols.clear()
 
 		# draw handles
 		colored_points_shader.bind()
@@ -1007,10 +1015,11 @@ def draw_callback(self, context):
 					else:
 						point_poss.append((coords[0], coords[1]))
 						point_cols.append(context.window_manager.motion_trail.handle_color)
-		batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
-		batch.draw(colored_points_shader)
-		point_poss.clear()
-		point_cols.clear()
+		if(not (point_poss == []) and not (point_cols == [])):
+			batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
+			batch.draw(colored_points_shader)
+			point_poss.clear()
+			point_cols.clear()
 
 	# draw keyframes
 	colored_points_shader.bind()
@@ -1029,10 +1038,11 @@ def draw_callback(self, context):
 			else:
 				point_poss.append((coords[0], coords[1]))
 				point_cols.append(context.window_manager.motion_trail.handle_color)
-	batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
-	batch.draw(colored_points_shader)
-	point_poss.clear()
-	point_cols.clear()
+	if(not (point_poss == []) and not (point_cols == [])):
+		batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
+		batch.draw(colored_points_shader)
+		point_poss.clear()
+		point_cols.clear()
 
 	# draw keyframe-numbers
 	if context.window_manager.motion_trail.keyframe_numbers:

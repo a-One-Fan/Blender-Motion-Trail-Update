@@ -2325,7 +2325,7 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			)
 
 	use_depsgraph: BoolProperty(name="Use depsgraph",
-			description="Whether to use the depsgraph or not.\nChanging this takes effect only when motion trails are not active.\n\nUsing the depsgraph currently has the following ups and downs:\n+ Completely accurate motion trails that factor in all constraints, drivers, and so on.\n- Less performant.\n- Constantly resets un-keyframed changes.\n- Dragging may shift at the start\n- The trail will not calculate when the viewport is not interacted with",
+			description="Whether to use the depsgraph or not.\nChanging this takes effect only when motion trails are not active.\n\nUsing the depsgraph currently has the following ups and downs:\n+ Completely accurate motion trails that factor in all constraints, drivers, and so on.\n- Less performant.\n- Constantly resets un-keyframed changes.\n- Dragging may shift at the start.\n- The trail will not calculate when the viewport is not interacted with",
 			default=False
 			)
 			

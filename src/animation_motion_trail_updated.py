@@ -20,7 +20,7 @@
 bl_info = {
 	"name": "Motion Trail (update)",
 	"author": "Bart Crouch, Viktor_smg",
-	"version": (0, 14, 1),
+	"version": (0, 14, 2),
 	"blender": (3, 2, 0),
 	"location": "View3D > Toolbar > Motion Trail tab",
 	"warning": "Support for features not originally present is buggy; NO UNDO!!!",
@@ -28,13 +28,10 @@ bl_info = {
 	"category": "Animation",
 }
 
-
-import bgl
 import gpu
 from gpu_extras.batch import batch_for_shader
 import blf
 import bpy
-import bpy_types
 from bpy_extras import view3d_utils
 import math
 import mathutils
@@ -1785,7 +1782,7 @@ class MotionTrailOperator(bpy.types.Operator):
 					attrs = ["active_keyframe", "active_handle", "active_timebead", "active_frame"]
 					# If a change happens, then no passthrough
 					gotten = [getattr(self, attr) for attr in attrs]
-					no_passthrough = not reduce(lambda accum, next: accum and not next, gotten, True)
+					no_passthrough = (not reduce(lambda accum, next: accum and not next, gotten, True)) and not mt.deselect_passthrough
 					
 					for attr in attrs:
 						setattr(self, attr, False)
@@ -2039,6 +2036,7 @@ class MotionTrailPanel(bpy.types.Panel):
 		col.row().prop(context.window_manager.motion_trail, "select_threshold")
 		col.row().prop(context.window_manager.motion_trail, "deselect_nohit_key")
 		col.row().prop(context.window_manager.motion_trail, "deselect_always_key")
+		col.row().prop(context.window_manager.motion_trail, "deselect_passthrough")
 		col.label(text="For the time being, confirm/cancel")
 		col.label(text="is LMB/RMB or Esc")
 			
@@ -2219,6 +2217,10 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			step=2,
 			min=0.0
 			)
+	deselect_passthrough: BoolProperty(name="Deselect passthrough",
+			description="When something in the motion trail is deselected, whether to pass that button press to the rest of blender or not",
+			default=True
+			)
 
 	#Colors
 	simple_color: FloatVectorProperty(name="Color",
@@ -2328,11 +2330,11 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			)
 
 	use_depsgraph: BoolProperty(name="Use depsgraph",
-			description="Whether to use the depsgraph or not.\nChanging this takes effect only when motion trails are not active.\n\nUsing the depsgraph currently has the following ups and downs:\n+ Completely accurate motion trails that factor in all constraints, drivers, and so on.\n- Less performant.\n- Constantly resets un-keyframed changes.\n- Dragging may shift at the start",
+			description="Whether to use the depsgraph or not.\nChanging this takes effect only when motion trails are not active.\n\nUsing the depsgraph currently has the following ups and downs:\n+ Completely accurate motion trails that factor in all constraints, drivers, and so on.\n- Less performant.\n- Constantly resets un-keyframed changes to objects with keyframes.\n- Dragging may shift at the start.\n- The trail will not calculate when the viewport is not interacted with",
 			default=False
 			)
 			
-configurable_props = ["use_depsgraph", "select_key", "select_threshold", "deselect_nohit_key", "deselect_always_key", "mode", "path_style", 
+configurable_props = ["use_depsgraph", "select_key", "select_threshold", "deselect_nohit_key", "deselect_always_key", "deselect_passthrough", "mode", "path_style", 
 "simple_color", "speed_color_min", "speed_color_max", "accel_color_neg", "accel_color_static", "accel_color_pos",
 "keyframe_color", "frame_color", "selection_color", "selection_color_dark", "handle_color", "handle_line_color", "timebead_color", 
 "text_color", "selected_text_color", "path_width", "path_resolution", "path_before", "path_after",

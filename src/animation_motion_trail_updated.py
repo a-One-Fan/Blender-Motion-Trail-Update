@@ -28,13 +28,10 @@ bl_info = {
 	"category": "Animation",
 }
 
-
-import bgl
 import gpu
 from gpu_extras.batch import batch_for_shader
 import blf
 import bpy
-import bpy_types
 from bpy_extras import view3d_utils
 import math
 import mathutils

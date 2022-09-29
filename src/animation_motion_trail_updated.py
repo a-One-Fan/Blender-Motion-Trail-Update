@@ -1924,11 +1924,14 @@ class MotionTrailPanel(bpy.types.Panel):
 		if (not context.window_manager.motion_trail.loaded_defaults):
 			load_defaults(context)
 			context.window_manager.motion_trail.loaded_defaults = True
+		
 		col = self.layout.column()
 		if not context.window_manager.motion_trail.enabled:
 			col.operator("view3d.motion_trail", text="Enable motion trail")
 		else:
 			col.operator("view3d.motion_trail", text="Disable motion trail")
+
+		col.prop(context.window_manager.motion_trail, "use_depsgraph")
 
 		box = self.layout.box()
 		box.prop(context.window_manager.motion_trail, "mode")
@@ -2292,8 +2295,13 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			size=4,
 			subtype='COLOR'
 			)
+
+	use_depsgraph: BoolProperty(name="Use depsgraph",
+			description="Whether to use the depsgraph or not.\nChanging this takes effect only when motion trails are not active.\n\nUsing the depsgraph currently has the following ups and downs:\n+ Completely accurate motion trails that factor in all constraints, drivers, and so on.\n- Slightly less performant.\n- Immediately and constantly resets un-keyframed changes.\n- Dragging may shift at the start",
+			default=False
+			)
 			
-configurable_props = ["select_key", "select_threshold", "deselect_nohit_key", "deselect_always_key", "mode", "path_style", 
+configurable_props = ["use_depsgraph", "select_key", "select_threshold", "deselect_nohit_key", "deselect_always_key", "mode", "path_style", 
 "simple_color", "speed_color_min", "speed_color_max", "accel_color_neg", "accel_color_static", "accel_color_pos",
 "keyframe_color", "frame_color", "selection_color", "selection_color_dark", "handle_color", "handle_line_color", "timebead_color", 
 "text_color", "selected_text_color", "path_width", "path_resolution", "path_before", "path_after",

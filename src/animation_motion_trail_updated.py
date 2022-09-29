@@ -20,7 +20,7 @@
 bl_info = {
 	"name": "Motion Trail (update)",
 	"author": "Bart Crouch, Viktor_smg",
-	"version": (0, 13, 1),
+	"version": (0, 14, 1),
 	"blender": (3, 2, 0),
 	"location": "View3D > Toolbar > Motion Trail tab",
 	"warning": "Support for features not originally present is buggy; NO UNDO!!!",
@@ -337,18 +337,51 @@ def evaluate_constraints(mat, constraints, frame, ob):
 		accumulatedMat = accumulatedMat @ constraintMat
 	return accumulatedMat @ mat
 
-# calculate location of display_ob in worldspace
+# calculate location of display_ob in worldspace using our own, draw handler-safe methods
 def get_location(frame, display_ob, offset_ob, curves, context):
 	return (get_matrix_any_parents(display_ob, frame).to_translation())
 
+def get_matrix_any_depsgraph(frame, target, context):
+	oldframe = context.scene.frame_float
+	isBone = type(target) is bpy.types.PoseBone
+
+	context.scene.frame_float = frame
+	dg = context.evaluated_depsgraph_get()
+	boneMat = mathutils.Matrix()
+	
+	ob = target.id_data if isBone else target
+		
+	evalledOb = ob.evaluated_get(dg)
+
+	if isBone:
+		boneMat = evalledOb.pose.bones[target.name].matrix
+
+	resMat = evalledOb.matrix_world @ boneMat
+	context.scene.frame_float = oldframe
+
+	return resMat
+
+# calculate location of display_ob in worldspace using the depsgraph
+def get_location_depsgraph(frame, display_ob, offset_ob, curves, context):
+	return get_matrix_any_depsgraph(frame, display_ob, context).to_translation()
+
 # Calculate an inverse matrix for an object or bone, such that it's suitable for the addon's
 # manipulation of keyframes (IE without the very last animation applied)
-def get_inverse_parents(frame, ob):
+# using our own, draw handler-safe methods
+def get_inverse_parents(frame, ob, context):
 	return get_matrix_any_parents(ob, frame, False).inverted()
-	
+
+def get_inverse_parents_depsgraph(frame, ob, context):
+	mat = ''
+	if type(ob) is bpy.types.PoseBone:
+		mat = get_matrix_frame(ob, frame, ob.id_data.animation_data.action)
+	else:
+		mat = get_matrix_frame(ob, frame, ob.animation_data.action)
+		
+	return (get_matrix_any_depsgraph(frame, ob, context) @ mat.inverted()).inverted()
 
 # get position of keyframes and handles at the start of dragging
-def get_original_animation_data(context, keyframes):
+def get_original_animation_data(context, keyframes, location_getter):
 	keyframes_ori = {}
 	handles_ori = {}
 
@@ -375,7 +408,7 @@ def get_original_animation_data(context, keyframes):
 		frame_old = context.scene.frame_current
 		keyframes_ori[display_ob.name] = {}
 		for frame in keyframes[display_ob.name]:
-			loc = get_location(frame, display_ob, offset_ob, curves, context)
+			loc = location_getter(frame, display_ob, offset_ob, curves, context)
 			keyframes_ori[display_ob.name][frame] = [frame, loc]
 
 		# get handle positions
@@ -413,9 +446,14 @@ def get_original_animation_data(context, keyframes):
 
 	return(keyframes_ori, handles_ori)
 
+def get_original_animation_data_dg(context, keyframes):
+	return get_original_animation_data(context, keyframes, get_location_depsgraph)
+
+def get_original_animation_data_ce(context, keyframes):
+	return get_original_animation_data(context, keyframes, get_location)
 
 # callback function that calculates positions of all things that need be drawn
-def calc_callback(self, context):
+def calc_callback(self, context, inverse_getter, location_getter):
 	# Remove handler if file was changed and we lose access to self
 	# I'm all ears for a better solution, as __del__ for the modal operator does not call on file change
 	# and there is no special event emitted to the operator for that
@@ -513,13 +551,13 @@ def calc_callback(self, context):
 			if use_cache and range_min - 1 in self.cached["path"][display_ob.name]:
 				prev_loc = self.cached["path"][display_ob.name][range_min - 1]
 			else:
-				prev_loc = get_location(range_min - 1, display_ob, offset_ob, curves, context)
+				prev_loc = location_getter(range_min - 1, display_ob, offset_ob, curves, context)
 				self.cached["path"][display_ob.name][range_min - 1] = prev_loc
 			for frame in range(range_min, range_max + 1, step):
 				if use_cache and frame in self.cached["path"][display_ob.name]:
 					loc = self.cached["path"][display_ob.name][frame]
 				else:
-					loc = get_location(frame, display_ob, offset_ob, curves, context)
+					loc = location_getter(frame, display_ob, offset_ob, curves, context)
 					self.cached["path"][display_ob.name][frame] = loc
 				if not context.region or not context.space_data:
 					continue
@@ -618,7 +656,7 @@ def calc_callback(self, context):
 					self.cached["keyframes"][display_ob.name]:
 						loc = self.cached["keyframes"][display_ob.name][co]
 					else:
-						loc = get_location(co, display_ob, offset_ob, curves, context)
+						loc = location_getter(co, display_ob, offset_ob, curves, context)
 						self.cached["keyframes"][display_ob.name][co] = loc
 					if handle_difs:
 						handle_difs[co]["keyframe_loc"] = loc
@@ -638,7 +676,7 @@ def calc_callback(self, context):
 				for frame, vecs in handle_difs.items():
 					if child:
 						# bone space to world space
-						mat = get_inverse_parents(frame, child)
+						mat = inverse_getter(frame, child, context)
 						vec_left = vecs["left"] @ mat
 						vec_right = vecs["right"] @ mat
 					else:
@@ -651,7 +689,7 @@ def calc_callback(self, context):
 					if vecs["keyframe_loc"] is not None:
 						vec_keyframe = vecs["keyframe_loc"]
 					else:
-						vec_keyframe = get_location(frame, display_ob, offset_ob,
+						vec_keyframe = location_getter(frame, display_ob, offset_ob,
 							curves, context)
 					x_left, y_left = world_to_screen(
 											context, vec_left * 2 + vec_keyframe
@@ -682,7 +720,7 @@ def calc_callback(self, context):
 							self.cached["timebeads_timing"][display_ob.name]:
 						loc = self.cached["timebeads_timing"][display_ob.name][frame]
 					else:
-						loc = get_location(frame, display_ob, offset_ob, curves, context)
+						loc = location_getter(frame, display_ob, offset_ob, curves, context)
 						self.cached["timebeads_timing"][display_ob.name][frame] = loc
 					x, y = world_to_screen(context, loc)
 					timebeads[frame] = [x, y]
@@ -729,7 +767,7 @@ def calc_callback(self, context):
 						self.cached["timebeads_speed"][display_ob.name]:
 							loc = self.cached["timebeads_speed"][display_ob.name][bead_frame]
 						else:
-							loc = get_location(bead_frame, display_ob, offset_ob,
+							loc = location_getter(bead_frame, display_ob, offset_ob,
 								curves, context)
 							self.cached["timebeads_speed"][display_ob.name][bead_frame] = loc
 						x, y = world_to_screen(context, loc)
@@ -749,7 +787,7 @@ def calc_callback(self, context):
 						self.cached["timebeads_speed"][display_ob.name]:
 							loc = self.cached["timebeads_speed"][display_ob.name][bead_frame]
 						else:
-							loc = get_location(bead_frame, display_ob, offset_ob,
+							loc = location_getter(bead_frame, display_ob, offset_ob,
 								curves, context)
 							self.cached["timebeads_speed"][display_ob.name][bead_frame] = loc
 						x, y = world_to_screen(context, loc)
@@ -783,6 +821,15 @@ def calc_callback(self, context):
 		print(traceback.extract_tb(tb))
 		# restore global undo in case of failure (see T52524)
 		#context.preferences.edit.use_global_undo = global_undo
+
+# calc_callback using depsgraph functions
+def calc_callback_dg(self, context):
+	return calc_callback(self, context, get_inverse_parents_depsgraph, get_location_depsgraph)
+
+# calc_callback using custom evaluation functions
+def calc_callback_ce(self, context):
+	return calc_callback(self, context, get_inverse_parents, get_location)
+
 
 # draw in 3d-view
 def draw_callback(self, context):
@@ -834,10 +881,11 @@ def draw_callback(self, context):
 				poss.append((x, y, 0))
 				cols.append(simple_color)
 			#batch = batch_for_shader(uniform_line_shader, 'LINE_STRIP', {"pos": poss})
-			batch = batch_for_shader(colored_line_shader, 'LINE_STRIP', {"pos": poss, "color": cols})
-			batch.draw(colored_line_shader)
-			poss.clear()
-			cols.clear()
+			if(not (poss == []) and not (cols == [])):
+				batch = batch_for_shader(colored_line_shader, 'LINE_STRIP', {"pos": poss, "color": cols})
+				batch.draw(colored_line_shader)
+				poss.clear()
+				cols.clear()
 	else:
 		colored_line_shader.bind()
 		colored_line_shader.uniform_float("lineWidth", width)
@@ -862,11 +910,11 @@ def draw_callback(self, context):
 					poss.append((x, y, 0.0))
 					cols.append(color)
 					poss.append((int(halfway[0]), int(halfway[1]), 0.0))
-			
-			batch = batch_for_shader(colored_line_shader, 'LINE_STRIP', {"pos": poss, "color": cols})
-			batch.draw(colored_line_shader)
-			poss.clear()
-			cols.clear()
+			if(not (poss == []) and not (cols == [])):
+				batch = batch_for_shader(colored_line_shader, 'LINE_STRIP', {"pos": poss, "color": cols})
+				batch.draw(colored_line_shader)
+				poss.clear()
+				cols.clear()
 
 	# draw frames
 	if context.window_manager.motion_trail.frame_display:
@@ -884,11 +932,12 @@ def draw_callback(self, context):
 				else:
 					point_poss.append((x, y))
 					point_cols.append(context.window_manager.motion_trail.frame_color)
-			batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
-			gpu.state.point_size_set(3.0)
-			batch.draw(colored_points_shader)
-			point_poss.clear()
-			point_cols.clear()
+			if(not (point_poss == []) and not (point_cols == [])):
+				batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
+				gpu.state.point_size_set(3.0)
+				batch.draw(colored_points_shader)
+				point_poss.clear()
+				point_cols.clear()
 
 	# time beads are shown in speed and timing modes
 	if context.window_manager.motion_trail.mode in ('speed', 'timing'):
@@ -907,11 +956,12 @@ def draw_callback(self, context):
 				else:
 					point_cols.append(context.window_manager.motion_trail.timebead_color)
 					point_poss.append((coords[0], coords[1]))
-			batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
-			gpu.state.point_size_set(3.0)
-			batch.draw(colored_points_shader)
-			point_poss.clear()
-			point_cols.clear()
+			if(not (point_poss == []) and not (point_cols == [])):
+				batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
+				gpu.state.point_size_set(3.0)
+				batch.draw(colored_points_shader)
+				point_poss.clear()
+				point_cols.clear()
 
 	# handles are only shown in location mode
 	if context.window_manager.motion_trail.mode == 'location':
@@ -940,10 +990,11 @@ def draw_callback(self, context):
 							self.keyframes[objectname][frame][1], 0.0))
 						cols.append(context.window_manager.motion_trail.handle_line_color)
 						poss.append((coords[0], coords[1], 0.0))
-			batch = batch_for_shader(colored_line_shader, 'LINES', {"pos": poss, "color": cols})
-			batch.draw(colored_line_shader)
-			poss.clear()
-			cols.clear()
+			if(not (cols == []) and not (poss == [])):
+				batch = batch_for_shader(colored_line_shader, 'LINES', {"pos": poss, "color": cols})
+				batch.draw(colored_line_shader)
+				poss.clear()
+				cols.clear()
 
 		# draw handles
 		colored_points_shader.bind()
@@ -964,10 +1015,11 @@ def draw_callback(self, context):
 					else:
 						point_poss.append((coords[0], coords[1]))
 						point_cols.append(context.window_manager.motion_trail.handle_color)
-		batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
-		batch.draw(colored_points_shader)
-		point_poss.clear()
-		point_cols.clear()
+		if(not (point_poss == []) and not (point_cols == [])):
+			batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
+			batch.draw(colored_points_shader)
+			point_poss.clear()
+			point_cols.clear()
 
 	# draw keyframes
 	colored_points_shader.bind()
@@ -986,10 +1038,11 @@ def draw_callback(self, context):
 			else:
 				point_poss.append((coords[0], coords[1]))
 				point_cols.append(context.window_manager.motion_trail.handle_color)
-	batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
-	batch.draw(colored_points_shader)
-	point_poss.clear()
-	point_cols.clear()
+	if(not (point_poss == []) and not (point_cols == [])):
+		batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
+		batch.draw(colored_points_shader)
+		point_poss.clear()
+		point_cols.clear()
 
 	# draw keyframe-numbers
 	if context.window_manager.motion_trail.keyframe_numbers:
@@ -1023,12 +1076,12 @@ def draw_callback(self, context):
 
 # change data based on mouse movement
 def drag(context, event, drag_mouse_ori, active_keyframe, active_handle,
-active_timebead, keyframes_ori, handles_ori):
+active_timebead, keyframes_ori, handles_ori, inverse_getter):
 	# change 3d-location of keyframe
 	if context.window_manager.motion_trail.mode == 'location' and \
 	active_keyframe:
 		objectname, frame, frame_ori, action_ob, child = active_keyframe
-		mat = get_inverse_parents(frame, child if child else action_ob)
+		mat = inverse_getter(frame, child if child else action_ob, context)
 		mt = context.window_manager.motion_trail
 		
 		mouse_ori_world = mat @ screen_to_world(context, drag_mouse_ori[0],
@@ -1061,7 +1114,7 @@ active_timebead, keyframes_ori, handles_ori):
 	# change 3d-location of handle
 	elif context.window_manager.motion_trail.mode == 'location' and active_handle:
 		objectname, frame, side, action_ob, child = active_handle
-		mat = get_inverse_parents(frame, child if child else action_ob)
+		mat = inverse_getter(frame, child if child else action_ob, context)
 
 		mouse_ori_world = mat @ screen_to_world(context, drag_mouse_ori[0],
 			drag_mouse_ori[1])
@@ -1178,7 +1231,7 @@ active_timebead, keyframes_ori, handles_ori):
 	elif context.window_manager.motion_trail.mode == 'timing' and \
 	active_keyframe:
 		objectname, frame, frame_ori, action_ob, child = active_keyframe
-		mat = get_inverse_parents(frame, child if child else action_ob)
+		mat = inverse_getter(frame, child if child else action_ob, context)
 
 		mouse_ori_world = mat @ screen_to_world(context, drag_mouse_ori[0],
 			drag_mouse_ori[1])
@@ -1249,7 +1302,7 @@ active_timebead, keyframes_ori, handles_ori):
 	elif context.window_manager.motion_trail.mode == 'speed' and \
 	active_timebead:
 		objectname, frame, frame_ori, action_ob, child = active_timebead
-		mat = get_inverse_parents(frame, child if child else action_ob)
+		mat = inverse_getter(frame, child if child else action_ob, context)
 
 		mouse_ori_world = mat @ screen_to_world(context, drag_mouse_ori[0],
 			drag_mouse_ori[1])
@@ -1540,9 +1593,13 @@ class MotionTrailOperator(bpy.types.Operator):
 	@staticmethod
 	def handle_add(self, context):
 		global global_mtrail_handler_calc
+
+		dg_optional_callback = update_callback if context.window_manager.motion_trail.use_depsgraph else calc_callback_ce
+		# Using the depsgraph in a callback seems to make blender freeze! Very cool, and is the whole reason why I avoided using it so far.
+
 		global_mtrail_handler_calc = \
 		MotionTrailOperator._handle_calc = bpy.types.SpaceView3D.draw_handler_add(
-			calc_callback, (self, context), 'WINDOW', 'POST_VIEW')
+			dg_optional_callback, (self, context), 'WINDOW', 'POST_VIEW')
 		
 		global global_mtrail_handler_draw
 		global_mtrail_handler_draw = \
@@ -1586,6 +1643,9 @@ class MotionTrailOperator(bpy.types.Operator):
 				context.area.tag_redraw()
 			return {'FINISHED'}
 
+		if context.window_manager.motion_trail.use_depsgraph:
+			calc_callback_dg(self, context)
+
 		if not context.area or not context.region or event.type == 'NONE':
 			#context.area.tag_redraw()
 			return {'PASS_THROUGH'}
@@ -1627,7 +1687,7 @@ class MotionTrailOperator(bpy.types.Operator):
 					self.active_keyframe = self.active_frame
 					self.active_frame = False
 				self.keyframes_ori, self.handles_ori = \
-					get_original_animation_data(context, self.keyframes)
+					get_original_animation_data_ce(context, self.keyframes)
 				self.drag_mouse_ori = mathutils.Vector([event.mouse_region_x,
 					event.mouse_region_y])
 				self.drag = True
@@ -1657,7 +1717,7 @@ class MotionTrailOperator(bpy.types.Operator):
 			self.active_keyframe, self.active_timebead, self.keyframes_ori = \
 				drag(context, event, self.drag_mouse_ori,
 				self.active_keyframe, self.active_handle,
-				self.active_timebead, self.keyframes_ori, self.handles_ori)
+				self.active_timebead, self.keyframes_ori, self.handles_ori, get_inverse_parents_depsgraph)
 			no_passthrough = True
 		elif event.type in [select, deselect_nohit] and event.value == 'PRESS' and \
 		not self.drag and not event.shift and not event.alt and not \
@@ -1851,6 +1911,31 @@ class MotionTrailLoadDefaults(bpy.types.Operator):
 		load_defaults(context)
 		return {'FINISHED'}
 
+def save_defaults(context):
+	prefs = context.preferences.addons[__name__].preferences
+	for p in configurable_props:
+		current = getattr(context.window_manager.motion_trail, p)
+		setattr(prefs.default_trail_settings, p, current)
+
+class MotionTrailSaveDefaults(bpy.types.Operator):
+	bl_idname="view3d.motion_trail_save_defaults"
+	bl_label="Save Defaults"
+	bl_description="Overwrite the defaults in the addon's preferences with what the current settings are"
+
+	def draw(self, context):
+		layout = self.layout
+		col = layout.column()
+		col.label(text="Are you sure you want to overwrite the defaults?")
+		col.label(text="If not, click off of this dialog box, or ESCape.")
+	
+	def execute(self, context):
+		save_defaults(context)
+		return {'FINISHED'}
+
+	def invoke(self, context, event):
+		wm = context.window_manager
+		return wm.invoke_props_dialog(self)
+
 class MotionTrailPanel(bpy.types.Panel):
 	bl_idname = "VIEW3D_PT_motion_trail"
 	bl_category = "Animation"
@@ -1869,11 +1954,14 @@ class MotionTrailPanel(bpy.types.Panel):
 		if (not context.window_manager.motion_trail.loaded_defaults):
 			load_defaults(context)
 			context.window_manager.motion_trail.loaded_defaults = True
+		
 		col = self.layout.column()
 		if not context.window_manager.motion_trail.enabled:
 			col.operator("view3d.motion_trail", text="Enable motion trail")
 		else:
 			col.operator("view3d.motion_trail", text="Disable motion trail")
+
+		col.prop(context.window_manager.motion_trail, "use_depsgraph")
 
 		box = self.layout.box()
 		box.prop(context.window_manager.motion_trail, "mode")
@@ -1955,6 +2043,7 @@ class MotionTrailPanel(bpy.types.Panel):
 		col.label(text="is LMB/RMB or Esc")
 			
 		self.layout.column().operator("view3d.motion_trail_load_defaults")
+		self.layout.column().operator("view3d.motion_trail_save_defaults")
 
 DESELECT_WARNING = "Deselection will happen before your click registers to the rest of Blender.\n" +\
 	"This can prevent you from changing the handle type if it's set to left click"
@@ -2237,8 +2326,13 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			size=4,
 			subtype='COLOR'
 			)
+
+	use_depsgraph: BoolProperty(name="Use depsgraph",
+			description="Whether to use the depsgraph or not.\nChanging this takes effect only when motion trails are not active.\n\nUsing the depsgraph currently has the following ups and downs:\n+ Completely accurate motion trails that factor in all constraints, drivers, and so on.\n- Less performant.\n- Constantly resets un-keyframed changes.\n- Dragging may shift at the start",
+			default=False
+			)
 			
-configurable_props = ["select_key", "select_threshold", "deselect_nohit_key", "deselect_always_key", "mode", "path_style", 
+configurable_props = ["use_depsgraph", "select_key", "select_threshold", "deselect_nohit_key", "deselect_always_key", "mode", "path_style", 
 "simple_color", "speed_color_min", "speed_color_max", "accel_color_neg", "accel_color_static", "accel_color_pos",
 "keyframe_color", "frame_color", "selection_color", "selection_color_dark", "handle_color", "handle_line_color", "timebead_color", 
 "text_color", "selected_text_color", "path_width", "path_resolution", "path_before", "path_after",
@@ -2264,6 +2358,7 @@ classes = (
 		MotionTrailPanel,
 		MotionTrailPreferences,
 		MotionTrailLoadDefaults,
+		MotionTrailSaveDefaults,
 		)
 
 

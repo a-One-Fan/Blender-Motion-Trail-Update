@@ -342,10 +342,10 @@ def get_location(frame, display_ob, offset_ob, curves, context):
 	return (get_matrix_any_parents(display_ob, frame).to_translation())
 
 def get_matrix_any_depsgraph(frame, target, context):
-	oldframe = context.scene.frame_current
+	oldframe = context.scene.frame_float
 	isBone = type(target) is bpy.types.PoseBone
 
-	context.scene.frame_set(int(frame))
+	context.scene.frame_float = frame
 	dg = context.evaluated_depsgraph_get()
 	boneMat = mathutils.Matrix()
 	
@@ -357,7 +357,7 @@ def get_matrix_any_depsgraph(frame, target, context):
 		boneMat = evalledOb.pose.bones[target.name].matrix
 
 	resMat = evalledOb.matrix_world @ boneMat
-	context.scene.frame_set(oldframe)
+	context.scene.frame_float = oldframe
 
 	return resMat
 

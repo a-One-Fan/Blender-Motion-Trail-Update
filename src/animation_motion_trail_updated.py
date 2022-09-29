@@ -1911,6 +1911,31 @@ class MotionTrailLoadDefaults(bpy.types.Operator):
 		load_defaults(context)
 		return {'FINISHED'}
 
+def save_defaults(context):
+	prefs = context.preferences.addons[__name__].preferences
+	for p in configurable_props:
+		current = getattr(context.window_manager.motion_trail, p)
+		setattr(prefs.default_trail_settings, p, current)
+
+class MotionTrailSaveDefaults(bpy.types.Operator):
+	bl_idname="view3d.motion_trail_save_defaults"
+	bl_label="Save Defaults"
+	bl_description="Overwrite the defaults in the addon's preferences with what the current settings are"
+
+	def draw(self, context):
+		layout = self.layout
+		col = layout.column()
+		col.label(text="Are you sure you want to overwrite the defaults?")
+		col.label(text="If not, click off of this dialog box, or ESCape.")
+	
+	def execute(self, context):
+		save_defaults(context)
+		return {'FINISHED'}
+
+	def invoke(self, context, event):
+		wm = context.window_manager
+		return wm.invoke_props_dialog(self)
+
 class MotionTrailPanel(bpy.types.Panel):
 	bl_idname = "VIEW3D_PT_motion_trail"
 	bl_category = "Animation"
@@ -2018,6 +2043,7 @@ class MotionTrailPanel(bpy.types.Panel):
 		col.label(text="is LMB/RMB or Esc")
 			
 		self.layout.column().operator("view3d.motion_trail_load_defaults")
+		self.layout.column().operator("view3d.motion_trail_save_defaults")
 
 DESELECT_WARNING = "Deselection will happen before your click registers to the rest of Blender.\n" +\
 	"This can prevent you from changing the handle type if it's set to left click"
@@ -2332,6 +2358,7 @@ classes = (
 		MotionTrailPanel,
 		MotionTrailPreferences,
 		MotionTrailLoadDefaults,
+		MotionTrailSaveDefaults,
 		)
 
 

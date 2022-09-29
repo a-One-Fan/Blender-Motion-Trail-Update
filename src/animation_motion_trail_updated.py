@@ -1782,7 +1782,7 @@ class MotionTrailOperator(bpy.types.Operator):
 					attrs = ["active_keyframe", "active_handle", "active_timebead", "active_frame"]
 					# If a change happens, then no passthrough
 					gotten = [getattr(self, attr) for attr in attrs]
-					no_passthrough = not reduce(lambda accum, next: accum and not next, gotten, True)
+					no_passthrough = (not reduce(lambda accum, next: accum and not next, gotten, True)) and not mt.deselect_passthrough
 					
 					for attr in attrs:
 						setattr(self, attr, False)
@@ -2036,6 +2036,7 @@ class MotionTrailPanel(bpy.types.Panel):
 		col.row().prop(context.window_manager.motion_trail, "select_threshold")
 		col.row().prop(context.window_manager.motion_trail, "deselect_nohit_key")
 		col.row().prop(context.window_manager.motion_trail, "deselect_always_key")
+		col.row().prop(context.window_manager.motion_trail, "deselect_passthrough")
 		col.label(text="For the time being, confirm/cancel")
 		col.label(text="is LMB/RMB or Esc")
 			
@@ -2216,6 +2217,10 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			step=2,
 			min=0.0
 			)
+	deselect_passthrough: BoolProperty(name="Deselect passthrough",
+			description="When something in the motion trail is deselected, whether to pass that button press to the rest of blender or not",
+			default=True
+			)
 
 	#Colors
 	simple_color: FloatVectorProperty(name="Color",
@@ -2329,7 +2334,7 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			default=False
 			)
 			
-configurable_props = ["use_depsgraph", "select_key", "select_threshold", "deselect_nohit_key", "deselect_always_key", "mode", "path_style", 
+configurable_props = ["use_depsgraph", "select_key", "select_threshold", "deselect_nohit_key", "deselect_always_key", "deselect_passthrough", "mode", "path_style", 
 "simple_color", "speed_color_min", "speed_color_max", "accel_color_neg", "accel_color_static", "accel_color_pos",
 "keyframe_color", "frame_color", "selection_color", "selection_color_dark", "handle_color", "handle_line_color", "timebead_color", 
 "text_color", "selected_text_color", "path_width", "path_resolution", "path_before", "path_after",

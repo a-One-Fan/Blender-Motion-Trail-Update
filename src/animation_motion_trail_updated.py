@@ -1593,9 +1593,13 @@ class MotionTrailOperator(bpy.types.Operator):
 	@staticmethod
 	def handle_add(self, context):
 		global global_mtrail_handler_calc
+
+		dg_optional_callback = update_callback if context.window_manager.motion_trail.use_depsgraph else calc_callback_ce
+		# Using the depsgraph in a callback seems to make blender freeze! Very cool, and is the whole reason why I avoided using it so far.
+
 		global_mtrail_handler_calc = \
 		MotionTrailOperator._handle_calc = bpy.types.SpaceView3D.draw_handler_add(
-			update_callback, (self, context), 'WINDOW', 'POST_VIEW')
+			dg_optional_callback, (self, context), 'WINDOW', 'POST_VIEW')
 		
 		global global_mtrail_handler_draw
 		global_mtrail_handler_draw = \
@@ -1639,7 +1643,8 @@ class MotionTrailOperator(bpy.types.Operator):
 				context.area.tag_redraw()
 			return {'FINISHED'}
 
-		calc_callback_dg(self, context)
+		if context.window_manager.motion_trail.use_depsgraph:
+			calc_callback_dg(self, context)
 
 		if not context.area or not context.region or event.type == 'NONE':
 			#context.area.tag_redraw()
@@ -2297,7 +2302,7 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			)
 
 	use_depsgraph: BoolProperty(name="Use depsgraph",
-			description="Whether to use the depsgraph or not.\nChanging this takes effect only when motion trails are not active.\n\nUsing the depsgraph currently has the following ups and downs:\n+ Completely accurate motion trails that factor in all constraints, drivers, and so on.\n- Slightly less performant.\n- Immediately and constantly resets un-keyframed changes.\n- Dragging may shift at the start",
+			description="Whether to use the depsgraph or not.\nChanging this takes effect only when motion trails are not active.\n\nUsing the depsgraph currently has the following ups and downs:\n+ Completely accurate motion trails that factor in all constraints, drivers, and so on.\n- Less performant.\n- Constantly resets un-keyframed changes.\n- Dragging may shift at the start",
 			default=False
 			)
 			

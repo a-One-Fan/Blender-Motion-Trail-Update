@@ -828,7 +828,8 @@ def calc_callback(self, context, inverse_getter, location_getter, rotation_gette
 						rot = self.cached["spines_rot"][display_ob.name][frame]
 					else:
 						rot = rotation_getter(frame, display_ob, offset_ob, curves, context)
-						self.cached["spines_rot"][display_ob.name][frame] = rot
+						rot.rotate(context.window_manager.motion_trail.spine_offset)
+						self.cached["spines_rot"][display_ob.name][frame] = rot 
 
 					baseLoc = world_to_screen(context, loc)
 

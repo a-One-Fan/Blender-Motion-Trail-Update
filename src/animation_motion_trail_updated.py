@@ -1948,120 +1948,121 @@ class MotionTrailPanel(bpy.types.Panel):
 		return context.active_object.mode in ('OBJECT', 'POSE')
 
 	def draw(self, context):
-		if (not context.window_manager.motion_trail.loaded_defaults):
+		mt = context.window_manager.motion_trail
+
+		if (not mt.loaded_defaults):
 			load_defaults(context)
-			context.window_manager.motion_trail.loaded_defaults = True
+			mt.loaded_defaults = True
 		
 		col = self.layout.column()
-		if not context.window_manager.motion_trail.enabled:
+		if not mt.enabled:
 			col.operator("view3d.motion_trail", text="Enable motion trail")
 		else:
 			col.operator("view3d.motion_trail", text="Disable motion trail")
 
-		col.prop(context.window_manager.motion_trail, "use_depsgraph")
+		col.prop(mt, "use_depsgraph")
 
 		box = self.layout.box()
-		box.prop(context.window_manager.motion_trail, "mode")
-		# box.prop(context.window_manager.motion_trail, "calculate")
-		if context.window_manager.motion_trail.mode == 'timing':
-			box.prop(context.window_manager.motion_trail, "timebeads")
+		box.prop(mt, "mode")
+		# box.prop(mt, "calculate")
+		if mt.mode == 'timing':
+			box.prop(mt, "timebeads")
 
 		box = self.layout.box()
 		col = box.column()
 		row = col.row()
 
-		if context.window_manager.motion_trail.path_display:
-			row.prop(context.window_manager.motion_trail, "path_display",
+		if mt.path_display:
+			row.prop(mt, "path_display",
 				icon="DOWNARROW_HLT", text="", emboss=False)
 		else:
-			row.prop(context.window_manager.motion_trail, "path_display",
+			row.prop(mt, "path_display",
 				icon="RIGHTARROW", text="", emboss=False)
 
 		row.label(text="Path options")
 
-		if context.window_manager.motion_trail.path_display:
-			col.prop(context.window_manager.motion_trail, "path_style",
+		if mt.path_display:
+			col.prop(mt, "path_style",
 				text="Style")
 			
-			if context.window_manager.motion_trail.path_style == 'simple':
-				col.row().prop(context.window_manager.motion_trail, "simple_color")
-			elif context.window_manager.motion_trail.path_style == 'speed':
-				col.row().prop(context.window_manager.motion_trail, "speed_color_min")
-				col.row().prop(context.window_manager.motion_trail, "speed_color_max")
+			if mt.path_style == 'simple':
+				col.row().prop(mt, "simple_color")
+			elif mt.path_style == 'speed':
+				col.row().prop(mt, "speed_color_min")
+				col.row().prop(mt, "speed_color_max")
 			else:
-				col.row().prop(context.window_manager.motion_trail, "accel_color_neg")	
-				col.row().prop(context.window_manager.motion_trail, "accel_color_static")
-				col.row().prop(context.window_manager.motion_trail, "accel_color_pos")
+				col.row().prop(mt, "accel_color_neg")	
+				col.row().prop(mt, "accel_color_static")
+				col.row().prop(mt, "accel_color_pos")
 				
 			grouped = col.column(align=True)
-			grouped.prop(context.window_manager.motion_trail, "path_width",
+			grouped.prop(mt, "path_width",
 				text="Width")
-			grouped.prop(context.window_manager.motion_trail,
+			grouped.prop(mt,
 				"path_resolution")
 			row = grouped.row(align=True)
-			row.prop(context.window_manager.motion_trail, "path_before")
-			row.prop(context.window_manager.motion_trail, "path_after")
+			row.prop(mt, "path_before")
+			row.prop(mt, "path_after")
 			col = col.column(align=True)
-			col.prop(context.window_manager.motion_trail, "keyframe_numbers")
-			if context.window_manager.motion_trail.keyframe_numbers:
-				col.row().prop(context.window_manager.motion_trail, "text_color")
-				col.row().prop(context.window_manager.motion_trail, "selected_text_color")
-			col.prop(context.window_manager.motion_trail, "frame_display")
-			if context.window_manager.motion_trail.frame_display:
-				col.row().prop(context.window_manager.motion_trail, "frame_color")
+			col.prop(mt, "keyframe_numbers")
+			if mt.keyframe_numbers:
+				col.row().prop(mt, "text_color")
+				col.row().prop(mt, "selected_text_color")
+			col.prop(mt, "frame_display")
+			if mt.frame_display:
+				col.row().prop(mt, "frame_color")
 
 		box = self.layout.box()
 		col = box.column(align=True)
-		if context.window_manager.motion_trail.mode == 'location':
-			col.prop(context.window_manager.motion_trail, "handle_display",
+		if mt.mode == 'location':
+			col.prop(mt, "handle_display",
 				text="Handles")
-			if context.window_manager.motion_trail.handle_display:
+			if mt.handle_display:
 				row = col.row()
-				row.enabled = context.window_manager.motion_trail.\
-					handle_type_enabled
-				row.prop(context.window_manager.motion_trail, "handle_type")
-				col.prop(context.window_manager.motion_trail, "handle_direction")
-				col.prop(context.window_manager.motion_trail, "handle_length")
+				row.enabled = mt.handle_type_enabled
+				row.prop(mt, "handle_type")
+				col.prop(mt, "handle_direction")
+				col.prop(mt, "handle_length")
 				
-				col.row().prop(context.window_manager.motion_trail, "handle_color")
-				col.row().prop(context.window_manager.motion_trail, "handle_line_color")
-				col.row().prop(context.window_manager.motion_trail, "selection_color_dark")
+				col.row().prop(mt, "handle_color")
+				col.row().prop(mt, "handle_line_color")
+				col.row().prop(mt, "selection_color_dark")
 		else:
-			col.row().prop(context.window_manager.motion_trail, "timebead_color")
+			col.row().prop(mt, "timebead_color")
 
 		box = self.layout.box()
 		col = box.column(align=True)
-		col.row().prop(context.window_manager.motion_trail, "selection_color")
-		col.row().prop(context.window_manager.motion_trail, "select_key")
-		col.row().prop(context.window_manager.motion_trail, "select_threshold")
-		col.row().prop(context.window_manager.motion_trail, "deselect_nohit_key")
-		col.row().prop(context.window_manager.motion_trail, "deselect_always_key")
-		col.row().prop(context.window_manager.motion_trail, "deselect_passthrough")
+		col.row().prop(mt, "selection_color")
+		col.row().prop(mt, "select_key")
+		col.row().prop(mt, "select_threshold")
+		col.row().prop(mt, "deselect_nohit_key")
+		col.row().prop(mt, "deselect_always_key")
+		col.row().prop(mt, "deselect_passthrough")
 		col.label(text="For the time being, confirm/cancel")
 		col.label(text="is LMB/RMB or Esc")
 
 		box = self.layout.box()
 		col = box.column(align=True)
-		col.row().prop(context.window_manager.motion_trail, "show_spines")
-		if context.window_manager.motion_trail.show_spines:
+		col.row().prop(mt, "show_spines")
+		if mt.show_spines:
 			pSpineStrings = ["pXspines", "pYspines", "pZspines"]
 			nSpineStrings = ["nXspines", "nYspines", "nZspines"]
 			spineColorStrings = ["spine_x_color", "spine_y_color", "spine_z_color"]
 
-			col.row().prop(context.window_manager.motion_trail, "spine_length")
-			col.row().prop(context.window_manager.motion_trail, "spine_offset")
+			col.row().prop(mt, "spine_length")
+			col.row().prop(mt, "spine_offset")
 
 			row = col.row()
 			for s in pSpineStrings:
-				row.prop(context.window_manager.motion_trail, s)
+				row.prop(mt, s)
 
 			row = col.row()
 			for s in nSpineStrings:
-				row.prop(context.window_manager.motion_trail, s)
+				row.prop(mt, s)
 
 			row = col.row()
 			for s in spineColorStrings:
-				row.prop(context.window_manager.motion_trail, s)
+				row.prop(mt, s)
 			
 		self.layout.column().operator("view3d.motion_trail_load_defaults")
 		self.layout.column().operator("view3d.motion_trail_save_defaults")

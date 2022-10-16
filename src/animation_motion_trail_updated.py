@@ -2039,6 +2039,29 @@ class MotionTrailPanel(bpy.types.Panel):
 		col.row().prop(context.window_manager.motion_trail, "deselect_passthrough")
 		col.label(text="For the time being, confirm/cancel")
 		col.label(text="is LMB/RMB or Esc")
+
+		box = self.layout.box()
+		col = box.column(align=True)
+		col.row().prop(context.window_manager.motion_trail, "show_spines")
+		if context.window_manager.motion_trail.show_spines:
+			pSpineStrings = ["pXspines", "pYspines", "pZspines"]
+			nSpineStrings = ["nXspines", "nYspines", "nZspines"]
+			spineColorStrings = ["spine_x_color", "spine_y_color", "spine_z_color"]
+
+			col.row().prop(context.window_manager.motion_trail, "spine_length")
+			col.row().prop(context.window_manager.motion_trail, "spine_offset")
+
+			row = col.row()
+			for s in pSpineStrings:
+				row.prop(context.window_manager.motion_trail, s)
+
+			row = col.row()
+			for s in nSpineStrings:
+				row.prop(context.window_manager.motion_trail, s)
+
+			row = col.row()
+			for s in spineColorStrings:
+				row.prop(context.window_manager.motion_trail, s)
 			
 		self.layout.column().operator("view3d.motion_trail_load_defaults")
 		self.layout.column().operator("view3d.motion_trail_save_defaults")
@@ -2222,6 +2245,55 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			default=True
 			)
 
+	SPSTRSTR = "Show spines for the " # haha it says str str!!! But really, it would be pointless if the name was longer than the string itself
+	SPSTREND = " axis. This visualization works for quaternions as well"
+	# Using a Bool vector looks very silly in the UI.
+
+	show_spines: BoolProperty(name="Spines",
+			description="Show spines for visualizing rotation along the motion trail",
+			default=False
+			)
+
+
+	pXspines: BoolProperty(name="+X",
+			description=SPSTRSTR + "+X" + SPSTREND,
+			default=False
+			)
+	pYspines: BoolProperty(name="+Y",
+			description=SPSTRSTR + "+Y" + SPSTREND,
+			default=True
+			)
+	pZspines: BoolProperty(name="+Z",
+			description=SPSTRSTR + "+Z" + SPSTREND,
+			default=False
+			)
+
+	nXspines: BoolProperty(name="-X",
+			description=SPSTRSTR + "-X" + SPSTREND,
+			default=False
+			)
+	nYspines: BoolProperty(name="-Y",
+			description=SPSTRSTR + "-Y" + SPSTREND,
+			default=True
+			)
+	nZspines: BoolProperty(name="-Z",
+			description=SPSTRSTR + "-Z" + SPSTREND,
+			default=False
+			)
+
+	spine_offset: FloatVectorProperty(name="Offset",
+			description="Apply this euler rotation to the motion trail rotation to adjust where spines are",
+			default=(0.0, 0.0, 0.0),
+			size=3,
+			subtype='EULER'
+			)
+	
+	spine_length: FloatProperty(name="Length",
+			description="How long spines should be",
+			default=4.0,
+			)
+
+
 	#Colors
 	simple_color: FloatVectorProperty(name="Color",
 			description="Color when using simple drawing mode",
@@ -2329,6 +2401,28 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			subtype='COLOR'
 			)
 
+	spine_x_color: FloatVectorProperty(name="X color",
+			description="Color that spines corresponding to X rotation will be colored in",
+			default=(0.2, 0.0, 0.0, 1.0),
+			min=0.0, soft_max=1.0,
+			size=4,
+			subtype='COLOR'
+			)
+	spine_y_color: FloatVectorProperty(name="Y color",
+			description="Color that spines corresponding to Y rotation will be colored in",
+			default=(0.0, 0.2, 0.0, 1.0),
+			min=0.0, soft_max=1.0,
+			size=4,
+			subtype='COLOR'
+			)
+	spine_z_color: FloatVectorProperty(name="Z color",
+			description="Color that spines corresponding to Z rotation will be colored in",
+			default=(0.0, 0.0, 0.2, 1.0),
+			min=0.0, soft_max=1.0,
+			size=4,
+			subtype='COLOR'
+			)
+
 	use_depsgraph: BoolProperty(name="Use depsgraph",
 			description="Whether to use the depsgraph or not.\nChanging this takes effect only when motion trails are not active.\n\nUsing the depsgraph currently has the following ups and downs:\n+ Completely accurate motion trails that factor in all constraints, drivers, and so on.\n- Less performant.\n- Constantly resets un-keyframed changes to objects with keyframes.\n- Dragging may shift at the start.\n- The trail will not calculate when the viewport is not interacted with",
 			default=False
@@ -2338,7 +2432,8 @@ configurable_props = ["use_depsgraph", "select_key", "select_threshold", "desele
 "simple_color", "speed_color_min", "speed_color_max", "accel_color_neg", "accel_color_static", "accel_color_pos",
 "keyframe_color", "frame_color", "selection_color", "selection_color_dark", "handle_color", "handle_line_color", "timebead_color", 
 "text_color", "selected_text_color", "path_width", "path_resolution", "path_before", "path_after",
-"keyframe_numbers", "frame_display", "handle_display", "handle_length", "handle_direction"]
+"keyframe_numbers", "frame_display", "handle_display", "handle_length", "handle_direction", "spine_x_color", "spine_y_color", "spine_z_color", "pXspines", "pYspines", "pZspines",
+"nXspines", "nYspines", "nZspines", "spine_length", "spine_offset"]
 			
 class MotionTrailPreferences(bpy.types.AddonPreferences):
 	bl_idname = __name__

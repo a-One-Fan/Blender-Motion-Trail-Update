@@ -20,7 +20,7 @@
 bl_info = {
 	"name": "Motion Trail (update)",
 	"author": "Bart Crouch, Viktor_smg",
-	"version": (0, 14, 2),
+	"version": (0, 15, 0),
 	"blender": (3, 2, 0),
 	"location": "View3D > Toolbar > Motion Trail tab",
 	"warning": "Support for features not originally present is buggy; NO UNDO!!!",
@@ -338,6 +338,11 @@ def evaluate_constraints(mat, constraints, frame, ob):
 def get_location(frame, display_ob, offset_ob, curves, context):
 	return (get_matrix_any_parents(display_ob, frame).to_translation())
 
+# calculate rotation of display_ob in worldspace using our own, draw handler-safe methods
+def get_rotation(frame, display_ob, offset_ob, curves, context):
+	return (get_matrix_any_parents(display_ob, frame).to_quaternion())
+
+
 def get_matrix_any_depsgraph(frame, target, context):
 	oldframe = context.scene.frame_float
 	isBone = type(target) is bpy.types.PoseBone
@@ -361,6 +366,10 @@ def get_matrix_any_depsgraph(frame, target, context):
 # calculate location of display_ob in worldspace using the depsgraph
 def get_location_depsgraph(frame, display_ob, offset_ob, curves, context):
 	return get_matrix_any_depsgraph(frame, display_ob, context).to_translation()
+
+# calculate rotation of display_ob in worldspace using the depsgraph
+def get_rotation_depsgraph(frame, display_ob, offset_ob, curves, context):
+	return get_matrix_any_depsgraph(frame, display_ob, context).to_quaternion()
 
 # Calculate an inverse matrix for an object or bone, such that it's suitable for the addon's
 # manipulation of keyframes (IE without the very last animation applied)
@@ -450,7 +459,7 @@ def get_original_animation_data_ce(context, keyframes):
 	return get_original_animation_data(context, keyframes, get_location)
 
 # callback function that calculates positions of all things that need be drawn
-def calc_callback(self, context, inverse_getter, location_getter):
+def calc_callback(self, context, inverse_getter, location_getter, rotation_getter):
 	# Remove handler if file was changed and we lose access to self
 	# I'm all ears for a better solution, as __del__ for the modal operator does not call on file change
 	# and there is no special event emitted to the operator for that
@@ -487,6 +496,7 @@ def calc_callback(self, context, inverse_getter, location_getter):
 	self.handles = {}    # value: dict of dicts
 	self.timebeads = {}  # value: dict with frame as key and [x,y] as value
 	self.click = {} 	 # value: list of lists with frame, type, loc-vector
+	self.spines = {}     # value: dict with frame as key and [x0,y0, [(x1, y1), (x2,y2), ...]] as values, for 1..6 where xy1,2,3 = +x,+y,+z and x4,5,6 = -x,-y,-z
 	if selection_change:
 		# value: editbone inverted rotation matrix or None
 		self.active_keyframe = False
@@ -498,7 +508,7 @@ def calc_callback(self, context, inverse_getter, location_getter):
 		# contains locations of path, keyframes and timebeads
 		self.cached = {
 				"path": {}, "keyframes": {}, "timebeads_timing": {},
-				"timebeads_speed": {}
+				"timebeads_speed": {}, "spines_loc": {}, "spines_rot": {}
 				}
 	if self.cached["path"]:
 		use_cache = True
@@ -795,6 +805,45 @@ def calc_callback(self, context, inverse_getter, location_getter):
 								action_ob, child]
 								)
 				self.timebeads[display_ob.name] = timebeads
+
+			if context.window_manager.motion_trail.show_spines:
+				if not use_cache:
+					if display_ob.name not in self.cached["spines_loc"]:
+						self.cached["spines_loc"][display_ob.name] = {}
+
+				if not use_cache:
+					if display_ob.name not in self.cached["spines_rot"]:
+						self.cached["spines_rot"][display_ob.name] = {}
+
+				for frame in range(range_min, range_max + 1, context.window_manager.motion_trail.spine_step):
+					loc = ""
+
+					if use_cache and frame in self.cached["spines_loc"][display_ob.name]:
+						loc = self.cached["spines_loc"][display_ob.name][frame]
+					else:
+						loc = location_getter(frame, display_ob, offset_ob, curves, context)
+						self.cached["spines_loc"][display_ob.name][frame] = loc
+
+					if use_cache and frame in self.cached["spines_rot"][display_ob.name]:
+						rot = self.cached["spines_rot"][display_ob.name][frame]
+					else:
+						rot = rotation_getter(frame, display_ob, offset_ob, curves, context)
+						rot.rotate(context.window_manager.motion_trail.spine_offset)
+						self.cached["spines_rot"][display_ob.name][frame] = rot 
+
+					baseLoc = world_to_screen(context, loc)
+
+					slen = context.window_manager.motion_trail.spine_length
+
+					resLocs = []
+					vecs = ((slen, 0, 0), (0, slen, 0), (0, 0, slen), (-slen, 0, 0), (0, -slen, 0), (0, 0, -slen))
+					for i in range(6):
+						vec = mathutils.Vector(vecs[i])
+						vec.rotate(rot)
+						resLocs.append(world_to_screen(context, loc + vec))
+					
+					self.spines[frame] = (baseLoc, resLocs)
+
 			# add frame positions to click-list
 			if context.window_manager.motion_trail.frame_display:
 				path = self.paths[display_ob.name]
@@ -821,11 +870,11 @@ def calc_callback(self, context, inverse_getter, location_getter):
 
 # calc_callback using depsgraph functions
 def calc_callback_dg(self, context):
-	return calc_callback(self, context, get_inverse_parents_depsgraph, get_location_depsgraph)
+	return calc_callback(self, context, get_inverse_parents_depsgraph, get_location_depsgraph, get_rotation_depsgraph)
 
 # calc_callback using custom evaluation functions
 def calc_callback_ce(self, context):
-	return calc_callback(self, context, get_inverse_parents, get_location)
+	return calc_callback(self, context, get_inverse_parents, get_location, get_rotation)
 
 
 # draw in 3d-view
@@ -1067,6 +1116,31 @@ def draw_callback(self, context):
 					c = context.window_manager.motion_trail.text_color
 					blf.color(0, * c)
 					blf.draw(0, text)
+
+	# Draw rotation spines
+	if context.window_manager.motion_trail.show_spines:
+		colored_line_shader.bind()
+		colored_line_shader.uniform_float("lineWidth", 2)
+		poss = []
+		cols = []
+		for frame, locs in self.spines.items():
+			if frame < limit_min or frame > limit_max:
+				continue
+			
+			mt = context.window_manager.motion_trail
+			to_use = (mt.pXspines, mt.pYspines, mt.pZspines, mt.nXspines, mt.nYspines, mt.nZspines)
+			to_use_colors = (mt.spine_x_color, mt.spine_y_color, mt.spine_z_color, mt.spine_x_color, mt.spine_y_color, mt.spine_z_color)
+			for i in range(6):
+				if to_use[i]:
+					cols.append(to_use_colors[i])
+					poss.append((locs[0][0], locs[0][1], 0.0))
+					cols.append(to_use_colors[i])
+					poss.append((locs[1][i][0], locs[1][i][1], 0.0))
+			if(not (cols == []) and not (poss == [])):
+				batch = batch_for_shader(colored_line_shader, 'LINES', {"pos": poss, "color": cols})
+				batch.draw(colored_line_shader)
+				poss.clear()
+				cols.clear()
 
 	# restore opengl defaults
 	gpu.state.point_size_set(1.0) # TODO: is this the correct value?
@@ -1948,97 +2022,123 @@ class MotionTrailPanel(bpy.types.Panel):
 		return context.active_object.mode in ('OBJECT', 'POSE')
 
 	def draw(self, context):
-		if (not context.window_manager.motion_trail.loaded_defaults):
+		mt = context.window_manager.motion_trail
+
+		if (not mt.loaded_defaults):
 			load_defaults(context)
-			context.window_manager.motion_trail.loaded_defaults = True
+			mt.loaded_defaults = True
 		
 		col = self.layout.column()
-		if not context.window_manager.motion_trail.enabled:
+		if not mt.enabled:
 			col.operator("view3d.motion_trail", text="Enable motion trail")
 		else:
 			col.operator("view3d.motion_trail", text="Disable motion trail")
 
-		col.prop(context.window_manager.motion_trail, "use_depsgraph")
+		col.prop(mt, "use_depsgraph")
 
 		box = self.layout.box()
-		box.prop(context.window_manager.motion_trail, "mode")
-		# box.prop(context.window_manager.motion_trail, "calculate")
-		if context.window_manager.motion_trail.mode == 'timing':
-			box.prop(context.window_manager.motion_trail, "timebeads")
+		box.prop(mt, "mode")
+		# box.prop(mt, "calculate")
+		if mt.mode == 'timing':
+			box.prop(mt, "timebeads")
 
 		box = self.layout.box()
 		col = box.column()
 		row = col.row()
 
-		if context.window_manager.motion_trail.path_display:
-			row.prop(context.window_manager.motion_trail, "path_display",
+		if mt.path_display:
+			row.prop(mt, "path_display",
 				icon="DOWNARROW_HLT", text="", emboss=False)
 		else:
-			row.prop(context.window_manager.motion_trail, "path_display",
+			row.prop(mt, "path_display",
 				icon="RIGHTARROW", text="", emboss=False)
 
 		row.label(text="Path options")
 
-		if context.window_manager.motion_trail.path_display:
-			col.prop(context.window_manager.motion_trail, "path_style",
+		if mt.path_display:
+			col.prop(mt, "path_style",
 				text="Style")
 			
-			if context.window_manager.motion_trail.path_style == 'simple':
-				col.row().prop(context.window_manager.motion_trail, "simple_color")
-			elif context.window_manager.motion_trail.path_style == 'speed':
-				col.row().prop(context.window_manager.motion_trail, "speed_color_min")
-				col.row().prop(context.window_manager.motion_trail, "speed_color_max")
+			if mt.path_style == 'simple':
+				col.row().prop(mt, "simple_color")
+			elif mt.path_style == 'speed':
+				col.row().prop(mt, "speed_color_min")
+				col.row().prop(mt, "speed_color_max")
 			else:
-				col.row().prop(context.window_manager.motion_trail, "accel_color_neg")	
-				col.row().prop(context.window_manager.motion_trail, "accel_color_static")
-				col.row().prop(context.window_manager.motion_trail, "accel_color_pos")
+				col.row().prop(mt, "accel_color_neg")	
+				col.row().prop(mt, "accel_color_static")
+				col.row().prop(mt, "accel_color_pos")
 				
 			grouped = col.column(align=True)
-			grouped.prop(context.window_manager.motion_trail, "path_width",
+			grouped.prop(mt, "path_width",
 				text="Width")
-			grouped.prop(context.window_manager.motion_trail,
+			grouped.prop(mt,
 				"path_resolution")
 			row = grouped.row(align=True)
-			row.prop(context.window_manager.motion_trail, "path_before")
-			row.prop(context.window_manager.motion_trail, "path_after")
+			row.prop(mt, "path_before")
+			row.prop(mt, "path_after")
 			col = col.column(align=True)
-			col.prop(context.window_manager.motion_trail, "keyframe_numbers")
-			if context.window_manager.motion_trail.keyframe_numbers:
-				col.row().prop(context.window_manager.motion_trail, "text_color")
-				col.row().prop(context.window_manager.motion_trail, "selected_text_color")
-			col.prop(context.window_manager.motion_trail, "frame_display")
-			if context.window_manager.motion_trail.frame_display:
-				col.row().prop(context.window_manager.motion_trail, "frame_color")
+			col.prop(mt, "keyframe_numbers")
+			if mt.keyframe_numbers:
+				col.row().prop(mt, "text_color")
+				col.row().prop(mt, "selected_text_color")
+			col.prop(mt, "frame_display")
+			if mt.frame_display:
+				col.row().prop(mt, "frame_color")
 
 		box = self.layout.box()
 		col = box.column(align=True)
-		if context.window_manager.motion_trail.mode == 'location':
-			col.prop(context.window_manager.motion_trail, "handle_display",
+		if mt.mode == 'location':
+			col.prop(mt, "handle_display",
 				text="Handles")
-			if context.window_manager.motion_trail.handle_display:
+			if mt.handle_display:
 				row = col.row()
-				row.enabled = context.window_manager.motion_trail.\
-					handle_type_enabled
-				row.prop(context.window_manager.motion_trail, "handle_type")
-				col.prop(context.window_manager.motion_trail, "handle_direction")
-				col.prop(context.window_manager.motion_trail, "handle_length")
+				row.enabled = mt.handle_type_enabled
+				row.prop(mt, "handle_type")
+				col.prop(mt, "handle_direction")
+				col.prop(mt, "handle_length")
 				
-				col.row().prop(context.window_manager.motion_trail, "handle_color")
-				col.row().prop(context.window_manager.motion_trail, "handle_line_color")
-				col.row().prop(context.window_manager.motion_trail, "selection_color_dark")
+				col.row().prop(mt, "handle_color")
+				col.row().prop(mt, "handle_line_color")
+				col.row().prop(mt, "selection_color_dark")
 		else:
-			col.row().prop(context.window_manager.motion_trail, "timebead_color")
+			col.row().prop(mt, "timebead_color")
 
 		box = self.layout.box()
 		col = box.column(align=True)
-		col.row().prop(context.window_manager.motion_trail, "selection_color")
-		col.row().prop(context.window_manager.motion_trail, "select_key")
-		col.row().prop(context.window_manager.motion_trail, "select_threshold")
-		col.row().prop(context.window_manager.motion_trail, "deselect_nohit_key")
-		col.row().prop(context.window_manager.motion_trail, "deselect_always_key")
-		col.row().prop(context.window_manager.motion_trail, "deselect_passthrough")
+		col.row().prop(mt, "selection_color")
+		col.row().prop(mt, "select_key")
+		col.row().prop(mt, "select_threshold")
+		col.row().prop(mt, "deselect_nohit_key")
+		col.row().prop(mt, "deselect_always_key")
+		col.row().prop(mt, "deselect_passthrough")
 		col.label(text="For the time being, confirm/cancel")
 		col.label(text="is LMB/RMB or Esc")
+
+		# Spines
+		box = self.layout.box()
+		col = box.column(align=True)
+		col.row().prop(mt, "show_spines")
+		if mt.show_spines:
+			pSpineStrings = ["pXspines", "pYspines", "pZspines"]
+			nSpineStrings = ["nXspines", "nYspines", "nZspines"]
+			spineColorStrings = ["spine_x_color", "spine_y_color", "spine_z_color"]
+
+			col.row().prop(mt, "spine_length")
+			col.row().prop(mt, "spine_step")
+			col.row().prop(mt, "spine_offset")
+
+			row = col.row()
+			for s in pSpineStrings:
+				row.prop(mt, s)
+
+			row = col.row()
+			for s in nSpineStrings:
+				row.prop(mt, s)
+
+			row = col.row()
+			for s in spineColorStrings:
+				row.prop(mt, s)
 			
 		self.layout.column().operator("view3d.motion_trail_load_defaults")
 		self.layout.column().operator("view3d.motion_trail_save_defaults")
@@ -2222,6 +2322,64 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			default=True
 			)
 
+	# Spines
+
+	SPSTRSTR = "Show spines for the " # haha it says str str!!! But really, it would be pointless if the name was longer than the string itself
+	SPSTREND = " axis. This visualization works for quaternions as well"
+	# Using a Bool vector looks very silly in the UI.
+
+	show_spines: BoolProperty(name="Spines",
+			description="Show spines for visualizing rotation along the motion trail",
+			default=False
+			)
+
+
+	pXspines: BoolProperty(name="+X",
+			description=SPSTRSTR + "+X" + SPSTREND,
+			default=False
+			)
+	pYspines: BoolProperty(name="+Y",
+			description=SPSTRSTR + "+Y" + SPSTREND,
+			default=True
+			)
+	pZspines: BoolProperty(name="+Z",
+			description=SPSTRSTR + "+Z" + SPSTREND,
+			default=False
+			)
+
+	nXspines: BoolProperty(name="-X",
+			description=SPSTRSTR + "-X" + SPSTREND,
+			default=False
+			)
+	nYspines: BoolProperty(name="-Y",
+			description=SPSTRSTR + "-Y" + SPSTREND,
+			default=False
+			)
+	nZspines: BoolProperty(name="-Z",
+			description=SPSTRSTR + "-Z" + SPSTREND,
+			default=False
+			)
+
+	spine_offset: FloatVectorProperty(name="Offset",
+			description="Apply this euler rotation to the motion trail rotation to adjust where spines are",
+			default=(0.0, 0.0, 0.0),
+			size=3,
+			subtype='EULER'
+			)
+	
+	spine_length: FloatProperty(name="Length",
+			description="How long spines should be",
+			default=1.0,
+			)
+
+	spine_step: IntProperty(name="Step",
+			description="How many frames to step across for each spine, higher = less spines",
+			default=1,
+			min=1,
+			soft_max=10
+			)
+
+
 	#Colors
 	simple_color: FloatVectorProperty(name="Color",
 			description="Color when using simple drawing mode",
@@ -2329,6 +2487,28 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			subtype='COLOR'
 			)
 
+	spine_x_color: FloatVectorProperty(name="X color",
+			description="Color that spines corresponding to X rotation will be colored in",
+			default=(0.2, 0.0, 0.0, 1.0),
+			min=0.0, soft_max=1.0,
+			size=4,
+			subtype='COLOR'
+			)
+	spine_y_color: FloatVectorProperty(name="Y color",
+			description="Color that spines corresponding to Y rotation will be colored in",
+			default=(0.0, 0.2, 0.0, 1.0),
+			min=0.0, soft_max=1.0,
+			size=4,
+			subtype='COLOR'
+			)
+	spine_z_color: FloatVectorProperty(name="Z color",
+			description="Color that spines corresponding to Z rotation will be colored in",
+			default=(0.0, 0.0, 0.2, 1.0),
+			min=0.0, soft_max=1.0,
+			size=4,
+			subtype='COLOR'
+			)
+
 	use_depsgraph: BoolProperty(name="Use depsgraph",
 			description="Whether to use the depsgraph or not.\nChanging this takes effect only when motion trails are not active.\n\nUsing the depsgraph currently has the following ups and downs:\n+ Completely accurate motion trails that factor in all constraints, drivers, and so on.\n- Less performant.\n- Constantly resets un-keyframed changes to objects with keyframes.\n- Dragging may shift at the start.\n- The trail will not calculate when the viewport is not interacted with",
 			default=False
@@ -2338,7 +2518,8 @@ configurable_props = ["use_depsgraph", "select_key", "select_threshold", "desele
 "simple_color", "speed_color_min", "speed_color_max", "accel_color_neg", "accel_color_static", "accel_color_pos",
 "keyframe_color", "frame_color", "selection_color", "selection_color_dark", "handle_color", "handle_line_color", "timebead_color", 
 "text_color", "selected_text_color", "path_width", "path_resolution", "path_before", "path_after",
-"keyframe_numbers", "frame_display", "handle_display", "handle_length", "handle_direction"]
+"keyframe_numbers", "frame_display", "handle_display", "handle_length", "handle_direction", "spine_x_color", "spine_y_color", "spine_z_color", "pXspines", "pYspines", "pZspines",
+"nXspines", "nYspines", "nZspines", "spine_length", "spine_step", "spine_offset"]
 			
 class MotionTrailPreferences(bpy.types.AddonPreferences):
 	bl_idname = __name__

@@ -2352,7 +2352,7 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			)
 	nYspines: BoolProperty(name="-Y",
 			description=SPSTRSTR + "-Y" + SPSTREND,
-			default=True
+			default=False
 			)
 	nZspines: BoolProperty(name="-Z",
 			description=SPSTRSTR + "-Z" + SPSTREND,
@@ -2368,7 +2368,7 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 	
 	spine_length: FloatProperty(name="Length",
 			description="How long spines should be",
-			default=4.0,
+			default=1.0,
 			)
 
 	spine_step: IntProperty(name="Step",

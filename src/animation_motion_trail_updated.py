@@ -338,6 +338,11 @@ def evaluate_constraints(mat, constraints, frame, ob):
 def get_location(frame, display_ob, offset_ob, curves, context):
 	return (get_matrix_any_parents(display_ob, frame).to_translation())
 
+# calculate rotation of display_ob in worldspace using our own, draw handler-safe methods
+def get_rotation(frame, display_ob, offset_ob, curves, context):
+	return (get_matrix_any_parents(display_ob, frame).to_quaternion())
+
+
 def get_matrix_any_depsgraph(frame, target, context):
 	oldframe = context.scene.frame_float
 	isBone = type(target) is bpy.types.PoseBone
@@ -361,6 +366,10 @@ def get_matrix_any_depsgraph(frame, target, context):
 # calculate location of display_ob in worldspace using the depsgraph
 def get_location_depsgraph(frame, display_ob, offset_ob, curves, context):
 	return get_matrix_any_depsgraph(frame, display_ob, context).to_translation()
+
+# calculate rotation of display_ob in worldspace using the depsgraph
+def get_rotation_depsgraph(frame, display_ob, offset_ob, curves, context):
+	return get_matrix_any_depsgraph(frame, display_ob, context).to_quaternion()
 
 # Calculate an inverse matrix for an object or bone, such that it's suitable for the addon's
 # manipulation of keyframes (IE without the very last animation applied)
@@ -450,7 +459,7 @@ def get_original_animation_data_ce(context, keyframes):
 	return get_original_animation_data(context, keyframes, get_location)
 
 # callback function that calculates positions of all things that need be drawn
-def calc_callback(self, context, inverse_getter, location_getter):
+def calc_callback(self, context, inverse_getter, location_getter, rotation_getter):
 	# Remove handler if file was changed and we lose access to self
 	# I'm all ears for a better solution, as __del__ for the modal operator does not call on file change
 	# and there is no special event emitted to the operator for that
@@ -487,6 +496,7 @@ def calc_callback(self, context, inverse_getter, location_getter):
 	self.handles = {}    # value: dict of dicts
 	self.timebeads = {}  # value: dict with frame as key and [x,y] as value
 	self.click = {} 	 # value: list of lists with frame, type, loc-vector
+	self.spines = {}     # value: dict with frame as key and [x0,y0, [(x1, y1), (x2,y2), ...]] as values, for 1..6 where xy1,2,3 = +x,+y,+z and x4,5,6 = -x,-y,-z
 	if selection_change:
 		# value: editbone inverted rotation matrix or None
 		self.active_keyframe = False
@@ -498,7 +508,7 @@ def calc_callback(self, context, inverse_getter, location_getter):
 		# contains locations of path, keyframes and timebeads
 		self.cached = {
 				"path": {}, "keyframes": {}, "timebeads_timing": {},
-				"timebeads_speed": {}
+				"timebeads_speed": {}, "spines_loc": {}, "spines_rot": {}
 				}
 	if self.cached["path"]:
 		use_cache = True
@@ -795,6 +805,44 @@ def calc_callback(self, context, inverse_getter, location_getter):
 								action_ob, child]
 								)
 				self.timebeads[display_ob.name] = timebeads
+
+			if context.window_manager.motion_trail.show_spines:
+				if not use_cache:
+					if display_ob.name not in self.cached["spines_loc"]:
+						self.cached["spines_loc"][display_ob.name] = {}
+
+				if not use_cache:
+					if display_ob.name not in self.cached["spines_rot"]:
+						self.cached["spines_rot"][display_ob.name] = {}
+
+				for frame in range(range_min, range_max + 1, context.window_manager.motion_trail.spine_step):
+					loc = ""
+
+					if use_cache and frame in self.cached["spines_loc"][display_ob.name]:
+						loc = self.cached["spines_loc"][display_ob.name][frame]
+					else:
+						loc = location_getter(frame, display_ob, offset_ob, curves, context)
+						self.cached["spines_loc"][display_ob.name][frame] = loc
+
+					if use_cache and frame in self.cached["spines_rot"][display_ob.name]:
+						rot = self.cached["spines_rot"][display_ob.name][frame]
+					else:
+						rot = rotation_getter(frame, display_ob, offset_ob, curves, context)
+						self.cached["spines_rot"][display_ob.name][frame] = rot
+
+					baseLoc = world_to_screen(context, loc)
+
+					slen = context.window_manager.motion_trail.spine_length
+
+					resLocs = []
+					vecs = ((slen, 0, 0), (0, slen, 0), (0, 0, slen), (-slen, 0, 0), (0, -slen, 0), (0, 0, -slen))
+					for i in range(6):
+						vec = mathutils.Vector(vecs[i])
+						vec.rotate(rot)
+						resLocs.append(world_to_screen(context, loc + vec))
+					
+					self.spines[frame] = (baseLoc, resLocs)
+
 			# add frame positions to click-list
 			if context.window_manager.motion_trail.frame_display:
 				path = self.paths[display_ob.name]
@@ -821,11 +869,11 @@ def calc_callback(self, context, inverse_getter, location_getter):
 
 # calc_callback using depsgraph functions
 def calc_callback_dg(self, context):
-	return calc_callback(self, context, get_inverse_parents_depsgraph, get_location_depsgraph)
+	return calc_callback(self, context, get_inverse_parents_depsgraph, get_location_depsgraph, get_rotation_depsgraph)
 
 # calc_callback using custom evaluation functions
 def calc_callback_ce(self, context):
-	return calc_callback(self, context, get_inverse_parents, get_location)
+	return calc_callback(self, context, get_inverse_parents, get_location, get_rotation)
 
 
 # draw in 3d-view
@@ -1067,6 +1115,31 @@ def draw_callback(self, context):
 					c = context.window_manager.motion_trail.text_color
 					blf.color(0, * c)
 					blf.draw(0, text)
+
+	# Draw rotation spines
+	if context.window_manager.motion_trail.show_spines:
+		colored_line_shader.bind()
+		colored_line_shader.uniform_float("lineWidth", 2)
+		poss = []
+		cols = []
+		for frame, locs in self.spines.items():
+			if frame < limit_min or frame > limit_max:
+				continue
+			
+			mt = context.window_manager.motion_trail
+			to_use = (mt.pXspines, mt.pYspines, mt.pZspines, mt.nXspines, mt.nYspines, mt.nZspines)
+			to_use_colors = (mt.spine_x_color, mt.spine_y_color, mt.spine_z_color, mt.spine_x_color, mt.spine_y_color, mt.spine_z_color)
+			for i in range(6):
+				if to_use[i]:
+					cols.append(to_use_colors[i])
+					poss.append((locs[0][0], locs[0][1], 0.0))
+					cols.append(to_use_colors[i])
+					poss.append((locs[1][i][0], locs[1][i][1], 0.0))
+			if(not (cols == []) and not (poss == [])):
+				batch = batch_for_shader(colored_line_shader, 'LINES', {"pos": poss, "color": cols})
+				batch.draw(colored_line_shader)
+				poss.clear()
+				cols.clear()
 
 	# restore opengl defaults
 	gpu.state.point_size_set(1.0) # TODO: is this the correct value?

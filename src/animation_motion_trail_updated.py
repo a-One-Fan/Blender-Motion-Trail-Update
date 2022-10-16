@@ -2041,6 +2041,7 @@ class MotionTrailPanel(bpy.types.Panel):
 		col.label(text="For the time being, confirm/cancel")
 		col.label(text="is LMB/RMB or Esc")
 
+		# Spines
 		box = self.layout.box()
 		col = box.column(align=True)
 		col.row().prop(mt, "show_spines")
@@ -2050,6 +2051,7 @@ class MotionTrailPanel(bpy.types.Panel):
 			spineColorStrings = ["spine_x_color", "spine_y_color", "spine_z_color"]
 
 			col.row().prop(mt, "spine_length")
+			col.row().prop(mt, "spine_step")
 			col.row().prop(mt, "spine_offset")
 
 			row = col.row()
@@ -2246,6 +2248,8 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			default=True
 			)
 
+	# Spines
+
 	SPSTRSTR = "Show spines for the " # haha it says str str!!! But really, it would be pointless if the name was longer than the string itself
 	SPSTREND = " axis. This visualization works for quaternions as well"
 	# Using a Bool vector looks very silly in the UI.
@@ -2292,6 +2296,13 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 	spine_length: FloatProperty(name="Length",
 			description="How long spines should be",
 			default=4.0,
+			)
+
+	spine_step: IntProperty(name="Step",
+			description="How many frames to step across for each spine, higher = less spines",
+			default=1,
+			min=1,
+			soft_max=10
 			)
 
 
@@ -2434,7 +2445,7 @@ configurable_props = ["use_depsgraph", "select_key", "select_threshold", "desele
 "keyframe_color", "frame_color", "selection_color", "selection_color_dark", "handle_color", "handle_line_color", "timebead_color", 
 "text_color", "selected_text_color", "path_width", "path_resolution", "path_before", "path_after",
 "keyframe_numbers", "frame_display", "handle_display", "handle_length", "handle_direction", "spine_x_color", "spine_y_color", "spine_z_color", "pXspines", "pYspines", "pZspines",
-"nXspines", "nYspines", "nZspines", "spine_length", "spine_offset"]
+"nXspines", "nYspines", "nZspines", "spine_length", "spine_step", "spine_offset"]
 			
 class MotionTrailPreferences(bpy.types.AddonPreferences):
 	bl_idname = __name__

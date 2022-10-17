@@ -28,7 +28,6 @@ bl_info = {
 	"category": "Animation",
 }
 
-from distutils.command.config import config
 import gpu
 from gpu_extras.batch import batch_for_shader
 import blf
@@ -2526,6 +2525,94 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			description="Whether to use the depsgraph or not.\nChanging this takes effect only when motion trails are not active.\n\nUsing the depsgraph currently has the following ups and downs:\n+ Completely accurate motion trails that factor in all constraints, drivers, and so on.\n- Less performant.\n- Constantly resets un-keyframed changes to objects with keyframes.\n- Dragging may shift at the start.\n- The trail will not calculate when the viewport is not interacted with",
 			default=False
 			)
+
+	# From here on till the end, this code is structured to be easily deletable
+
+	master_version: bpy.props.IntVectorProperty(
+		default=(-1, -1, -1)
+		)
+
+	experimental_version: bpy.props.IntVectorProperty(
+		default=(-1, -1, -1)
+		)
+
+	version_checked: bpy.props.BoolVectorProperty(
+		default=(False, False),
+		size=2
+		)
+
+
+import urllib.request
+import re
+SOURCE_URL = "https://raw.githubusercontent.com/a-One-Fan/Blender-Motion-Trail-Update/one/src/animation_motion_trail_updated.py"
+SOURCE_URL_EXPERIMENTAL = "https://raw.githubusercontent.com/a-One-Fan/Blender-Motion-Trail-Update/other_one/src/animation_motion_trail_updated.py"
+
+def get_version(link):
+	response = urllib.request.urlopen(link)
+
+	gpl_done = False
+	while not gpl_done:
+		line = response.readline()
+		
+		if response.isclosed():
+			return -1
+		
+		if line.find(b"END GPL") > -1:
+			gpl_done = True
+
+	gotten_version = None
+	while gotten_version == None:
+		line = response.readline()
+
+		if response.isclosed():
+			return -2
+		
+		if line.find(b"version") > -1:
+			match = re.search(r"\(([0-9]+),\s*([0-9]+),\s*([0-9]+)\)", line.decode())
+			if not match:
+				return -3
+			gotten_version = (int(match[1]), int(match[2]), int(match[3]))
+
+	response.close()
+
+	return gotten_version
+
+class MotionTrailCheckUpdate(bpy.types.Operator):
+	bl_idname="info.motion_trail_check_update"
+	bl_label="Check for motion trail updates"
+	bl_description="Check the versions of the motion trail addon available on github"
+	
+	def execute(self, context):
+		mt = context.window_manager.motion_trail
+
+		mt.version_checked = (False, False)
+
+		version_regular = get_version(SOURCE_URL)
+		version_experimental = get_version(SOURCE_URL_EXPERIMENTAL)
+
+		print(version_regular)
+		print(version_experimental)
+
+		if type(version_regular) is not int:
+			mt.master_version = version_regular
+			mt.version_checked[0] = True
+
+		if type(version_experimental) is not int:
+			mt.experimental_version = version_experimental
+			mt.version_checked[1] = True
+
+		return {'FINISHED'}
+
+# returns tup1 < tup2
+def compare_ver(tup1, tup2):
+	for i in range(len(tup1)):
+		if tup1[i]<tup2[i]:
+			return True
+		if tup1[i]>tup2[i]:
+			return False
+	return False
+
+# == END of deleteable code ==
 			
 configurable_props = ["use_depsgraph", "select_key", "select_threshold", "deselect_nohit_key", "deselect_always_key", "deselect_passthrough", "mode", "path_style", 
 "simple_color", "speed_color_min", "speed_color_max", "accel_color_neg", "accel_color_static", "accel_color_pos",
@@ -2542,6 +2629,22 @@ class MotionTrailPreferences(bpy.types.AddonPreferences):
 	def draw(self, context):
 		layout = self.layout
 		col = layout.column()
+
+		mt = context.window_manager.motion_trail
+
+		#deletable code
+		col.operator("info.motion_trail_check_update")
+		if mt.version_checked[0] or mt.version_checked[1]:
+			if mt.version_checked[0]:
+				col.row().label(text="Current master version: {}.{}.{}".format(*mt.master_version))
+				if compare_ver(bl_info["version"], mt.master_version):
+					col.row().label(text="Please update!")
+			if mt.version_checked[1]:
+				col.row().label(text="Current experimental version: {}.{}.{}".format(*mt.experimental_version))
+		else:
+			col.row().label(text="Version not checked yet...")
+		#end of deletable code
+
 		col.label(text=DESELECT_WARNING)
 		col.label(text="Default values for all settings:")
 		col.label(text="")
@@ -2560,6 +2663,7 @@ classes = (
 		MotionTrailPreferences,
 		MotionTrailLoadDefaults,
 		MotionTrailSaveDefaults,
+		MotionTrailCheckUpdate,
 		)
 
 

@@ -2331,7 +2331,7 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			min=0.0
 			)
 	deselect_passthrough: BoolProperty(name="Deselect passthrough",
-			description="When something in the motion trail is deselected, whether to pass that button press to the rest of blender or not",
+			description="When something in the motion trail is deselected, whether to pass that button press to the rest of Blender or not",
 			default=True
 			)
 

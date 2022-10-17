@@ -28,6 +28,7 @@ bl_info = {
 	"category": "Animation",
 }
 
+from distutils.command.config import config
 import gpu
 from gpu_extras.batch import batch_for_shader
 import blf
@@ -52,6 +53,16 @@ from functools import reduce
 # Linear interpolation for 4-element tuples
 def lerp4(fac, tup1, tup2):
 	return (* [tup1[i] * fac + tup2[i]*(1.0-fac) for i in range(4)],)
+
+# Flattens recursively.
+def flatten(deeplist):
+	flatlist = []
+	for elem in deeplist:
+		if type(elem) is list:
+			flatlist.extend(flatten(elem))
+		else:
+			flatlist.append(elem)
+	return flatlist
 
 # fake fcurve class, used if no fcurve is found for a path
 class fake_fcurve():
@@ -1969,7 +1980,8 @@ class MotionTrailOperator(bpy.types.Operator):
 
 def load_defaults(context):
 	prefs = context.preferences.addons[__name__].preferences
-	for p in configurable_props:
+	flat_props = flatten(configurable_props)
+	for p in flat_props:
 		default = getattr(prefs.default_trail_settings, p)
 		setattr(context.window_manager.motion_trail, p, default)
 
@@ -1984,7 +1996,8 @@ class MotionTrailLoadDefaults(bpy.types.Operator):
 
 def save_defaults(context):
 	prefs = context.preferences.addons[__name__].preferences
-	for p in configurable_props:
+	flat_props = flatten(configurable_props)
+	for p in flat_props:
 		current = getattr(context.window_manager.motion_trail, p)
 		setattr(prefs.default_trail_settings, p, current)
 
@@ -2518,8 +2531,8 @@ configurable_props = ["use_depsgraph", "select_key", "select_threshold", "desele
 "simple_color", "speed_color_min", "speed_color_max", "accel_color_neg", "accel_color_static", "accel_color_pos",
 "keyframe_color", "frame_color", "selection_color", "selection_color_dark", "handle_color", "handle_line_color", "timebead_color", 
 "text_color", "selected_text_color", "path_width", "path_resolution", "path_before", "path_after",
-"keyframe_numbers", "frame_display", "handle_display", "handle_length", "handle_direction", "spine_x_color", "spine_y_color", "spine_z_color", "pXspines", "pYspines", "pZspines",
-"nXspines", "nYspines", "nZspines", "spine_length", "spine_step", "spine_offset"]
+"keyframe_numbers", "frame_display", "handle_display", "handle_length", "handle_direction", "show_spines", "spine_length", "spine_step", "spine_offset",
+["pXspines", "pYspines", "pZspines"], ["nXspines", "nYspines", "nZspines"], ["spine_x_color", "spine_y_color", "spine_z_color"]]
 			
 class MotionTrailPreferences(bpy.types.AddonPreferences):
 	bl_idname = __name__
@@ -2533,7 +2546,12 @@ class MotionTrailPreferences(bpy.types.AddonPreferences):
 		col.label(text="Default values for all settings:")
 		col.label(text="")
 		for p in configurable_props:
-			col.row().prop(self.default_trail_settings, p)
+			if type(p) is list:
+				row = col.row()
+				for subp in p:
+					row.prop(self.default_trail_settings, subp)
+			else:
+				col.row().prop(self.default_trail_settings, p)
 
 classes = (
 		MotionTrailProps,

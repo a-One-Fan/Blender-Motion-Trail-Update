@@ -2579,7 +2579,7 @@ def get_version(link):
 
 class MotionTrailCheckUpdate(bpy.types.Operator):
 	bl_idname="info.motion_trail_check_update"
-	bl_label="Check for motion trail updates"
+	bl_label="Check available versions"
 	bl_description="Check the versions of the motion trail addon available on github"
 	
 	def execute(self, context):

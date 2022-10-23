@@ -1670,6 +1670,7 @@ class MotionTrailOperator(bpy.types.Operator):
 	_handle_calc = None
 	_handle_draw = None
 	_handle_update = None
+	_timer = None
 
 	@staticmethod
 	def handle_add(self, context):
@@ -1727,9 +1728,9 @@ class MotionTrailOperator(bpy.types.Operator):
 		if context.window_manager.motion_trail.use_depsgraph:
 			calc_callback_dg(self, context)
 
-		if not context.area or not context.region or event.type == 'NONE':
+		#if not context.area or not context.region: or event.type == 'NONE':
 			#context.area.tag_redraw()
-			return {'PASS_THROUGH'}
+		#	return {'PASS_THROUGH'}
 
 		no_passthrough = False
 
@@ -1963,6 +1964,8 @@ class MotionTrailOperator(bpy.types.Operator):
 
 			context.window_manager.modal_handler_add(self)
 			bpy.ops.ed.undo_push(message="Started Motion Trail modal operator")
+
+			self._timer = wm.event_timer_add(0.0, window = context.window)
 			return {'RUNNING_MODAL'}
 
 		else:
@@ -1976,6 +1979,9 @@ class MotionTrailOperator(bpy.types.Operator):
 				context.area.tag_redraw()
 
 			return {'FINISHED'}
+
+	def cancel(self, context):
+		context.window_manager.event_timer_remove(self._timer)
 
 def load_defaults(context):
 	prefs = context.preferences.addons[__name__].preferences
@@ -2522,7 +2528,7 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			)
 
 	use_depsgraph: BoolProperty(name="Use depsgraph",
-			description="Whether to use the depsgraph or not.\nChanging this takes effect only when motion trails are not active.\n\nUsing the depsgraph currently has the following ups and downs:\n+ Completely accurate motion trails that factor in all constraints, drivers, and so on.\n- Less performant.\n- Constantly resets un-keyframed changes to objects with keyframes.\n- Dragging may shift at the start.\n- The trail will not calculate when the viewport is not interacted with",
+			description="Whether to use the depsgraph or not.\nChanging this takes effect only when motion trails are not active.\n\nUsing the depsgraph currently has the following ups and downs:\n+ Completely accurate motion trails that factor in all constraints, drivers, and so on.\n- Less performant.\n- Constantly resets un-keyframed changes to objects with keyframes.\n- Dragging may shift at the start",
 			default=False
 			)
 

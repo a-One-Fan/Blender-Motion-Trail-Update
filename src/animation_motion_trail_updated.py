@@ -513,6 +513,7 @@ def calc_callback(self, context, inverse_getter, location_getter, rotation_gette
 		self.active_handle = False
 		self.active_timebead = False
 		self.active_frame = False
+		self.highlighted_coord = False
 	if selection_change or not self.lock or context.window_manager.\
 	motion_trail.force_update:
 		# contains locations of path, keyframes and timebeads
@@ -1151,6 +1152,21 @@ def draw_callback(self, context):
 				batch.draw(colored_line_shader)
 				poss.clear()
 				cols.clear()
+
+	if self.highlighted_coord:
+		colored_points_shader.bind()
+		mt = context.window_manager.motion_trail
+
+		gpu.state.point_size_set(8.0)
+		point_poss = [self.highlighted_coord]
+		point_cols = [mt.highlight_color]
+		batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
+		batch.draw(colored_points_shader)
+		print("\n\n\nHighligted:")
+		print(point_poss)
+		print(point_cols)
+		point_poss.clear()
+		point_cols.clear()
 
 	# restore opengl defaults
 	gpu.state.point_size_set(1.0) # TODO: is this the correct value?
@@ -1801,10 +1817,9 @@ class MotionTrailOperator(bpy.types.Operator):
 				self.active_keyframe, self.active_handle,
 				self.active_timebead, self.keyframes_ori, self.handles_ori, get_inverse_parents_depsgraph)
 			no_passthrough = True
-		elif event.type in [select, deselect_nohit] and event.value == 'PRESS' and \
-		not self.drag and not event.shift and not event.alt and not \
-		event.ctrl:
-			# select
+
+		elif not self.drag and not event.shift and not event.alt and not event.ctrl:
+			# Select or highlight
 			threshold = mt.select_threshold
 			clicked = mathutils.Vector([event.mouse_region_x,
 				event.mouse_region_y])
@@ -1838,7 +1853,10 @@ class MotionTrailOperator(bpy.types.Operator):
 					if (coord - clicked).length <= threshold:
 						found = True
 
-						if event.type == select:
+						if event.type == 'MOUSEMOVE':
+							self.highlighted_coord = coord
+
+						if event.type == select: # and event.value == 'PRESS'?
 							self.active_keyframe = False
 							self.active_handle = False
 							self.active_timebead = False
@@ -1863,7 +1881,8 @@ class MotionTrailOperator(bpy.types.Operator):
 									action_ob, child]
 							break
 			if not found:
-				if event.type == deselect_nohit:
+				self.highlighted_coord = None
+				if event.type == deselect_nohit: # and event.value == 'PRESS'?
 					attrs = ["active_keyframe", "active_handle", "active_timebead", "active_frame"]
 					# If a change happens, then no passthrough
 					gotten = [getattr(self, attr) for attr in attrs]
@@ -2052,8 +2071,6 @@ class MotionTrailPanel(bpy.types.Panel):
 		else:
 			col.operator("view3d.motion_trail", text="Disable motion trail")
 
-		col.prop(mt, "use_depsgraph")
-
 		box = self.layout.box()
 		box.prop(mt, "mode")
 		# box.prop(mt, "calculate")
@@ -2125,6 +2142,7 @@ class MotionTrailPanel(bpy.types.Panel):
 		box = self.layout.box()
 		col = box.column(align=True)
 		col.row().prop(mt, "selection_color")
+		col.row().prop(mt, "highlight_color")
 		col.row().prop(mt, "select_key")
 		col.row().prop(mt, "select_threshold")
 		col.row().prop(mt, "deselect_nohit_key")
@@ -2158,6 +2176,9 @@ class MotionTrailPanel(bpy.types.Panel):
 			for s in spineColorStrings:
 				row.prop(mt, s)
 			
+		
+		self.layout.column().prop(mt, "use_depsgraph")
+		
 		self.layout.column().operator("view3d.motion_trail_load_defaults")
 		self.layout.column().operator("view3d.motion_trail_save_defaults")
 
@@ -2527,6 +2548,14 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			subtype='COLOR'
 			)
 
+	highlight_color: FloatVectorProperty(name="Highlight color",
+			description="Color that something you're about to select will be highlighted in",
+			default=(0.0, 1.0, 0.7, 1.0),
+			min=0.0, soft_max=1.0,
+			size=4,
+			subtype='COLOR'
+			)
+
 	use_depsgraph: BoolProperty(name="Use depsgraph",
 			description="Whether to use the depsgraph or not.\nChanging this takes effect only when motion trails are not active.\n\nUsing the depsgraph currently has the following ups and downs:\n+ Completely accurate motion trails that factor in all constraints, drivers, and so on.\n- Less performant.\n- Constantly resets un-keyframed changes to objects with keyframes.\n- Dragging may shift at the start",
 			default=False
@@ -2622,7 +2651,7 @@ def compare_ver(tup1, tup2):
 			
 configurable_props = ["use_depsgraph", "select_key", "select_threshold", "deselect_nohit_key", "deselect_always_key", "deselect_passthrough", "mode", "path_style", 
 "simple_color", "speed_color_min", "speed_color_max", "accel_color_neg", "accel_color_static", "accel_color_pos",
-"keyframe_color", "frame_color", "selection_color", "selection_color_dark", "handle_color", "handle_line_color", "timebead_color", 
+"keyframe_color", "frame_color", "selection_color", "selection_color_dark", "highlight_color", "handle_color", "handle_line_color", "timebead_color", 
 "text_color", "selected_text_color", "path_width", "path_resolution", "path_before", "path_after",
 "keyframe_numbers", "frame_display", "handle_display", "handle_length", "handle_direction", "show_spines", "spine_length", "spine_step", "spine_offset",
 ["pXspines", "pYspines", "pZspines"], ["nXspines", "nYspines", "nZspines"], ["spine_x_color", "spine_y_color", "spine_z_color"]]

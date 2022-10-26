@@ -502,6 +502,8 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 			bpy.types.SpaceView3D.draw_handler_remove(global_mtrail_handler_calc, 'WINDOW')
 		return
 	
+	mt = context.window_manager.motion_trail
+
 	if context.active_object and context.active_object.mode == 'POSE':
 		armature_ob = context.active_object
 		objects = [
@@ -517,7 +519,7 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 
 	if self.lock and not selection_change and \
 	context.region_data.perspective_matrix == self.perspective and not \
-	context.window_manager.motion_trail.force_update:
+	mt.force_update:
 		pass
 		#return
 	# dictionaries with key: objectname
@@ -535,13 +537,12 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 		self.active_frame = False
 		self.highlighted_coord = False
 	
-	if selection_change or not self.lock or context.window_manager.\
-	motion_trail.force_update:
+	if selection_change or not self.lock or mt.force_update:
 		self.cache = matrix_cache(matrix_getter)
 
 	self.perspective = context.region_data.perspective_matrix.copy()
 	self.displayed = objects  # store, so it can be checked next time
-	context.window_manager.motion_trail.force_update = False
+	mt.force_update = False
 	try:
 		#global_undo = context.preferences.edit.use_global_undo
 		#context.preferences.edit.use_global_undo = False
@@ -551,20 +552,20 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 			curves = get_curves(action_ob, child)
 			if len(curves) == 0:
 				continue
-			if context.window_manager.motion_trail.path_before == 0:
+			if mt.path_before == 0:
 				range_min = context.scene.frame_start
 			else:
 				range_min = max(
 							context.scene.frame_start,
 							context.scene.frame_current -
-							context.window_manager.motion_trail.path_before
+							mt.path_before
 							)
-			if context.window_manager.motion_trail.path_after == 0:
+			if mt.path_after == 0:
 				range_max = context.scene.frame_end
 			else:
 				range_max = min(context.scene.frame_end,
 							context.scene.frame_current +
-							context.window_manager.motion_trail.path_after
+							mt.path_after
 							)
 			fcx, fcy, fcz = curves
 			if child:
@@ -575,7 +576,7 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 			path = []
 			speeds = []
 			frame_old = context.scene.frame_current
-			step = 11 - context.window_manager.motion_trail.path_resolution
+			step = 11 - mt.path_resolution
 
 			prev_loc = self.cache.get_location(range_min - 1, display_ob, context)
 			for frame in range(range_min, range_max + 1, step):
@@ -583,7 +584,7 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 				if not context.region or not context.space_data:
 					continue
 				x, y = world_to_screen(context, loc)
-				if context.window_manager.motion_trail.path_style == 'simple':
+				if mt.path_style == 'simple':
 					path.append([x, y, [0.0, 0.0, 0.0], frame, action_ob, child])
 				else:
 					dloc = (loc - prev_loc).length
@@ -591,7 +592,7 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 					speeds.append(dloc)
 					prev_loc = loc
 			# calculate color of path
-			if context.window_manager.motion_trail.path_style == 'speed':
+			if mt.path_style == 'speed':
 				speeds.sort()
 				min_speed = speeds[0]
 				d_speed = speeds[-1] - min_speed
@@ -599,9 +600,9 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 				for i, [x, y, d_loc, frame, action_ob, child] in enumerate(path):
 					relative_speed = (d_loc - min_speed) / d_speed # 0.0 to 1.0
 					fac = min(1.0, 2.0 * relative_speed)
-					path[i][2] = lerp4(fac, context.window_manager.motion_trail.speed_color_max, 
-					context.window_manager.motion_trail.speed_color_min)
-			elif context.window_manager.motion_trail.path_style == 'acceleration':
+					path[i][2] = lerp4(fac, mt.speed_color_max, 
+					mt.speed_color_min)
+			elif mt.path_style == 'acceleration':
 				accelerations = []
 				prev_speed = 0.0
 				for i, [x, y, d_loc, frame, action_ob, child] in enumerate(path):
@@ -616,15 +617,15 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 					if accel < 0:
 						relative_accel = accel / min_accel  # values from 0.0 to 1.0
 						fac = 1.0 - relative_accel
-						path[i][2] = lerp4(fac, context.window_manager.motion_trail.accel_color_neg, 
-						context.window_manager.motion_trail.accel_color_static)
+						path[i][2] = lerp4(fac, mt.accel_color_neg, 
+						mt.accel_color_static)
 					elif accel > 0:
 						relative_accel = accel / max_accel  # values from 1.0 to 0.0
 						fac = 1.0 - relative_accel
-						path[i][2] = lerp4(fac, context.window_manager.motion_trail.accel_color_static, 
-						context.window_manager.motion_trail.accel_color_pos)
+						path[i][2] = lerp4(fac, mt.accel_color_static, 
+						mt.accel_color_pos)
 					else:
-						path[i][2] = context.window_manager.motion_trail.accel_color_static
+						path[i][2] = mt.accel_color_static
 			self.paths[display_ob.name] = path
 			# get keyframes and handles
 			keyframes = {}
@@ -635,14 +636,14 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 			for fc in curves:
 				for kf in fc.keyframe_points:
 					# handles for location mode
-					if context.window_manager.motion_trail.mode == 'location':
+					if mt.mode == 'location':
 						if kf.co[0] not in handle_difs:
 							handle_difs[kf.co[0]] = {"left": mathutils.Vector(),
 								"right": mathutils.Vector(), "keyframe_loc": None}
 								
 						ldiff = mathutils.Vector(kf.handle_left[:]) - mathutils.Vector(kf.co[:])
 						rdiff = mathutils.Vector(kf.handle_right[:]) - mathutils.Vector(kf.co[:])
-						hdir = context.window_manager.motion_trail.handle_direction
+						hdir = mt.handle_direction
 						lco = 0.0
 						rco = 0.0
 						
@@ -676,14 +677,13 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 
 					x, y = world_to_screen(context, loc)
 					keyframes[kf.co[0]] = [x, y]
-					if context.window_manager.motion_trail.mode != 'speed':
+					if mt.mode != 'speed':
 						# can't select keyframes in speed mode
 						click.append([kf.co[0], "keyframe",
 							mathutils.Vector([x, y]), action_ob, child])
 			self.keyframes[display_ob.name] = keyframes
 			# handles are only shown in location-altering mode
-			if context.window_manager.motion_trail.mode == 'location' and \
-			context.window_manager.motion_trail.handle_display:
+			if mt.mode == 'location' and mt.handle_display:
 				# calculate handle positions
 				handles = {}
 				for frame, vecs in handle_difs.items():
@@ -696,7 +696,7 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 						vec_left = vecs["left"]
 						vec_right = vecs["right"]
 						
-					hlen = context.window_manager.motion_trail.handle_length
+					hlen = mt.handle_length
 					vec_left = vec_left * hlen
 					vec_right = vec_right * hlen
 					if vecs["keyframe_loc"] is not None:
@@ -718,9 +718,9 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 				self.handles[display_ob.name] = handles
 
 			# calculate timebeads for timing mode
-			if context.window_manager.motion_trail.mode == 'timing':
+			if mt.mode == 'timing':
 				timebeads = {}
-				n = context.window_manager.motion_trail.timebeads * (len(kf_time) - 1)
+				n = mt.timebeads * (len(kf_time) - 1)
 				dframe = (range_max - range_min) / (n + 1)
 
 				for i in range(1, n + 1):
@@ -735,7 +735,7 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 				self.timebeads[display_ob.name] = timebeads
 
 			# calculate timebeads for speed mode
-			if context.window_manager.motion_trail.mode == 'speed':
+			if mt.mode == 'speed':
 				angles = dict([[kf, {"left": [], "right": []}] for kf in
 							  self.keyframes[display_ob.name]])
 				for fc in curves:
@@ -791,14 +791,14 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 								)
 				self.timebeads[display_ob.name] = timebeads
 
-			if context.window_manager.motion_trail.show_spines:
-				for frame in range(range_min, range_max + 1, context.window_manager.motion_trail.spine_step):
+			if mt.show_spines:
+				for frame in range(range_min, range_max + 1, mt.spine_step):
 					loc = self.cache.get_location(frame, display_ob, context)
 					rot = self.cache.get_rotation(frame, display_ob, context)
 
 					baseLoc = world_to_screen(context, loc)
 
-					slen = context.window_manager.motion_trail.spine_length
+					slen = mt.spine_length
 
 					resLocs = []
 					vecs = ((slen, 0, 0), (0, slen, 0), (0, 0, slen), (-slen, 0, 0), (0, -slen, 0), (0, 0, -slen))
@@ -810,7 +810,7 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 					self.spines[frame] = (baseLoc, resLocs)
 
 			# add frame positions to click-list
-			if context.window_manager.motion_trail.frame_display:
+			if mt.frame_display:
 				path = self.paths[display_ob.name]
 				for x, y, color, frame, action_ob, child in path:
 					click.append(

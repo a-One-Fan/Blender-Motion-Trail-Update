@@ -49,7 +49,6 @@ import sys
 import traceback
 from functools import reduce
 from collections.abc import Callable
-from typing import Concatenate
 
 # Linear interpolation for 4-element tuples
 def lerp4(fac, tup1, tup2):

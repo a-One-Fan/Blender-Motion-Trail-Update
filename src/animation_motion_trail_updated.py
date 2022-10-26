@@ -973,6 +973,21 @@ def draw_callback(self, context):
 				poss.clear()
 				cols.clear()
 
+	if self.highlighted_coord:
+		colored_points_shader.bind()
+		mt = context.window_manager.motion_trail
+
+		gpu.state.point_size_set(10.0)
+		point_poss = [self.highlighted_coord]
+		point_cols = [mt.highlight_color]
+		batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
+		batch.draw(colored_points_shader)
+		print("\n\n\nHighligted:")
+		print(point_poss)
+		print(point_cols)
+		point_poss.clear()
+		point_cols.clear()
+
 	# draw frames
 	if context.window_manager.motion_trail.frame_display:
 		colored_points_shader.bind()
@@ -1152,21 +1167,6 @@ def draw_callback(self, context):
 				batch.draw(colored_line_shader)
 				poss.clear()
 				cols.clear()
-
-	if self.highlighted_coord:
-		colored_points_shader.bind()
-		mt = context.window_manager.motion_trail
-
-		gpu.state.point_size_set(8.0)
-		point_poss = [self.highlighted_coord]
-		point_cols = [mt.highlight_color]
-		batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
-		batch.draw(colored_points_shader)
-		print("\n\n\nHighligted:")
-		print(point_poss)
-		print(point_cols)
-		point_poss.clear()
-		point_cols.clear()
 
 	# restore opengl defaults
 	gpu.state.point_size_set(1.0) # TODO: is this the correct value?

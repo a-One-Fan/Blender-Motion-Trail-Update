@@ -48,6 +48,8 @@ from bpy.props import (
 import sys
 import traceback
 from functools import reduce
+from collections.abc import Callable
+from typing import Concatenate
 
 # Linear interpolation for 4-element tuples
 def lerp4(fac, tup1, tup2):
@@ -87,6 +89,41 @@ class fake_fcurve():
 	def range(self):
 		return([])
 
+
+class matrix_cache():
+	__mats: dict[(float, bpy.types.Object|bpy.types.Bone), (mathutils.Matrix, mathutils.Vector, mathutils.Vector, mathutils.Vector)]
+	getter: Callable[[float, bpy.types.Object|bpy.types.Bone, bpy.types.Context], mathutils.Matrix]
+
+	def __init__(self, _getter: Callable[[float, bpy.types.Object|bpy.types.Bone, bpy.types.Context], mathutils.Matrix]):
+		self.__mats = {}
+		self.getter = _getter
+
+	def __build_entry(self, frame, obj, context):
+
+		mat: mathutils.Matrix = self.getter(frame, obj, context)
+		decomposed = mat.decompose()
+		self.__mats[(frame, obj)] = (mat, *decomposed)
+
+	def __guarantee_entry(self, frame, obj, context):
+		if not (frame, obj) in self.__mats:
+			self.__build_entry(frame, obj, context)
+
+	def get_matrix(self, frame, obj, context):
+		self.__guarantee_entry(frame, obj, context)
+		return self.__mats[(frame, obj)][0]
+
+	def get_location(self, frame, obj, context):
+		self.__guarantee_entry(frame, obj, context)
+		return self.__mats[(frame, obj)][1]
+
+	def get_rotation(self, frame, obj, context):
+		self.__guarantee_entry(frame, obj, context)
+		return self.__mats[(frame, obj)][2]
+
+	def get_scale(self, frame, obj, context):
+		self.__guarantee_entry(frame, obj, context)
+		return self.__mats[(frame, obj)][3]
+		
 
 # get location curves of the given object
 def get_curves(object, child=False):
@@ -287,7 +324,7 @@ def get_matrix_bone_parents(pose_bone, frame, do_anim = True):
 	get_matrix_bone_parents_as(pose_bone, frame, do_anim)
 
 # Get the world-ish matrix of a bone or object
-def get_matrix_any_parents(thing, frame, do_anim = True):
+def get_matrix_any_parents(frame, thing, do_anim = True):
 	if type(thing) is bpy.types.PoseBone:
 		return get_matrix_bone_parents(thing, frame, do_anim)
 	return get_matrix_obj_parents(thing, frame, do_anim)
@@ -344,15 +381,6 @@ def evaluate_constraints(mat, constraints, frame, ob):
 		accumulatedMat = accumulatedMat @ constraintMat
 	return accumulatedMat @ mat
 
-# calculate location of display_ob in worldspace using our own, draw handler-safe methods
-def get_location(frame, display_ob, offset_ob, curves, context):
-	return (get_matrix_any_parents(display_ob, frame).to_translation())
-
-# calculate rotation of display_ob in worldspace using our own, draw handler-safe methods
-def get_rotation(frame, display_ob, offset_ob, curves, context):
-	return (get_matrix_any_parents(display_ob, frame).to_quaternion())
-
-
 def get_matrix_any_depsgraph(frame, target, context):
 	oldframe = context.scene.frame_float
 	isBone = type(target) is bpy.types.PoseBone
@@ -372,14 +400,6 @@ def get_matrix_any_depsgraph(frame, target, context):
 	context.scene.frame_float = oldframe
 
 	return resMat
-
-# calculate location of display_ob in worldspace using the depsgraph
-def get_location_depsgraph(frame, display_ob, offset_ob, curves, context):
-	return get_matrix_any_depsgraph(frame, display_ob, context).to_translation()
-
-# calculate rotation of display_ob in worldspace using the depsgraph
-def get_rotation_depsgraph(frame, display_ob, offset_ob, curves, context):
-	return get_matrix_any_depsgraph(frame, display_ob, context).to_quaternion()
 
 # Calculate an inverse matrix for an object or bone, such that it's suitable for the addon's
 # manipulation of keyframes (IE without the very last animation applied)
@@ -469,7 +489,7 @@ def get_original_animation_data_ce(context, keyframes):
 	return get_original_animation_data(context, keyframes, get_location)
 
 # callback function that calculates positions of all things that need be drawn
-def calc_callback(self, context, inverse_getter, location_getter, rotation_getter):
+def calc_callback(self, context, inverse_getter, matrix_getter):
 	# Remove handler if file was changed and we lose access to self
 	# I'm all ears for a better solution, as __del__ for the modal operator does not call on file change
 	# and there is no special event emitted to the operator for that
@@ -514,17 +534,11 @@ def calc_callback(self, context, inverse_getter, location_getter, rotation_gette
 		self.active_timebead = False
 		self.active_frame = False
 		self.highlighted_coord = False
+	
 	if selection_change or not self.lock or context.window_manager.\
 	motion_trail.force_update:
-		# contains locations of path, keyframes and timebeads
-		self.cached = {
-				"path": {}, "keyframes": {}, "timebeads_timing": {},
-				"timebeads_speed": {}, "spines_loc": {}, "spines_rot": {}
-				}
-	if self.cached["path"]:
-		use_cache = True
-	else:
-		use_cache = False
+		self.cache = matrix_cache(matrix_getter)
+
 	self.perspective = context.region_data.perspective_matrix.copy()
 	self.displayed = objects  # store, so it can be checked next time
 	context.window_manager.motion_trail.force_update = False
@@ -562,21 +576,10 @@ def calc_callback(self, context, inverse_getter, location_getter, rotation_gette
 			speeds = []
 			frame_old = context.scene.frame_current
 			step = 11 - context.window_manager.motion_trail.path_resolution
-			if not use_cache:
-				if display_ob.name not in self.cached["path"]:
-					self.cached["path"][display_ob.name] = {}
-					
-			if use_cache and range_min - 1 in self.cached["path"][display_ob.name]:
-				prev_loc = self.cached["path"][display_ob.name][range_min - 1]
-			else:
-				prev_loc = location_getter(range_min - 1, display_ob, offset_ob, curves, context)
-				self.cached["path"][display_ob.name][range_min - 1] = prev_loc
+
+			prev_loc = self.cache.get_location(range_min - 1, display_ob, context)
 			for frame in range(range_min, range_max + 1, step):
-				if use_cache and frame in self.cached["path"][display_ob.name]:
-					loc = self.cached["path"][display_ob.name][frame]
-				else:
-					loc = location_getter(frame, display_ob, offset_ob, curves, context)
-					self.cached["path"][display_ob.name][frame] = loc
+				loc = self.cache.get_location(frame, display_ob, context)
 				if not context.region or not context.space_data:
 					continue
 				x, y = world_to_screen(context, loc)
@@ -628,9 +631,6 @@ def calc_callback(self, context, inverse_getter, location_getter, rotation_gette
 			handle_difs = {}
 			kf_time = []
 			click = []
-			if not use_cache:
-				if display_ob.name not in self.cached["keyframes"]:
-					self.cached["keyframes"][display_ob.name] = {}
 
 			for fc in curves:
 				for kf in fc.keyframe_points:
@@ -670,12 +670,7 @@ def calc_callback(self, context, inverse_getter, location_getter, rotation_gette
 					kf_time.append(kf.co[0])
 					co = kf.co[0]
 
-					if use_cache and co in \
-					self.cached["keyframes"][display_ob.name]:
-						loc = self.cached["keyframes"][display_ob.name][co]
-					else:
-						loc = location_getter(co, display_ob, offset_ob, curves, context)
-						self.cached["keyframes"][display_ob.name][co] = loc
+					loc = self.cache.get_location(co, display_ob, context)
 					if handle_difs:
 						handle_difs[co]["keyframe_loc"] = loc
 
@@ -705,10 +700,9 @@ def calc_callback(self, context, inverse_getter, location_getter, rotation_gette
 					vec_left = vec_left * hlen
 					vec_right = vec_right * hlen
 					if vecs["keyframe_loc"] is not None:
-						vec_keyframe = vecs["keyframe_loc"]
+						vec_keyframe = vecs["keyframe_loc"] # TODO: is this a cache? Kill it if so!
 					else:
-						vec_keyframe = location_getter(frame, display_ob, offset_ob,
-							curves, context)
+						vec_keyframe = self.cache.get_location(frame, display_ob, context)
 					x_left, y_left = world_to_screen(
 											context, vec_left * 2 + vec_keyframe
 											)
@@ -728,18 +722,10 @@ def calc_callback(self, context, inverse_getter, location_getter, rotation_gette
 				timebeads = {}
 				n = context.window_manager.motion_trail.timebeads * (len(kf_time) - 1)
 				dframe = (range_max - range_min) / (n + 1)
-				if not use_cache:
-					if display_ob.name not in self.cached["timebeads_timing"]:
-						self.cached["timebeads_timing"][display_ob.name] = {}
 
 				for i in range(1, n + 1):
 					frame = range_min + i * dframe
-					if use_cache and frame in \
-							self.cached["timebeads_timing"][display_ob.name]:
-						loc = self.cached["timebeads_timing"][display_ob.name][frame]
-					else:
-						loc = location_getter(frame, display_ob, offset_ob, curves, context)
-						self.cached["timebeads_timing"][display_ob.name][frame] = loc
+					loc = self.cache.get_location(frame, display_ob, context)
 					x, y = world_to_screen(context, loc)
 					timebeads[frame] = [x, y]
 					click.append(
@@ -770,10 +756,6 @@ def calc_callback(self, context, inverse_getter, location_getter, rotation_gette
 								angles[kf.co[0]]["right"].append(angle)
 				timebeads = {}
 				kf_time.sort()
-				if not use_cache:
-					if display_ob.name not in self.cached["timebeads_speed"]:
-						self.cached["timebeads_speed"][display_ob.name] = {}
-
 				for frame, sides in angles.items():
 					if sides["left"]:
 						perc = (sum(sides["left"]) / len(sides["left"])) / \
@@ -781,13 +763,9 @@ def calc_callback(self, context, inverse_getter, location_getter, rotation_gette
 						perc = max(0.4, min(1, perc * 5))
 						previous = kf_time[kf_time.index(frame) - 1]
 						bead_frame = frame - perc * ((frame - previous - 2) / 2)
-						if use_cache and bead_frame in \
-						self.cached["timebeads_speed"][display_ob.name]:
-							loc = self.cached["timebeads_speed"][display_ob.name][bead_frame]
-						else:
-							loc = location_getter(bead_frame, display_ob, offset_ob,
-								curves, context)
-							self.cached["timebeads_speed"][display_ob.name][bead_frame] = loc
+
+						loc = self.cache.get_location(bead_frame, display_ob, context)
+
 						x, y = world_to_screen(context, loc)
 						timebeads[bead_frame] = [x, y]
 						click.append(
@@ -801,13 +779,9 @@ def calc_callback(self, context, inverse_getter, location_getter, rotation_gette
 						perc = max(0.4, min(1, perc * 5))
 						next = kf_time[kf_time.index(frame) + 1]
 						bead_frame = frame + perc * ((next - frame - 2) / 2)
-						if use_cache and bead_frame in \
-						self.cached["timebeads_speed"][display_ob.name]:
-							loc = self.cached["timebeads_speed"][display_ob.name][bead_frame]
-						else:
-							loc = location_getter(bead_frame, display_ob, offset_ob,
-								curves, context)
-							self.cached["timebeads_speed"][display_ob.name][bead_frame] = loc
+
+						loc = self.cache.get_location(bead_frame, display_ob, frame)
+
 						x, y = world_to_screen(context, loc)
 						timebeads[bead_frame] = [x, y]
 						click.append(
@@ -818,29 +792,9 @@ def calc_callback(self, context, inverse_getter, location_getter, rotation_gette
 				self.timebeads[display_ob.name] = timebeads
 
 			if context.window_manager.motion_trail.show_spines:
-				if not use_cache:
-					if display_ob.name not in self.cached["spines_loc"]:
-						self.cached["spines_loc"][display_ob.name] = {}
-
-				if not use_cache:
-					if display_ob.name not in self.cached["spines_rot"]:
-						self.cached["spines_rot"][display_ob.name] = {}
-
 				for frame in range(range_min, range_max + 1, context.window_manager.motion_trail.spine_step):
-					loc = ""
-
-					if use_cache and frame in self.cached["spines_loc"][display_ob.name]:
-						loc = self.cached["spines_loc"][display_ob.name][frame]
-					else:
-						loc = location_getter(frame, display_ob, offset_ob, curves, context)
-						self.cached["spines_loc"][display_ob.name][frame] = loc
-
-					if use_cache and frame in self.cached["spines_rot"][display_ob.name]:
-						rot = self.cached["spines_rot"][display_ob.name][frame]
-					else:
-						rot = rotation_getter(frame, display_ob, offset_ob, curves, context)
-						rot.rotate(context.window_manager.motion_trail.spine_offset)
-						self.cached["spines_rot"][display_ob.name][frame] = rot 
+					loc = self.cache.get_location(frame, display_ob, context)
+					rot = self.cache.get_rotation(frame, display_ob, context)
 
 					baseLoc = world_to_screen(context, loc)
 
@@ -881,11 +835,11 @@ def calc_callback(self, context, inverse_getter, location_getter, rotation_gette
 
 # calc_callback using depsgraph functions
 def calc_callback_dg(self, context):
-	return calc_callback(self, context, get_inverse_parents_depsgraph, get_location_depsgraph, get_rotation_depsgraph)
+	return calc_callback(self, context, get_inverse_parents_depsgraph, get_matrix_any_depsgraph)
 
 # calc_callback using custom evaluation functions
 def calc_callback_ce(self, context):
-	return calc_callback(self, context, get_inverse_parents, get_location, get_rotation)
+	return calc_callback(self, context, get_inverse_parents, get_matrix_any_parents)
 
 
 # draw in 3d-view
@@ -1964,13 +1918,13 @@ class MotionTrailOperator(bpy.types.Operator):
 			self.lock = True
 			self.perspective = context.region_data.perspective_matrix
 			self.displayed = []
-			context.window_manager.motion_trail.force_update = True
-			context.window_manager.motion_trail.backed_up_keyframes = False
-			context.window_manager.motion_trail.handle_type_enabled = False
-			self.cached = {
-					"path": {}, "keyframes": {},
-					"timebeads_timing": {}, "timebeads_speed": {}
-					}
+
+			mt = context.window_manager.motion_trail
+			mt.force_update = True
+			mt.backed_up_keyframes = False
+			mt.handle_type_enabled = False
+			getter = get_matrix_any_depsgraph if mt.use_depsgraph else get_matrix_any_parents
+			self.cache = matrix_cache(getter)
 
 			for kmi in kmis:
 				kmi.active = False

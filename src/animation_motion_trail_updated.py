@@ -397,7 +397,6 @@ def get_matrix_any_depsgraph(frame, target, context):
 
 	resMat = evalledOb.matrix_world @ boneMat
 	context.scene.frame_float = oldframe
-
 	return resMat
 
 # Calculate an inverse matrix for an object or bone, such that it's suitable for the addon's
@@ -521,7 +520,7 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 	mt.force_update:
 		pass
 		#return
-		# TODO: Check for frame change as well, THEN we can return early
+		# TODO: Check for frame change as well, THEN we can return early; this seems like the last major fixable performance bottleneck, as DG will call calc_callback a lot and it needs to end early when extra computations are unnecessary
 	# dictionaries with key: objectname
 	self.paths = {} 	 # value: list of lists with x, y, color
 	self.keyframes = {}  # value: dict with frame as key and [x,y] as value
@@ -538,7 +537,6 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 		self.highlighted_coord = False
 	
 	if selection_change or not self.lock or mt.force_update:
-		print("Reset cache because:  {} selection change    {} unlock    {} forced update".format(selection_change, not self.lock, mt.force_update))
 		self.cache = matrix_cache(matrix_getter)
 
 	self.perspective = context.region_data.perspective_matrix.copy()
@@ -2577,9 +2575,6 @@ class MotionTrailCheckUpdate(bpy.types.Operator):
 
 		version_regular = get_version(SOURCE_URL)
 		version_experimental = get_version(SOURCE_URL_EXPERIMENTAL)
-
-		print(version_regular)
-		print(version_experimental)
 
 		if type(version_regular) is not int:
 			mt.master_version = version_regular

@@ -519,8 +519,7 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 	if self.lock and not selection_change and \
 	context.region_data.perspective_matrix == self.perspective and not \
 	mt.force_update:
-		pass
-		#return
+		return
 	# dictionaries with key: objectname
 	self.paths = {} 	 # value: list of lists with x, y, color
 	self.keyframes = {}  # value: dict with frame as key and [x,y] as value
@@ -537,6 +536,7 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 		self.highlighted_coord = False
 	
 	if selection_change or not self.lock or mt.force_update:
+		print("Reset cache because:  {} selection change    {} unlock    {} forced update".format(selection_change, not self.lock, mt.force_update))
 		self.cache = matrix_cache(matrix_getter)
 
 	self.perspective = context.region_data.perspective_matrix.copy()
@@ -1642,12 +1642,10 @@ class MotionTrailOperator(bpy.types.Operator):
 	def handle_add(self, context):
 		global global_mtrail_handler_calc
 
-		dg_optional_callback = update_callback if context.window_manager.motion_trail.use_depsgraph else calc_callback_ce
-		# Using the depsgraph in a callback seems to make blender freeze! Very cool, and is the whole reason why I avoided using it so far.
-
-		global_mtrail_handler_calc = \
-		MotionTrailOperator._handle_calc = bpy.types.SpaceView3D.draw_handler_add(
-			dg_optional_callback, (self, context), 'WINDOW', 'POST_VIEW')
+		if not context.window_manager.motion_trail.use_depsgraph:
+			global_mtrail_handler_calc = \
+			MotionTrailOperator._handle_calc = bpy.types.SpaceView3D.draw_handler_add(
+				calc_callback_ce, (self, context), 'WINDOW', 'POST_VIEW')
 		
 		global global_mtrail_handler_draw
 		global_mtrail_handler_draw = \
@@ -1658,6 +1656,7 @@ class MotionTrailOperator(bpy.types.Operator):
 		global_mtrail_handler_update = \
 		MotionTrailOperator._handle_update = bpy.types.SpaceGraphEditor.draw_handler_add(
 			update_callback, (self, context), 'WINDOW', 'POST_PIXEL')
+		# TODO: Use RNA subscription for frame changes?
 
 	@staticmethod
 	def handle_remove():
@@ -1774,7 +1773,9 @@ class MotionTrailOperator(bpy.types.Operator):
 			clicked = mathutils.Vector([event.mouse_region_x,
 				event.mouse_region_y])
 
-			context.window_manager.motion_trail.force_update = True
+			#context.window_manager.motion_trail.force_update = True
+			#TODO: Stare at the above line, should it be commented out?
+
 			found = False
 
 			if context.window_manager.motion_trail.path_before == 0:

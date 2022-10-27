@@ -519,7 +519,9 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 	if self.lock and not selection_change and \
 	context.region_data.perspective_matrix == self.perspective and not \
 	mt.force_update:
-		return
+		pass
+		#return
+		# TODO: Check for frame change as well, THEN we can return early
 	# dictionaries with key: objectname
 	self.paths = {} 	 # value: list of lists with x, y, color
 	self.keyframes = {}  # value: dict with frame as key and [x,y] as value

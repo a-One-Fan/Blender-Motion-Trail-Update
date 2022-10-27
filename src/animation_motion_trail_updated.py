@@ -935,9 +935,6 @@ def draw_callback(self, context):
 		point_cols = [mt.highlight_color]
 		batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
 		batch.draw(colored_points_shader)
-		print("\n\n\nHighligted:")
-		print(point_poss)
-		print(point_cols)
 		point_poss.clear()
 		point_cols.clear()
 

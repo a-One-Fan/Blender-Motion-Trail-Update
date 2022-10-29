@@ -1741,8 +1741,9 @@ class MotionTrailOperator(bpy.types.Operator):
 					insert_keyframe(self, context, self.active_frame)
 					self.active_keyframe = self.active_frame
 					self.active_frame = False
-				self.keyframes_ori, self.handles_ori = \
-					get_original_animation_data_ce(context, self.keyframes)
+
+				anim_data_getter = get_original_animation_data_dg if mt.use_depsgraph else get_original_animation_data_ce
+				self.keyframes_ori, self.handles_ori = anim_data_getter(context, self.keyframes)
 				self.drag_mouse_ori = mathutils.Vector([event.mouse_region_x,
 					event.mouse_region_y])
 				self.drag = True
@@ -2514,7 +2515,7 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			)
 
 	use_depsgraph: BoolProperty(name="Use depsgraph",
-			description="Whether to use the depsgraph or not.\nChanging this takes effect only when motion trails are not active.\n\nUsing the depsgraph currently has the following ups and downs:\n+ Completely accurate motion trails that factor in all constraints, drivers, and so on.\n- Less performant.\n- Constantly resets un-keyframed changes to objects with keyframes.\n- Dragging may shift at the start",
+			description="Whether to use the depsgraph or not.\nChanging this takes effect only when motion trails are not active.\n\nUsing the depsgraph currently has the following ups and downs:\n+ Completely accurate motion trails that factor in all constraints, drivers, and so on.\n- Less performant.\n- Constantly resets un-keyframed changes to objects with keyframes",
 			default=False
 			)
 

@@ -519,10 +519,11 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 
 	if self.lock and not selection_change and \
 	context.region_data.perspective_matrix == self.perspective and not \
-	mt.force_update:
-		pass
-		#return
-		# TODO: Check for frame change as well, THEN we can return early; this seems like the last major fixable performance bottleneck, as DG will call calc_callback a lot and it needs to end early when extra computations are unnecessary
+	mt.force_update and self.last_frame == context.scene.frame_float:
+		return
+
+	self.last_frame = context.scene.frame_float
+
 	# dictionaries with key: objectname
 	self.paths = {} 	 # value: list of lists with x, y, color
 	self.keyframes = {}  # value: dict with frame as key and [x,y] as value
@@ -1920,6 +1921,7 @@ class MotionTrailOperator(bpy.types.Operator):
 			self.lock = True
 			self.perspective = context.region_data.perspective_matrix
 			self.displayed = []
+			self.last_frame = -1
 
 			mt.force_update = True
 			mt.backed_up_keyframes = False

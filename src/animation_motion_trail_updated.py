@@ -1617,7 +1617,7 @@ def set_handle_type(self, context):
 
 	mt.force_update = True
 
-def update_callback(self, context):
+def force_update_callback(self, context):
 	# Remove handler if file was changed and we lose access to self
 	try:
 		self.properties
@@ -1661,7 +1661,7 @@ class MotionTrailOperator(bpy.types.Operator):
 		global global_mtrail_handler_update
 		global_mtrail_handler_update = \
 		MotionTrailOperator._handle_update = bpy.types.SpaceGraphEditor.draw_handler_add(
-			update_callback, (self, context), 'WINDOW', 'POST_PIXEL')
+			force_update_callback, (self, context), 'WINDOW', 'POST_PIXEL')
 		# TODO: Use RNA subscription for frame changes?
 
 	@staticmethod

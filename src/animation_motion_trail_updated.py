@@ -90,7 +90,7 @@ class fake_fcurve():
 
 
 class matrix_cache():
-	__mats: dict[(float, bpy.types.Object|bpy.types.Bone), (mathutils.Matrix, mathutils.Vector, mathutils.Vector, mathutils.Vector)]
+	__mats: dict[(float, bpy.types.Object|bpy.types.Bone), (mathutils.Matrix, mathutils.Vector, mathutils.Quaternion, mathutils.Vector)]
 	getter: Callable[[float, bpy.types.Object|bpy.types.Bone, bpy.types.Context], mathutils.Matrix]
 
 	def __init__(self, _getter: Callable[[float, bpy.types.Object|bpy.types.Bone, bpy.types.Context], mathutils.Matrix]):

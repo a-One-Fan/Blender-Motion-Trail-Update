@@ -2029,6 +2029,8 @@ class MotionTrailPanel(bpy.types.Panel):
 		else:
 			col.operator("view3d.motion_trail", text="Disable motion trail")
 
+		self.layout.column().prop(mt, "use_depsgraph")
+
 		box = self.layout.box()
 		box.prop(mt, "mode")
 		# box.prop(mt, "calculate")
@@ -2133,9 +2135,6 @@ class MotionTrailPanel(bpy.types.Panel):
 			row = col.row()
 			for s in spineColorStrings:
 				row.prop(mt, s)
-			
-		
-		self.layout.column().prop(mt, "use_depsgraph")
 		
 		self.layout.column().operator("view3d.motion_trail_load_defaults")
 		self.layout.column().operator("view3d.motion_trail_save_defaults")

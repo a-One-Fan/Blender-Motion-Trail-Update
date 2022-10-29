@@ -439,7 +439,6 @@ def get_original_animation_data(context, keyframes, location_getter):
 			display_ob = action_ob
 
 		# get keyframe positions
-		frame_old = context.scene.frame_current
 		keyframes_ori[display_ob.name] = {}
 		for frame in keyframes[display_ob.name]:
 			loc = location_getter(frame, display_ob, context)
@@ -474,9 +473,6 @@ def get_original_animation_data(context, keyframes, location_getter):
 				left_z]
 			handles_ori[display_ob.name][frame]["right"] = [right_x, right_y,
 				right_z]
-
-		if context.scene.frame_current != frame_old:
-			context.scene.frame_set(frame_old)
 
 	return(keyframes_ori, handles_ori)
 

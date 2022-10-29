@@ -323,7 +323,7 @@ def get_matrix_bone_parents(pose_bone, frame, do_anim = True):
 	get_matrix_bone_parents_as(pose_bone, frame, do_anim)
 
 # Get the world-ish matrix of a bone or object
-def get_matrix_any_parents(frame, thing, do_anim = True):
+def get_matrix_any_parents(frame: float, thing: bpy.types.Object | bpy.types.PoseBone, do_anim = True) -> mathutils.Matrix:
 	if type(thing) is bpy.types.PoseBone:
 		return get_matrix_bone_parents(thing, frame, do_anim)
 	return get_matrix_obj_parents(thing, frame, do_anim)
@@ -380,7 +380,7 @@ def evaluate_constraints(mat, constraints, frame, ob):
 		accumulatedMat = accumulatedMat @ constraintMat
 	return accumulatedMat @ mat
 
-def get_matrix_any_depsgraph(frame, target, context):
+def get_matrix_any_depsgraph(frame: float, target: bpy.types.Object | bpy.types.PoseBone, context: bpy.types.Context) -> mathutils.Matrix:
 	oldframe = context.scene.frame_float
 	isBone = type(target) is bpy.types.PoseBone
 
@@ -442,7 +442,7 @@ def get_original_animation_data(context, keyframes, location_getter):
 		frame_old = context.scene.frame_current
 		keyframes_ori[display_ob.name] = {}
 		for frame in keyframes[display_ob.name]:
-			loc = location_getter(frame, display_ob, offset_ob, curves, context)
+			loc = location_getter(frame, display_ob, context)
 			keyframes_ori[display_ob.name][frame] = [frame, loc]
 
 		# get handle positions
@@ -480,11 +480,17 @@ def get_original_animation_data(context, keyframes, location_getter):
 
 	return(keyframes_ori, handles_ori)
 
+def get_uncached_location_dg(frame, ob, context):
+	return get_matrix_any_depsgraph(frame, ob, context).to_translation()
+
+def get_uncached_location_ce(frame, ob, context):
+	return get_matrix_any_parents(frame, ob, context).to_translation()
+
 def get_original_animation_data_dg(context, keyframes):
-	return get_original_animation_data(context, keyframes, get_location_depsgraph)
+	return get_original_animation_data(context, keyframes, get_uncached_location_dg)
 
 def get_original_animation_data_ce(context, keyframes):
-	return get_original_animation_data(context, keyframes, get_location)
+	return get_original_animation_data(context, keyframes, get_uncached_location_ce)
 
 # callback function that calculates positions of all things that need be drawn
 def calc_callback(self, context, inverse_getter, matrix_getter):

@@ -824,6 +824,7 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 
 			if context.scene.frame_current != frame_old:
 				context.scene.frame_set(frame_old)
+			#TODO: Consider culling this ^
 
 		#context.preferences.edit.use_global_undo = global_undo
 

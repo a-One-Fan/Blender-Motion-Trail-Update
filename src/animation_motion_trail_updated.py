@@ -323,7 +323,7 @@ def get_matrix_bone_parents(pose_bone, frame, do_anim = True):
 	get_matrix_bone_parents_as(pose_bone, frame, do_anim)
 
 # Get the world-ish matrix of a bone or object
-def get_matrix_any_parents(frame: float, thing: bpy.types.Object | bpy.types.PoseBone, do_anim = True) -> mathutils.Matrix:
+def get_matrix_any_custom_eval(frame: float, thing: bpy.types.Object | bpy.types.PoseBone, do_anim = True) -> mathutils.Matrix:
 	if type(thing) is bpy.types.PoseBone:
 		return get_matrix_bone_parents(thing, frame, do_anim)
 	return get_matrix_obj_parents(thing, frame, do_anim)
@@ -404,7 +404,7 @@ def get_matrix_any_depsgraph(frame: float, target: bpy.types.Object | bpy.types.
 # manipulation of keyframes (IE without the very last animation applied)
 # using our own, draw handler-safe methods
 def get_inverse_parents(frame, ob, context):
-	return get_matrix_any_parents(ob, frame, False).inverted()
+	return get_matrix_any_custom_eval(ob, frame, False).inverted()
 
 def get_inverse_parents_depsgraph(frame, ob, context):
 	mat = ''
@@ -481,7 +481,7 @@ def get_uncached_location_dg(frame, ob, context):
 	return get_matrix_any_depsgraph(frame, ob, context).to_translation()
 
 def get_uncached_location_ce(frame, ob, context):
-	return get_matrix_any_parents(frame, ob, context).to_translation()
+	return get_matrix_any_custom_eval(frame, ob, context).to_translation()
 
 def get_original_animation_data_dg(context, keyframes):
 	return get_original_animation_data(context, keyframes, get_uncached_location_dg)
@@ -838,7 +838,7 @@ def calc_callback_dg(self, context):
 
 # calc_callback using custom evaluation functions
 def calc_callback_ce(self, context):
-	return calc_callback(self, context, get_inverse_parents, get_matrix_any_parents)
+	return calc_callback(self, context, get_inverse_parents, get_matrix_any_custom_eval)
 
 
 # draw in 3d-view
@@ -1946,7 +1946,7 @@ class MotionTrailOperator(bpy.types.Operator):
 			mt.force_update = True
 			mt.backed_up_keyframes = False
 			mt.handle_type_enabled = False
-			getter = get_matrix_any_depsgraph if mt.use_depsgraph else get_matrix_any_parents
+			getter = get_matrix_any_depsgraph if mt.use_depsgraph else get_matrix_any_custom_eval
 			self.cache = matrix_cache(getter)
 
 			for kmi in kmis:
@@ -2533,7 +2533,7 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			)
 
 	use_depsgraph: BoolProperty(name="Use depsgraph",
-			description="Whether to use the depsgraph or not.\nChanging this takes effect only when motion trails are not active.\n\nUsing the depsgraph currently has the following ups and downs:\n+ Completely accurate motion trails that factor in all constraints, drivers, and so on.\n- Less performant.\n- Constantly resets un-keyframed changes to objects with keyframes\n- Does not update with the graph editor",
+			description="Whether to use the depsgraph or not.\nChanging this takes effect only when motion trails are not active.\n\nUsing the depsgraph currently has the following ups and downs:\n+ Completely accurate motion trails that factor in all constraints, drivers, and so on.\n- Constantly resets un-keyframed changes to objects with keyframes.\n- Does not update with the graph editor or others.\n- Less performant",
 			default=False
 			)
 

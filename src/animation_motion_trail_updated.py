@@ -577,7 +577,6 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 			# get location data of motion path
 			path = []
 			speeds = []
-			frame_old = context.scene.frame_current
 			step = 11 - mt.path_resolution
 
 			prev_loc = self.cache.get_location(range_min - 1, display_ob, context)
@@ -822,10 +821,6 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 							)
 
 			self.click[display_ob.name] = click
-
-			if context.scene.frame_current != frame_old:
-				context.scene.frame_set(frame_old)
-			#TODO: Consider culling this ^
 
 		#context.preferences.edit.use_global_undo = global_undo
 

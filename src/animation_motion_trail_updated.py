@@ -1434,23 +1434,23 @@ active_timebead, keyframes_ori, handles_ori, inverse_getter):
 # revert changes made by dragging
 def cancel_drag(context, active_keyframe, active_handle, active_timebead,
 keyframes_ori, handles_ori):
+	mt: MotionTrailProps = context.window_manager.motion_trail
+
 	# revert change in 3d-location of active keyframe and its handles
-	if context.window_manager.motion_trail.mode == 'location' and \
-	active_keyframe:
+	if mt.mode == 'location' and active_keyframe:
 		objectname, frame, frame_ori, active_ob, child = active_keyframe
 		curves = get_curves(active_ob, child)
 		for i, curve in enumerate(curves):
 			for kf in curve.keyframe_points:
 				if kf.co[0] == frame:
-					kf.co[1] = context.window_manager.motion_trail.keyframe_backup[i]
+					kf.co[1] = mt.keyframe_backup[i]
 					kf.handle_left[1] = handles_ori[objectname][frame]["left"][i][1]
 					kf.handle_right[1] = handles_ori[objectname][frame]["right"][i][1]
 					break
-		context.window_manager.motion_trail.backed_up_keyframes = False
+		mt.backed_up_keyframes = False
 
 	# revert change in 3d-location of active handle
-	elif context.window_manager.motion_trail.mode == 'location' and \
-	active_handle:
+	elif mt.mode == 'location' and active_handle:
 		objectname, frame, side, active_ob, child = active_handle
 		curves = get_curves(active_ob, child)
 		for i, curve in enumerate(curves):
@@ -1461,8 +1461,7 @@ keyframes_ori, handles_ori):
 					break
 
 	# revert position of all keyframes and handles on timeline
-	elif context.window_manager.motion_trail.mode == 'timing' and \
-	active_timebead:
+	elif mt.mode == 'timing' and active_timebead:
 		objectname, frame, frame_ori, active_ob, child = active_timebead
 		curves = get_curves(active_ob, child)
 		for i, curve in enumerate(curves):
@@ -1476,8 +1475,7 @@ keyframes_ori, handles_ori):
 						break
 
 	# revert position of active keyframe and its handles on the timeline
-	elif context.window_manager.motion_trail.mode == 'timing' and \
-	active_keyframe:
+	elif mt.mode == 'timing' and active_keyframe:
 		objectname, frame, frame_ori, active_ob, child = active_keyframe
 		curves = get_curves(active_ob, child)
 		for i, curve in enumerate(curves):
@@ -1490,8 +1488,7 @@ keyframes_ori, handles_ori):
 		active_keyframe = [objectname, frame_ori, frame_ori, active_ob, child]
 
 	# revert position of handles on the timeline
-	elif context.window_manager.motion_trail.mode == 'speed' and \
-	active_timebead:
+	elif mt.mode == 'speed' and active_timebead:
 		objectname, frame, frame_ori, active_ob, child = active_timebead
 		curves = get_curves(active_ob, child)
 		keyframes = [kf for kf in keyframes_ori[objectname]]

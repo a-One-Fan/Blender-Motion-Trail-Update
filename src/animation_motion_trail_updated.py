@@ -1644,22 +1644,22 @@ class MotionTrailOperator(bpy.types.Operator):
 
 	@staticmethod
 	def handle_add(self, context):
-		global global_mtrail_handler_calc
 
 		if not context.window_manager.motion_trail.use_depsgraph:
+			global global_mtrail_handler_calc
 			global_mtrail_handler_calc = \
 			MotionTrailOperator._handle_calc = bpy.types.SpaceView3D.draw_handler_add(
 				calc_callback_ce, (self, context), 'WINDOW', 'POST_VIEW')
+
+			global global_mtrail_handler_update
+			global_mtrail_handler_update = \
+			MotionTrailOperator._handle_update = bpy.types.SpaceGraphEditor.draw_handler_add(
+			force_update_callback, (self, context), 'WINDOW', 'POST_PIXEL')
 		
 		global global_mtrail_handler_draw
 		global_mtrail_handler_draw = \
 		MotionTrailOperator._handle_draw = bpy.types.SpaceView3D.draw_handler_add(
 			draw_callback, (self, context), 'WINDOW', 'POST_PIXEL')
-		
-		global global_mtrail_handler_update
-		global_mtrail_handler_update = \
-		MotionTrailOperator._handle_update = bpy.types.SpaceGraphEditor.draw_handler_add(
-			force_update_callback, (self, context), 'WINDOW', 'POST_PIXEL')
 
 		#global global_mtrail_msgbus_owner
 		#bpy.msgbus.subscribe_rna(
@@ -2529,7 +2529,7 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			)
 
 	use_depsgraph: BoolProperty(name="Use depsgraph",
-			description="Whether to use the depsgraph or not.\nChanging this takes effect only when motion trails are not active.\n\nUsing the depsgraph currently has the following ups and downs:\n+ Completely accurate motion trails that factor in all constraints, drivers, and so on.\n- Less performant.\n- Constantly resets un-keyframed changes to objects with keyframes",
+			description="Whether to use the depsgraph or not.\nChanging this takes effect only when motion trails are not active.\n\nUsing the depsgraph currently has the following ups and downs:\n+ Completely accurate motion trails that factor in all constraints, drivers, and so on.\n- Less performant.\n- Constantly resets un-keyframed changes to objects with keyframes\n- Does not update with the graph editor",
 			default=False
 			)
 

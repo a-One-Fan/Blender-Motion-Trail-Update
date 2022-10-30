@@ -397,6 +397,7 @@ def get_matrix_any_depsgraph(frame: float, target: bpy.types.Object | bpy.types.
 
 	resMat = evalledOb.matrix_world @ boneMat
 	context.scene.frame_float = oldframe
+	# TODO: When updates are forced with DG on, playback can freeze... This may be due to setting the frame in the DG functions. Is this fixable?
 	return resMat
 
 # Calculate an inverse matrix for an object or bone, such that it's suitable for the addon's
@@ -1617,6 +1618,9 @@ def force_update_callback(self, context):
 	except:
 		if global_mtrail_handler_update:
 			bpy.types.SpaceGraphEditor.draw_handler_remove(global_mtrail_handler_update, 'WINDOW')
+		#if global_mtrail_msgbus_owner:
+		#	bpy.msgbus.clear_by_owner(global_mtrail_msgbus_owner)
+		
 		return
 	
 	context.window_manager.motion_trail.force_update = True
@@ -1625,6 +1629,7 @@ def force_update_callback(self, context):
 global_mtrail_handler_calc = None
 global_mtrail_handler_draw = None
 global_mtrail_handler_update = None
+#global_mtrail_msgbus_owner = object()
 
 class MotionTrailOperator(bpy.types.Operator):
 	bl_idname = "view3d.motion_trail"
@@ -1655,7 +1660,14 @@ class MotionTrailOperator(bpy.types.Operator):
 		global_mtrail_handler_update = \
 		MotionTrailOperator._handle_update = bpy.types.SpaceGraphEditor.draw_handler_add(
 			force_update_callback, (self, context), 'WINDOW', 'POST_PIXEL')
-		# TODO: Use RNA subscription for frame changes?
+
+		#global global_mtrail_msgbus_owner
+		#bpy.msgbus.subscribe_rna(
+    	#	key=(bpy.types.Keyframe, "co_ui"), # why doesn't simply "co" work?
+    	#	owner=global_mtrail_msgbus_owner,
+    	#	args=(self, context),
+    	#	notify=force_update_callback
+		#)
 
 	@staticmethod
 	def handle_remove():
@@ -1678,6 +1690,8 @@ class MotionTrailOperator(bpy.types.Operator):
 		MotionTrailOperator._handle_calc = None
 		MotionTrailOperator._handle_draw = None
 		MotionTrailOperator._handle_update = None
+
+		#bpy.msgbus.clear_by_owner(global_mtrail_msgbus_owner)
 
 	def modal(self, context, event):
 		# XXX Required, or custom transform.translate will break!

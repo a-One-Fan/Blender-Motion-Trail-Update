@@ -20,7 +20,7 @@
 bl_info = {
 	"name": "Motion Trail (update)",
 	"author": "Bart Crouch, Viktor_smg",
-	"version": (0, 15, 0),
+	"version": (0, 16, 0),
 	"blender": (3, 2, 0),
 	"location": "View3D > Toolbar > Motion Trail tab",
 	"warning": "Support for features not originally present is buggy; NO UNDO!!!",
@@ -48,10 +48,21 @@ from bpy.props import (
 import sys
 import traceback
 from functools import reduce
+from collections.abc import Callable
 
 # Linear interpolation for 4-element tuples
 def lerp4(fac, tup1, tup2):
 	return (* [tup1[i] * fac + tup2[i]*(1.0-fac) for i in range(4)],)
+
+# Flattens recursively.
+def flatten(deeplist):
+	flatlist = []
+	for elem in deeplist:
+		if type(elem) is list:
+			flatlist.extend(flatten(elem))
+		else:
+			flatlist.append(elem)
+	return flatlist
 
 # fake fcurve class, used if no fcurve is found for a path
 class fake_fcurve():
@@ -77,6 +88,41 @@ class fake_fcurve():
 	def range(self):
 		return([])
 
+
+class matrix_cache():
+	__mats: dict[(float, bpy.types.Object|bpy.types.Bone), (mathutils.Matrix, mathutils.Vector, mathutils.Quaternion, mathutils.Vector)]
+	getter: Callable[[float, bpy.types.Object|bpy.types.Bone, bpy.types.Context], mathutils.Matrix]
+
+	def __init__(self, _getter: Callable[[float, bpy.types.Object|bpy.types.Bone, bpy.types.Context], mathutils.Matrix]):
+		self.__mats = {}
+		self.getter = _getter
+
+	def __build_entry(self, frame, obj, context):
+
+		mat: mathutils.Matrix = self.getter(frame, obj, context)
+		decomposed = mat.decompose()
+		self.__mats[(frame, obj)] = (mat, *decomposed)
+
+	def __guarantee_entry(self, frame, obj, context):
+		if not (frame, obj) in self.__mats:
+			self.__build_entry(frame, obj, context)
+
+	def get_matrix(self, frame, obj, context):
+		self.__guarantee_entry(frame, obj, context)
+		return self.__mats[(frame, obj)][0]
+
+	def get_location(self, frame, obj, context):
+		self.__guarantee_entry(frame, obj, context)
+		return self.__mats[(frame, obj)][1]
+
+	def get_rotation(self, frame, obj, context):
+		self.__guarantee_entry(frame, obj, context)
+		return self.__mats[(frame, obj)][2]
+
+	def get_scale(self, frame, obj, context):
+		self.__guarantee_entry(frame, obj, context)
+		return self.__mats[(frame, obj)][3]
+		
 
 # get location curves of the given object
 def get_curves(object, child=False):
@@ -277,7 +323,7 @@ def get_matrix_bone_parents(pose_bone, frame, do_anim = True):
 	get_matrix_bone_parents_as(pose_bone, frame, do_anim)
 
 # Get the world-ish matrix of a bone or object
-def get_matrix_any_parents(thing, frame, do_anim = True):
+def get_matrix_any_custom_eval(frame: float, thing: bpy.types.Object | bpy.types.PoseBone, do_anim = True) -> mathutils.Matrix:
 	if type(thing) is bpy.types.PoseBone:
 		return get_matrix_bone_parents(thing, frame, do_anim)
 	return get_matrix_obj_parents(thing, frame, do_anim)
@@ -334,16 +380,7 @@ def evaluate_constraints(mat, constraints, frame, ob):
 		accumulatedMat = accumulatedMat @ constraintMat
 	return accumulatedMat @ mat
 
-# calculate location of display_ob in worldspace using our own, draw handler-safe methods
-def get_location(frame, display_ob, offset_ob, curves, context):
-	return (get_matrix_any_parents(display_ob, frame).to_translation())
-
-# calculate rotation of display_ob in worldspace using our own, draw handler-safe methods
-def get_rotation(frame, display_ob, offset_ob, curves, context):
-	return (get_matrix_any_parents(display_ob, frame).to_quaternion())
-
-
-def get_matrix_any_depsgraph(frame, target, context):
+def get_matrix_any_depsgraph(frame: float, target: bpy.types.Object | bpy.types.PoseBone, context: bpy.types.Context) -> mathutils.Matrix:
 	oldframe = context.scene.frame_float
 	isBone = type(target) is bpy.types.PoseBone
 
@@ -360,22 +397,14 @@ def get_matrix_any_depsgraph(frame, target, context):
 
 	resMat = evalledOb.matrix_world @ boneMat
 	context.scene.frame_float = oldframe
-
+	# TODO: When updates are forced with DG on, playback can freeze... This may be due to setting the frame in the DG functions. Is this fixable?
 	return resMat
-
-# calculate location of display_ob in worldspace using the depsgraph
-def get_location_depsgraph(frame, display_ob, offset_ob, curves, context):
-	return get_matrix_any_depsgraph(frame, display_ob, context).to_translation()
-
-# calculate rotation of display_ob in worldspace using the depsgraph
-def get_rotation_depsgraph(frame, display_ob, offset_ob, curves, context):
-	return get_matrix_any_depsgraph(frame, display_ob, context).to_quaternion()
 
 # Calculate an inverse matrix for an object or bone, such that it's suitable for the addon's
 # manipulation of keyframes (IE without the very last animation applied)
 # using our own, draw handler-safe methods
 def get_inverse_parents(frame, ob, context):
-	return get_matrix_any_parents(ob, frame, False).inverted()
+	return get_matrix_any_custom_eval(ob, frame, False).inverted()
 
 def get_inverse_parents_depsgraph(frame, ob, context):
 	mat = ''
@@ -411,10 +440,9 @@ def get_original_animation_data(context, keyframes, location_getter):
 			display_ob = action_ob
 
 		# get keyframe positions
-		frame_old = context.scene.frame_current
 		keyframes_ori[display_ob.name] = {}
 		for frame in keyframes[display_ob.name]:
-			loc = location_getter(frame, display_ob, offset_ob, curves, context)
+			loc = location_getter(frame, display_ob, context)
 			keyframes_ori[display_ob.name][frame] = [frame, loc]
 
 		# get handle positions
@@ -447,19 +475,22 @@ def get_original_animation_data(context, keyframes, location_getter):
 			handles_ori[display_ob.name][frame]["right"] = [right_x, right_y,
 				right_z]
 
-		if context.scene.frame_current != frame_old:
-			context.scene.frame_set(frame_old)
-
 	return(keyframes_ori, handles_ori)
 
+def get_uncached_location_dg(frame, ob, context):
+	return get_matrix_any_depsgraph(frame, ob, context).to_translation()
+
+def get_uncached_location_ce(frame, ob, context):
+	return get_matrix_any_custom_eval(frame, ob, context).to_translation()
+
 def get_original_animation_data_dg(context, keyframes):
-	return get_original_animation_data(context, keyframes, get_location_depsgraph)
+	return get_original_animation_data(context, keyframes, get_uncached_location_dg)
 
 def get_original_animation_data_ce(context, keyframes):
-	return get_original_animation_data(context, keyframes, get_location)
+	return get_original_animation_data(context, keyframes, get_uncached_location_ce)
 
 # callback function that calculates positions of all things that need be drawn
-def calc_callback(self, context, inverse_getter, location_getter, rotation_getter):
+def calc_callback(self, context, inverse_getter, matrix_getter):
 	# Remove handler if file was changed and we lose access to self
 	# I'm all ears for a better solution, as __del__ for the modal operator does not call on file change
 	# and there is no special event emitted to the operator for that
@@ -472,6 +503,8 @@ def calc_callback(self, context, inverse_getter, location_getter, rotation_gette
 			bpy.types.SpaceView3D.draw_handler_remove(global_mtrail_handler_calc, 'WINDOW')
 		return
 	
+	mt: MotionTrailProps = context.window_manager.motion_trail
+
 	if context.active_object and context.active_object.mode == 'POSE':
 		armature_ob = context.active_object
 		objects = [
@@ -487,9 +520,11 @@ def calc_callback(self, context, inverse_getter, location_getter, rotation_gette
 
 	if self.lock and not selection_change and \
 	context.region_data.perspective_matrix == self.perspective and not \
-	context.window_manager.motion_trail.force_update:
-		pass
-		#return
+	mt.force_update and self.last_frame == context.scene.frame_float:
+		return
+
+	self.last_frame = context.scene.frame_float
+
 	# dictionaries with key: objectname
 	self.paths = {} 	 # value: list of lists with x, y, color
 	self.keyframes = {}  # value: dict with frame as key and [x,y] as value
@@ -503,20 +538,14 @@ def calc_callback(self, context, inverse_getter, location_getter, rotation_gette
 		self.active_handle = False
 		self.active_timebead = False
 		self.active_frame = False
-	if selection_change or not self.lock or context.window_manager.\
-	motion_trail.force_update:
-		# contains locations of path, keyframes and timebeads
-		self.cached = {
-				"path": {}, "keyframes": {}, "timebeads_timing": {},
-				"timebeads_speed": {}, "spines_loc": {}, "spines_rot": {}
-				}
-	if self.cached["path"]:
-		use_cache = True
-	else:
-		use_cache = False
+		self.highlighted_coord = False
+	
+	if selection_change or not self.lock or mt.force_update:
+		self.cache = matrix_cache(matrix_getter)
+
 	self.perspective = context.region_data.perspective_matrix.copy()
 	self.displayed = objects  # store, so it can be checked next time
-	context.window_manager.motion_trail.force_update = False
+	mt.force_update = False
 	try:
 		#global_undo = context.preferences.edit.use_global_undo
 		#context.preferences.edit.use_global_undo = False
@@ -526,20 +555,20 @@ def calc_callback(self, context, inverse_getter, location_getter, rotation_gette
 			curves = get_curves(action_ob, child)
 			if len(curves) == 0:
 				continue
-			if context.window_manager.motion_trail.path_before == 0:
+			if mt.path_before == 0:
 				range_min = context.scene.frame_start
 			else:
 				range_min = max(
 							context.scene.frame_start,
 							context.scene.frame_current -
-							context.window_manager.motion_trail.path_before
+							mt.path_before
 							)
-			if context.window_manager.motion_trail.path_after == 0:
+			if mt.path_after == 0:
 				range_max = context.scene.frame_end
 			else:
 				range_max = min(context.scene.frame_end,
 							context.scene.frame_current +
-							context.window_manager.motion_trail.path_after
+							mt.path_after
 							)
 			fcx, fcy, fcz = curves
 			if child:
@@ -549,27 +578,15 @@ def calc_callback(self, context, inverse_getter, location_getter, rotation_gette
 			# get location data of motion path
 			path = []
 			speeds = []
-			frame_old = context.scene.frame_current
-			step = 11 - context.window_manager.motion_trail.path_resolution
-			if not use_cache:
-				if display_ob.name not in self.cached["path"]:
-					self.cached["path"][display_ob.name] = {}
-					
-			if use_cache and range_min - 1 in self.cached["path"][display_ob.name]:
-				prev_loc = self.cached["path"][display_ob.name][range_min - 1]
-			else:
-				prev_loc = location_getter(range_min - 1, display_ob, offset_ob, curves, context)
-				self.cached["path"][display_ob.name][range_min - 1] = prev_loc
+			step = 11 - mt.path_resolution
+
+			prev_loc = self.cache.get_location(range_min - 1, display_ob, context)
 			for frame in range(range_min, range_max + 1, step):
-				if use_cache and frame in self.cached["path"][display_ob.name]:
-					loc = self.cached["path"][display_ob.name][frame]
-				else:
-					loc = location_getter(frame, display_ob, offset_ob, curves, context)
-					self.cached["path"][display_ob.name][frame] = loc
+				loc = self.cache.get_location(frame, display_ob, context)
 				if not context.region or not context.space_data:
 					continue
 				x, y = world_to_screen(context, loc)
-				if context.window_manager.motion_trail.path_style == 'simple':
+				if mt.path_style == 'simple':
 					path.append([x, y, [0.0, 0.0, 0.0], frame, action_ob, child])
 				else:
 					dloc = (loc - prev_loc).length
@@ -577,7 +594,7 @@ def calc_callback(self, context, inverse_getter, location_getter, rotation_gette
 					speeds.append(dloc)
 					prev_loc = loc
 			# calculate color of path
-			if context.window_manager.motion_trail.path_style == 'speed':
+			if mt.path_style == 'speed':
 				speeds.sort()
 				min_speed = speeds[0]
 				d_speed = speeds[-1] - min_speed
@@ -585,9 +602,9 @@ def calc_callback(self, context, inverse_getter, location_getter, rotation_gette
 				for i, [x, y, d_loc, frame, action_ob, child] in enumerate(path):
 					relative_speed = (d_loc - min_speed) / d_speed # 0.0 to 1.0
 					fac = min(1.0, 2.0 * relative_speed)
-					path[i][2] = lerp4(fac, context.window_manager.motion_trail.speed_color_max, 
-					context.window_manager.motion_trail.speed_color_min)
-			elif context.window_manager.motion_trail.path_style == 'acceleration':
+					path[i][2] = lerp4(fac, mt.speed_color_max, 
+					mt.speed_color_min)
+			elif mt.path_style == 'acceleration':
 				accelerations = []
 				prev_speed = 0.0
 				for i, [x, y, d_loc, frame, action_ob, child] in enumerate(path):
@@ -602,36 +619,33 @@ def calc_callback(self, context, inverse_getter, location_getter, rotation_gette
 					if accel < 0:
 						relative_accel = accel / min_accel  # values from 0.0 to 1.0
 						fac = 1.0 - relative_accel
-						path[i][2] = lerp4(fac, context.window_manager.motion_trail.accel_color_neg, 
-						context.window_manager.motion_trail.accel_color_static)
+						path[i][2] = lerp4(fac, mt.accel_color_neg, 
+						mt.accel_color_static)
 					elif accel > 0:
 						relative_accel = accel / max_accel  # values from 1.0 to 0.0
 						fac = 1.0 - relative_accel
-						path[i][2] = lerp4(fac, context.window_manager.motion_trail.accel_color_static, 
-						context.window_manager.motion_trail.accel_color_pos)
+						path[i][2] = lerp4(fac, mt.accel_color_static, 
+						mt.accel_color_pos)
 					else:
-						path[i][2] = context.window_manager.motion_trail.accel_color_static
+						path[i][2] = mt.accel_color_static
 			self.paths[display_ob.name] = path
 			# get keyframes and handles
 			keyframes = {}
 			handle_difs = {}
 			kf_time = []
 			click = []
-			if not use_cache:
-				if display_ob.name not in self.cached["keyframes"]:
-					self.cached["keyframes"][display_ob.name] = {}
 
 			for fc in curves:
 				for kf in fc.keyframe_points:
 					# handles for location mode
-					if context.window_manager.motion_trail.mode == 'location':
+					if mt.mode == 'location':
 						if kf.co[0] not in handle_difs:
 							handle_difs[kf.co[0]] = {"left": mathutils.Vector(),
 								"right": mathutils.Vector(), "keyframe_loc": None}
 								
 						ldiff = mathutils.Vector(kf.handle_left[:]) - mathutils.Vector(kf.co[:])
 						rdiff = mathutils.Vector(kf.handle_right[:]) - mathutils.Vector(kf.co[:])
-						hdir = context.window_manager.motion_trail.handle_direction
+						hdir = mt.handle_direction
 						lco = 0.0
 						rco = 0.0
 						
@@ -659,25 +673,19 @@ def calc_callback(self, context, inverse_getter, location_getter, rotation_gette
 					kf_time.append(kf.co[0])
 					co = kf.co[0]
 
-					if use_cache and co in \
-					self.cached["keyframes"][display_ob.name]:
-						loc = self.cached["keyframes"][display_ob.name][co]
-					else:
-						loc = location_getter(co, display_ob, offset_ob, curves, context)
-						self.cached["keyframes"][display_ob.name][co] = loc
+					loc = self.cache.get_location(co, display_ob, context)
 					if handle_difs:
 						handle_difs[co]["keyframe_loc"] = loc
 
 					x, y = world_to_screen(context, loc)
 					keyframes[kf.co[0]] = [x, y]
-					if context.window_manager.motion_trail.mode != 'speed':
+					if mt.mode != 'speed':
 						# can't select keyframes in speed mode
 						click.append([kf.co[0], "keyframe",
 							mathutils.Vector([x, y]), action_ob, child])
 			self.keyframes[display_ob.name] = keyframes
 			# handles are only shown in location-altering mode
-			if context.window_manager.motion_trail.mode == 'location' and \
-			context.window_manager.motion_trail.handle_display:
+			if mt.mode == 'location' and mt.handle_display:
 				# calculate handle positions
 				handles = {}
 				for frame, vecs in handle_difs.items():
@@ -690,14 +698,13 @@ def calc_callback(self, context, inverse_getter, location_getter, rotation_gette
 						vec_left = vecs["left"]
 						vec_right = vecs["right"]
 						
-					hlen = context.window_manager.motion_trail.handle_length
+					hlen = mt.handle_length
 					vec_left = vec_left * hlen
 					vec_right = vec_right * hlen
 					if vecs["keyframe_loc"] is not None:
-						vec_keyframe = vecs["keyframe_loc"]
+						vec_keyframe = vecs["keyframe_loc"] # TODO: is this a cache? Kill it if so!
 					else:
-						vec_keyframe = location_getter(frame, display_ob, offset_ob,
-							curves, context)
+						vec_keyframe = self.cache.get_location(frame, display_ob, context)
 					x_left, y_left = world_to_screen(
 											context, vec_left * 2 + vec_keyframe
 											)
@@ -713,22 +720,14 @@ def calc_callback(self, context, inverse_getter, location_getter, rotation_gette
 				self.handles[display_ob.name] = handles
 
 			# calculate timebeads for timing mode
-			if context.window_manager.motion_trail.mode == 'timing':
+			if mt.mode == 'timing':
 				timebeads = {}
-				n = context.window_manager.motion_trail.timebeads * (len(kf_time) - 1)
+				n = mt.timebeads * (len(kf_time) - 1)
 				dframe = (range_max - range_min) / (n + 1)
-				if not use_cache:
-					if display_ob.name not in self.cached["timebeads_timing"]:
-						self.cached["timebeads_timing"][display_ob.name] = {}
 
 				for i in range(1, n + 1):
 					frame = range_min + i * dframe
-					if use_cache and frame in \
-							self.cached["timebeads_timing"][display_ob.name]:
-						loc = self.cached["timebeads_timing"][display_ob.name][frame]
-					else:
-						loc = location_getter(frame, display_ob, offset_ob, curves, context)
-						self.cached["timebeads_timing"][display_ob.name][frame] = loc
+					loc = self.cache.get_location(frame, display_ob, context)
 					x, y = world_to_screen(context, loc)
 					timebeads[frame] = [x, y]
 					click.append(
@@ -738,7 +737,7 @@ def calc_callback(self, context, inverse_getter, location_getter, rotation_gette
 				self.timebeads[display_ob.name] = timebeads
 
 			# calculate timebeads for speed mode
-			if context.window_manager.motion_trail.mode == 'speed':
+			if mt.mode == 'speed':
 				angles = dict([[kf, {"left": [], "right": []}] for kf in
 							  self.keyframes[display_ob.name]])
 				for fc in curves:
@@ -759,10 +758,6 @@ def calc_callback(self, context, inverse_getter, location_getter, rotation_gette
 								angles[kf.co[0]]["right"].append(angle)
 				timebeads = {}
 				kf_time.sort()
-				if not use_cache:
-					if display_ob.name not in self.cached["timebeads_speed"]:
-						self.cached["timebeads_speed"][display_ob.name] = {}
-
 				for frame, sides in angles.items():
 					if sides["left"]:
 						perc = (sum(sides["left"]) / len(sides["left"])) / \
@@ -770,13 +765,9 @@ def calc_callback(self, context, inverse_getter, location_getter, rotation_gette
 						perc = max(0.4, min(1, perc * 5))
 						previous = kf_time[kf_time.index(frame) - 1]
 						bead_frame = frame - perc * ((frame - previous - 2) / 2)
-						if use_cache and bead_frame in \
-						self.cached["timebeads_speed"][display_ob.name]:
-							loc = self.cached["timebeads_speed"][display_ob.name][bead_frame]
-						else:
-							loc = location_getter(bead_frame, display_ob, offset_ob,
-								curves, context)
-							self.cached["timebeads_speed"][display_ob.name][bead_frame] = loc
+
+						loc = self.cache.get_location(bead_frame, display_ob, context)
+
 						x, y = world_to_screen(context, loc)
 						timebeads[bead_frame] = [x, y]
 						click.append(
@@ -790,13 +781,9 @@ def calc_callback(self, context, inverse_getter, location_getter, rotation_gette
 						perc = max(0.4, min(1, perc * 5))
 						next = kf_time[kf_time.index(frame) + 1]
 						bead_frame = frame + perc * ((next - frame - 2) / 2)
-						if use_cache and bead_frame in \
-						self.cached["timebeads_speed"][display_ob.name]:
-							loc = self.cached["timebeads_speed"][display_ob.name][bead_frame]
-						else:
-							loc = location_getter(bead_frame, display_ob, offset_ob,
-								curves, context)
-							self.cached["timebeads_speed"][display_ob.name][bead_frame] = loc
+
+						loc = self.cache.get_location(bead_frame, display_ob, frame)
+
 						x, y = world_to_screen(context, loc)
 						timebeads[bead_frame] = [x, y]
 						click.append(
@@ -806,34 +793,14 @@ def calc_callback(self, context, inverse_getter, location_getter, rotation_gette
 								)
 				self.timebeads[display_ob.name] = timebeads
 
-			if context.window_manager.motion_trail.show_spines:
-				if not use_cache:
-					if display_ob.name not in self.cached["spines_loc"]:
-						self.cached["spines_loc"][display_ob.name] = {}
-
-				if not use_cache:
-					if display_ob.name not in self.cached["spines_rot"]:
-						self.cached["spines_rot"][display_ob.name] = {}
-
-				for frame in range(range_min, range_max + 1, context.window_manager.motion_trail.spine_step):
-					loc = ""
-
-					if use_cache and frame in self.cached["spines_loc"][display_ob.name]:
-						loc = self.cached["spines_loc"][display_ob.name][frame]
-					else:
-						loc = location_getter(frame, display_ob, offset_ob, curves, context)
-						self.cached["spines_loc"][display_ob.name][frame] = loc
-
-					if use_cache and frame in self.cached["spines_rot"][display_ob.name]:
-						rot = self.cached["spines_rot"][display_ob.name][frame]
-					else:
-						rot = rotation_getter(frame, display_ob, offset_ob, curves, context)
-						rot.rotate(context.window_manager.motion_trail.spine_offset)
-						self.cached["spines_rot"][display_ob.name][frame] = rot 
+			if mt.show_spines:
+				for frame in range(range_min, range_max + 1, mt.spine_step):
+					loc = self.cache.get_location(frame, display_ob, context)
+					rot = self.cache.get_rotation(frame, display_ob, context)
 
 					baseLoc = world_to_screen(context, loc)
 
-					slen = context.window_manager.motion_trail.spine_length
+					slen = mt.spine_length
 
 					resLocs = []
 					vecs = ((slen, 0, 0), (0, slen, 0), (0, 0, slen), (-slen, 0, 0), (0, -slen, 0), (0, 0, -slen))
@@ -845,7 +812,7 @@ def calc_callback(self, context, inverse_getter, location_getter, rotation_gette
 					self.spines[frame] = (baseLoc, resLocs)
 
 			# add frame positions to click-list
-			if context.window_manager.motion_trail.frame_display:
+			if mt.frame_display:
 				path = self.paths[display_ob.name]
 				for x, y, color, frame, action_ob, child in path:
 					click.append(
@@ -855,9 +822,6 @@ def calc_callback(self, context, inverse_getter, location_getter, rotation_gette
 							)
 
 			self.click[display_ob.name] = click
-
-			if context.scene.frame_current != frame_old:
-				context.scene.frame_set(frame_old)
 
 		#context.preferences.edit.use_global_undo = global_undo
 
@@ -870,11 +834,11 @@ def calc_callback(self, context, inverse_getter, location_getter, rotation_gette
 
 # calc_callback using depsgraph functions
 def calc_callback_dg(self, context):
-	return calc_callback(self, context, get_inverse_parents_depsgraph, get_location_depsgraph, get_rotation_depsgraph)
+	return calc_callback(self, context, get_inverse_parents_depsgraph, get_matrix_any_depsgraph)
 
 # calc_callback using custom evaluation functions
 def calc_callback_ce(self, context):
-	return calc_callback(self, context, get_inverse_parents, get_location, get_rotation)
+	return calc_callback(self, context, get_inverse_parents, get_matrix_any_custom_eval)
 
 
 # draw in 3d-view
@@ -887,24 +851,24 @@ def draw_callback(self, context):
 			bpy.types.SpaceView3D.draw_handler_remove(global_mtrail_handler_draw, 'WINDOW')
 		return
 	
+	mt: MotionTrailProps = context.window_manager.motion_trail
+
 	# polling
-	if (context.mode not in ('OBJECT', 'POSE') or
-			not context.window_manager.motion_trail.enabled):
+	if (context.mode not in ('OBJECT', 'POSE') or not mt.enabled):
 		return
 
 	# display limits
-	if context.window_manager.motion_trail.path_before != 0:
+	if mt.path_before != 0:
 		limit_min = context.scene.frame_current - \
-			context.window_manager.motion_trail.path_before
+			mt.path_before
 	else:
 		limit_min = -1e6
-	if context.window_manager.motion_trail.path_after != 0:
-		limit_max = context.scene.frame_current + \
-			context.window_manager.motion_trail.path_after
+	if mt.path_after != 0:
+		limit_max = context.scene.frame_current + mt.path_after
 	else:
 		limit_max = 1e6
 	# draw motion path
-	width = context.window_manager.motion_trail.path_width
+	width = mt.path_width
 	#uniform_line_shader = gpu.shader.from_builtin('3D_POLYLINE_UNIFORM_COLOR')
 	colored_line_shader = gpu.shader.from_builtin('3D_POLYLINE_SMOOTH_COLOR')
 	colored_points_shader = gpu.shader.from_builtin('2D_FLAT_COLOR')
@@ -912,14 +876,14 @@ def draw_callback(self, context):
 	poss = []
 	cols = []
 	
-	if context.window_manager.motion_trail.path_style == 'simple':
+	if mt.path_style == 'simple':
 		#uniform_line_shader.bind()
-		#uniform_line_shader.uniform_float("color", context.window_manager.motion_trail.simple_color)
+		#uniform_line_shader.uniform_float("color", mt.simple_color)
 		#uniform_line_shader.uniform_float("lineWidth", width)
 		
 		colored_line_shader.bind()
 		colored_line_shader.uniform_float("lineWidth", width)
-		simple_color = context.window_manager.motion_trail.simple_color
+		simple_color = mt.simple_color
 		for objectname, path in self.paths.items():
 			for x, y, color, frame, action_ob, child in path:
 				if frame < limit_min or frame > limit_max:
@@ -962,8 +926,19 @@ def draw_callback(self, context):
 				poss.clear()
 				cols.clear()
 
+	if self.highlighted_coord:
+		colored_points_shader.bind()
+
+		gpu.state.point_size_set(10.0)
+		point_poss = [self.highlighted_coord]
+		point_cols = [mt.highlight_color]
+		batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
+		batch.draw(colored_points_shader)
+		point_poss.clear()
+		point_cols.clear()
+
 	# draw frames
-	if context.window_manager.motion_trail.frame_display:
+	if mt.frame_display:
 		colored_points_shader.bind()
 		point_poss = []
 		point_cols = []
@@ -973,11 +948,11 @@ def draw_callback(self, context):
 					continue
 				if self.active_frame and objectname == self.active_frame[0] \
 				and abs(frame - self.active_frame[1]) < 1e-4:
-					point_cols.append(context.window_manager.motion_trail.selection_color)
+					point_cols.append(mt.selection_color)
 					point_poss.append((x, y))
 				else:
 					point_poss.append((x, y))
-					point_cols.append(context.window_manager.motion_trail.frame_color)
+					point_cols.append(mt.frame_color)
 			if(not (point_poss == []) and not (point_cols == [])):
 				batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
 				gpu.state.point_size_set(3.0)
@@ -986,7 +961,7 @@ def draw_callback(self, context):
 				point_cols.clear()
 
 	# time beads are shown in speed and timing modes
-	if context.window_manager.motion_trail.mode in ('speed', 'timing'):
+	if mt.mode in ('speed', 'timing'):
 		gpu.state.point_size_set(4.0)
 		point_poss = []
 		point_cols = []
@@ -997,10 +972,10 @@ def draw_callback(self, context):
 				if self.active_timebead and \
 				objectname == self.active_timebead[0] and \
 				abs(frame - self.active_timebead[1]) < 1e-4:
-					point_cols.append(context.window_manager.motion_trail.selection_color)
+					point_cols.append(mt.selection_color)
 					point_poss.append((coords[0], coords[1]))
 				else:
-					point_cols.append(context.window_manager.motion_trail.timebead_color)
+					point_cols.append(mt.timebead_color)
 					point_poss.append((coords[0], coords[1]))
 			if(not (point_poss == []) and not (point_cols == [])):
 				batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
@@ -1010,7 +985,7 @@ def draw_callback(self, context):
 				point_cols.clear()
 
 	# handles are only shown in location mode
-	if context.window_manager.motion_trail.mode == 'location':
+	if mt.mode == 'location':
 		colored_line_shader.bind()
 		colored_line_shader.uniform_float("lineWidth", 2)
 		poss = []
@@ -1024,17 +999,17 @@ def draw_callback(self, context):
 					objectname == self.active_handle[0] and \
 					side == self.active_handle[2] and \
 					abs(frame - self.active_handle[1]) < 1e-4:
-						cols.append(context.window_manager.motion_trail.selection_color_dark)
+						cols.append(mt.selection_color_dark)
 						poss.append((self.keyframes[objectname][frame][0],
 							self.keyframes[objectname][frame][1], 0.0))
-						cols.append(context.window_manager.motion_trail.selection_color_dark)
+						cols.append(mt.selection_color_dark)
 						poss.append((coords[0], coords[1], 0.0))
 						
 					else:
-						cols.append(context.window_manager.motion_trail.handle_line_color)
+						cols.append(mt.handle_line_color)
 						poss.append((self.keyframes[objectname][frame][0],
 							self.keyframes[objectname][frame][1], 0.0))
-						cols.append(context.window_manager.motion_trail.handle_line_color)
+						cols.append(mt.handle_line_color)
 						poss.append((coords[0], coords[1], 0.0))
 			if(not (cols == []) and not (poss == [])):
 				batch = batch_for_shader(colored_line_shader, 'LINES', {"pos": poss, "color": cols})
@@ -1057,10 +1032,10 @@ def draw_callback(self, context):
 					side == self.active_handle[2] and \
 					abs(frame - self.active_handle[1]) < 1e-4:
 						point_poss.append((coords[0], coords[1]))
-						point_cols.append(context.window_manager.motion_trail.selection_color)
+						point_cols.append(mt.selection_color)
 					else:
 						point_poss.append((coords[0], coords[1]))
-						point_cols.append(context.window_manager.motion_trail.handle_color)
+						point_cols.append(mt.handle_color)
 		if(not (point_poss == []) and not (point_cols == [])):
 			batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
 			batch.draw(colored_points_shader)
@@ -1080,10 +1055,10 @@ def draw_callback(self, context):
 			objectname == self.active_keyframe[0] and \
 			abs(frame - self.active_keyframe[1]) < 1e-4:
 				point_poss.append((coords[0], coords[1]))
-				point_cols.append(context.window_manager.motion_trail.selection_color)
+				point_cols.append(mt.selection_color)
 			else:
 				point_poss.append((coords[0], coords[1]))
-				point_cols.append(context.window_manager.motion_trail.handle_color)
+				point_cols.append(mt.handle_color)
 	if(not (point_poss == []) and not (point_cols == [])):
 		batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
 		batch.draw(colored_points_shader)
@@ -1091,7 +1066,7 @@ def draw_callback(self, context):
 		point_cols.clear()
 
 	# draw keyframe-numbers
-	if context.window_manager.motion_trail.keyframe_numbers:
+	if mt.keyframe_numbers:
 		blf.size(0, 12, 72)
 		blf.color(0, 1.0, 1.0, 0.0, 1.0)
 		for objectname, values in self.keyframes.items():
@@ -1109,16 +1084,16 @@ def draw_callback(self, context):
 				if self.active_keyframe and \
 				objectname == self.active_keyframe[0] and \
 				abs(frame - self.active_keyframe[1]) < 1e-4:
-					c = context.window_manager.motion_trail.selected_text_color
+					c = mt.selected_text_color
 					blf.color(0, * c)
 					blf.draw(0, text)
 				else:
-					c = context.window_manager.motion_trail.text_color
+					c = mt.text_color
 					blf.color(0, * c)
 					blf.draw(0, text)
 
 	# Draw rotation spines
-	if context.window_manager.motion_trail.show_spines:
+	if mt.show_spines:
 		colored_line_shader.bind()
 		colored_line_shader.uniform_float("lineWidth", 2)
 		poss = []
@@ -1127,7 +1102,6 @@ def draw_callback(self, context):
 			if frame < limit_min or frame > limit_max:
 				continue
 			
-			mt = context.window_manager.motion_trail
 			to_use = (mt.pXspines, mt.pYspines, mt.pZspines, mt.nXspines, mt.nYspines, mt.nZspines)
 			to_use_colors = (mt.spine_x_color, mt.spine_y_color, mt.spine_z_color, mt.spine_x_color, mt.spine_y_color, mt.spine_z_color)
 			for i in range(6):
@@ -1148,12 +1122,14 @@ def draw_callback(self, context):
 # change data based on mouse movement
 def drag(context, event, drag_mouse_ori, active_keyframe, active_handle,
 active_timebead, keyframes_ori, handles_ori, inverse_getter):
+
+	mt: MotionTrailProps = context.window_manager.motion_trail
+
 	# change 3d-location of keyframe
-	if context.window_manager.motion_trail.mode == 'location' and \
+	if mt.mode == 'location' and \
 	active_keyframe:
 		objectname, frame, frame_ori, action_ob, child = active_keyframe
 		mat = inverse_getter(frame, child if child else action_ob, context)
-		mt = context.window_manager.motion_trail
 		
 		mouse_ori_world = mat @ screen_to_world(context, drag_mouse_ori[0],
 			drag_mouse_ori[1])
@@ -1183,7 +1159,7 @@ active_timebead, keyframes_ori, handles_ori, inverse_getter):
 					break
 
 	# change 3d-location of handle
-	elif context.window_manager.motion_trail.mode == 'location' and active_handle:
+	elif mt.mode == 'location' and active_handle:
 		objectname, frame, side, action_ob, child = active_handle
 		mat = inverse_getter(frame, child if child else action_ob, context)
 
@@ -1246,8 +1222,7 @@ active_timebead, keyframes_ori, handles_ori, inverse_getter):
 					break
 
 	# change position of all keyframes on timeline
-	elif context.window_manager.motion_trail.mode == 'timing' and \
-	active_timebead:
+	elif mt.mode == 'timing' and active_timebead:
 		objectname, frame, frame_ori, action_ob, child = active_timebead
 		curves = get_curves(action_ob, child)
 		ranges = [val for c in curves for val in c.range()]
@@ -1299,8 +1274,7 @@ active_timebead, keyframes_ori, handles_ori, inverse_getter):
 			keyframes_ori[objectname][new_frame] = value
 
 	# change position of active keyframe on the timeline
-	elif context.window_manager.motion_trail.mode == 'timing' and \
-	active_keyframe:
+	elif mt.mode == 'timing' and active_keyframe:
 		objectname, frame, frame_ori, action_ob, child = active_keyframe
 		mat = inverse_getter(frame, child if child else action_ob, context)
 
@@ -1370,8 +1344,7 @@ active_timebead, keyframes_ori, handles_ori, inverse_getter):
 		active_keyframe = [objectname, new_frame, frame_ori, action_ob, child]
 
 	# change position of active timebead on the timeline, thus altering speed
-	elif context.window_manager.motion_trail.mode == 'speed' and \
-	active_timebead:
+	elif mt.mode == 'speed' and active_timebead:
 		objectname, frame, frame_ori, action_ob, child = active_timebead
 		mat = inverse_getter(frame, child if child else action_ob, context)
 
@@ -1461,23 +1434,23 @@ active_timebead, keyframes_ori, handles_ori, inverse_getter):
 # revert changes made by dragging
 def cancel_drag(context, active_keyframe, active_handle, active_timebead,
 keyframes_ori, handles_ori):
+	mt: MotionTrailProps = context.window_manager.motion_trail
+
 	# revert change in 3d-location of active keyframe and its handles
-	if context.window_manager.motion_trail.mode == 'location' and \
-	active_keyframe:
+	if mt.mode == 'location' and active_keyframe:
 		objectname, frame, frame_ori, active_ob, child = active_keyframe
 		curves = get_curves(active_ob, child)
 		for i, curve in enumerate(curves):
 			for kf in curve.keyframe_points:
 				if kf.co[0] == frame:
-					kf.co[1] = context.window_manager.motion_trail.keyframe_backup[i]
+					kf.co[1] = mt.keyframe_backup[i]
 					kf.handle_left[1] = handles_ori[objectname][frame]["left"][i][1]
 					kf.handle_right[1] = handles_ori[objectname][frame]["right"][i][1]
 					break
-		context.window_manager.motion_trail.backed_up_keyframes = False
+		mt.backed_up_keyframes = False
 
 	# revert change in 3d-location of active handle
-	elif context.window_manager.motion_trail.mode == 'location' and \
-	active_handle:
+	elif mt.mode == 'location' and active_handle:
 		objectname, frame, side, active_ob, child = active_handle
 		curves = get_curves(active_ob, child)
 		for i, curve in enumerate(curves):
@@ -1488,8 +1461,7 @@ keyframes_ori, handles_ori):
 					break
 
 	# revert position of all keyframes and handles on timeline
-	elif context.window_manager.motion_trail.mode == 'timing' and \
-	active_timebead:
+	elif mt.mode == 'timing' and active_timebead:
 		objectname, frame, frame_ori, active_ob, child = active_timebead
 		curves = get_curves(active_ob, child)
 		for i, curve in enumerate(curves):
@@ -1503,8 +1475,7 @@ keyframes_ori, handles_ori):
 						break
 
 	# revert position of active keyframe and its handles on the timeline
-	elif context.window_manager.motion_trail.mode == 'timing' and \
-	active_keyframe:
+	elif mt.mode == 'timing' and active_keyframe:
 		objectname, frame, frame_ori, active_ob, child = active_keyframe
 		curves = get_curves(active_ob, child)
 		for i, curve in enumerate(curves):
@@ -1517,8 +1488,7 @@ keyframes_ori, handles_ori):
 		active_keyframe = [objectname, frame_ori, frame_ori, active_ob, child]
 
 	# revert position of handles on the timeline
-	elif context.window_manager.motion_trail.mode == 'speed' and \
-	active_timebead:
+	elif mt.mode == 'speed' and active_timebead:
 		objectname, frame, frame_ori, active_ob, child = active_timebead
 		curves = get_curves(active_ob, child)
 		keyframes = [kf for kf in keyframes_ori[objectname]]
@@ -1590,23 +1560,26 @@ def insert_keyframe(self, context, frame):
 
 # change the handle type of the active selection
 def set_handle_type(self, context):
-	if not context.window_manager.motion_trail.handle_type_enabled:
+
+	mt: MotionTrailProps = context.window_manager.motion_trail
+
+	if not mt.handle_type_enabled:
 		return
-	if context.window_manager.motion_trail.handle_type_old == \
-	context.window_manager.motion_trail.handle_type:
+	if mt.handle_type_old == mt.handle_type:
 		# function called because of selection change, not change in type
 		return
-	context.window_manager.motion_trail.handle_type_old = \
-		context.window_manager.motion_trail.handle_type
+	mt.handle_type_old = mt.handle_type
 
-	frame = bpy.context.window_manager.motion_trail.handle_type_frame
-	side = bpy.context.window_manager.motion_trail.handle_type_side
-	action_ob = bpy.context.window_manager.motion_trail.handle_type_action_ob
+	# TODO: Random bpy.context instead of context here, did replacing it break anything?
+	frame = mt.handle_type_frame
+	side = mt.handle_type_side
+	action_ob = mt.handle_type_action_ob
 	action_ob = bpy.data.objects[action_ob]
-	child = bpy.context.window_manager.motion_trail.handle_type_child
+	child = mt.handle_type_child
+	# End of above TODO
 	if child:
 		child = action_ob.pose.bones[child]
-	new_type = context.window_manager.motion_trail.handle_type
+	new_type = mt.handle_type
 
 	curves = get_curves(action_ob, child=child)
 	for c in curves:
@@ -1633,15 +1606,18 @@ def set_handle_type(self, context):
 				if side in ("right", "both"):
 					kf.handle_right_type = new_type
 
-	context.window_manager.motion_trail.force_update = True
+	mt.force_update = True
 
-def update_callback(self, context):
+def force_update_callback(self, context):
 	# Remove handler if file was changed and we lose access to self
 	try:
 		self.properties
 	except:
 		if global_mtrail_handler_update:
 			bpy.types.SpaceGraphEditor.draw_handler_remove(global_mtrail_handler_update, 'WINDOW')
+		if global_mtrail_msgbus_owner:
+			bpy.msgbus.clear_by_owner(global_mtrail_msgbus_owner)
+		
 		return
 	
 	context.window_manager.motion_trail.force_update = True
@@ -1650,6 +1626,7 @@ def update_callback(self, context):
 global_mtrail_handler_calc = None
 global_mtrail_handler_draw = None
 global_mtrail_handler_update = None
+global_mtrail_msgbus_owner = None
 
 class MotionTrailOperator(bpy.types.Operator):
 	bl_idname = "view3d.motion_trail"
@@ -1660,27 +1637,34 @@ class MotionTrailOperator(bpy.types.Operator):
 	_handle_calc = None
 	_handle_draw = None
 	_handle_update = None
+	_timer = None
 
 	@staticmethod
 	def handle_add(self, context):
-		global global_mtrail_handler_calc
 
-		dg_optional_callback = update_callback if context.window_manager.motion_trail.use_depsgraph else calc_callback_ce
-		# Using the depsgraph in a callback seems to make blender freeze! Very cool, and is the whole reason why I avoided using it so far.
+		if not context.window_manager.motion_trail.use_depsgraph:
+			global global_mtrail_handler_calc
+			global_mtrail_handler_calc = \
+			MotionTrailOperator._handle_calc = bpy.types.SpaceView3D.draw_handler_add(
+				calc_callback_ce, (self, context), 'WINDOW', 'POST_VIEW')
 
-		global_mtrail_handler_calc = \
-		MotionTrailOperator._handle_calc = bpy.types.SpaceView3D.draw_handler_add(
-			dg_optional_callback, (self, context), 'WINDOW', 'POST_VIEW')
+			global global_mtrail_handler_update
+			global_mtrail_handler_update = \
+			MotionTrailOperator._handle_update = bpy.types.SpaceGraphEditor.draw_handler_add(
+			force_update_callback, (self, context), 'WINDOW', 'POST_PIXEL')
+
+			global global_mtrail_msgbus_owner
+			bpy.msgbus.subscribe_rna(
+    			key=(bpy.types.Keyframe, "co_ui"), # why doesn't simply "co" work?
+    			owner=global_mtrail_msgbus_owner,
+    			args=(self, context),
+    			notify=force_update_callback
+			)
 		
 		global global_mtrail_handler_draw
 		global_mtrail_handler_draw = \
 		MotionTrailOperator._handle_draw = bpy.types.SpaceView3D.draw_handler_add(
 			draw_callback, (self, context), 'WINDOW', 'POST_PIXEL')
-		
-		global global_mtrail_handler_update
-		global_mtrail_handler_update = \
-		MotionTrailOperator._handle_update = bpy.types.SpaceGraphEditor.draw_handler_add(
-			update_callback, (self, context), 'WINDOW', 'POST_PIXEL')
 
 	@staticmethod
 	def handle_remove():
@@ -1699,6 +1683,12 @@ class MotionTrailOperator(bpy.types.Operator):
 				bpy.types.SpaceGraphEditor.draw_handler_remove(MotionTrailOperator._handle_update, 'WINDOW')
 			except:
 				pass
+
+		if MotionTrailOperator._handle_update is not None:
+			try:
+				bpy.msgbus.clear_by_owner(global_mtrail_msgbus_owner)
+			except:
+				pass
 			
 		MotionTrailOperator._handle_calc = None
 		MotionTrailOperator._handle_draw = None
@@ -1708,18 +1698,21 @@ class MotionTrailOperator(bpy.types.Operator):
 		# XXX Required, or custom transform.translate will break!
 		# XXX If one disables and re-enables motion trail, modal op will still be running,
 		# XXX default translate op will unintentionally get called, followed by custom translate.
-		if not context.window_manager.motion_trail.enabled:
+
+		mt: MotionTrailProps = context.window_manager.motion_trail
+
+		if not mt.enabled:
 			MotionTrailOperator.handle_remove()
 			if context.area:
 				context.area.tag_redraw()
 			return {'FINISHED'}
 
-		if context.window_manager.motion_trail.use_depsgraph:
+		if mt.use_depsgraph:
 			calc_callback_dg(self, context)
 
-		if not context.area or not context.region or event.type == 'NONE':
+		#if not context.area or not context.region: or event.type == 'NONE':
 			#context.area.tag_redraw()
-			return {'PASS_THROUGH'}
+		#	return {'PASS_THROUGH'}
 
 		no_passthrough = False
 
@@ -1728,8 +1721,8 @@ class MotionTrailOperator(bpy.types.Operator):
 			if self.drag:
 				self.drag = False
 				self.lock = True
-				context.window_manager.motion_trail.force_update = True
-				context.window_manager.motion_trail.backed_up_keyframes = False
+				mt.force_update = True
+				mt.backed_up_keyframes = False
 			# default hotkeys should still work
 			if event.type == self.transform_key and event.value == 'PRESS':
 				if bpy.ops.transform.translate.poll():
@@ -1741,7 +1734,6 @@ class MotionTrailOperator(bpy.types.Operator):
 			not (0 < event.mouse_region_y < context.region.height):
 				return {'PASS_THROUGH'}
 
-		mt = context.window_manager.motion_trail
 		select = mt.select_key
 		deselect_nohit = mt.deselect_nohit_key
 		deselect_always = mt.deselect_always_key
@@ -1757,8 +1749,9 @@ class MotionTrailOperator(bpy.types.Operator):
 					insert_keyframe(self, context, self.active_frame)
 					self.active_keyframe = self.active_frame
 					self.active_frame = False
-				self.keyframes_ori, self.handles_ori = \
-					get_original_animation_data_ce(context, self.keyframes)
+
+				anim_data_getter = get_original_animation_data_dg if mt.use_depsgraph else get_original_animation_data_ce
+				self.keyframes_ori, self.handles_ori = anim_data_getter(context, self.keyframes)
 				self.drag_mouse_ori = mathutils.Vector([event.mouse_region_x,
 					event.mouse_region_y])
 				self.drag = True
@@ -1767,8 +1760,8 @@ class MotionTrailOperator(bpy.types.Operator):
 				# stop drag
 				self.drag = False
 				self.lock = True
-				context.window_manager.motion_trail.force_update = True
-				context.window_manager.motion_trail.backed_up_keyframes = False
+				mt.force_update = True
+				mt.backed_up_keyframes = False
 		elif event.type == self.transform_key and event.value == 'PRESS':
 			# call default translate()
 			if bpy.ops.transform.translate.poll():
@@ -1778,8 +1771,8 @@ class MotionTrailOperator(bpy.types.Operator):
 			# cancel drag
 			self.drag = False
 			self.lock = True
-			context.window_manager.motion_trail.force_update = True
-			context.window_manager.motion_trail.backed_up_keyframes = False
+			mt.force_update = True
+			mt.backed_up_keyframes = False
 			self.active_keyframe, self.active_timebead = cancel_drag(context,
 				self.active_keyframe, self.active_handle,
 				self.active_timebead, self.keyframes_ori, self.handles_ori)
@@ -1790,32 +1783,33 @@ class MotionTrailOperator(bpy.types.Operator):
 				self.active_keyframe, self.active_handle,
 				self.active_timebead, self.keyframes_ori, self.handles_ori, get_inverse_parents_depsgraph)
 			no_passthrough = True
-		elif event.type in [select, deselect_nohit] and event.value == 'PRESS' and \
-		not self.drag and not event.shift and not event.alt and not \
-		event.ctrl:
-			# select
+
+		elif not self.drag and not event.shift and not event.alt and not event.ctrl:
+			# Select or highlight
 			threshold = mt.select_threshold
 			clicked = mathutils.Vector([event.mouse_region_x,
 				event.mouse_region_y])
 
-			context.window_manager.motion_trail.force_update = True
+			#context.window_manager.motion_trail.force_update = True
+			#TODO: Stare at the above line, should it be commented out?
+
 			found = False
 
-			if context.window_manager.motion_trail.path_before == 0:
+			if mt.path_before == 0:
 				frame_min = context.scene.frame_start
 			else:
 				frame_min = max(
 							context.scene.frame_start,
 							context.scene.frame_current -
-							context.window_manager.motion_trail.path_before
+							mt.path_before
 							)
-			if context.window_manager.motion_trail.path_after == 0:
+			if mt.path_after == 0:
 				frame_max = context.scene.frame_end
 			else:
 				frame_max = min(
 							context.scene.frame_end,
 							context.scene.frame_current +
-							context.window_manager.motion_trail.path_after
+							mt.path_after
 							)
 
 			for objectname, values in self.click.items():
@@ -1827,12 +1821,15 @@ class MotionTrailOperator(bpy.types.Operator):
 					if (coord - clicked).length <= threshold:
 						found = True
 
-						if event.type == select:
+						if event.type == 'MOUSEMOVE':
+							self.highlighted_coord = coord
+
+						if event.type == select: # and event.value == 'PRESS'?
 							self.active_keyframe = False
 							self.active_handle = False
 							self.active_timebead = False
 							self.active_frame = False
-							context.window_manager.motion_trail.handle_type_enabled = True
+							mt.handle_type_enabled = True
 							no_passthrough = True
 
 							if type == "keyframe":
@@ -1852,7 +1849,8 @@ class MotionTrailOperator(bpy.types.Operator):
 									action_ob, child]
 							break
 			if not found:
-				if event.type == deselect_nohit:
+				self.highlighted_coord = None
+				if event.type == deselect_nohit: # and event.value == 'PRESS'?
 					attrs = ["active_keyframe", "active_handle", "active_timebead", "active_frame"]
 					# If a change happens, then no passthrough
 					gotten = [getattr(self, attr) for attr in attrs]
@@ -1860,27 +1858,24 @@ class MotionTrailOperator(bpy.types.Operator):
 					
 					for attr in attrs:
 						setattr(self, attr, False)
-					context.window_manager.motion_trail.handle_type_enabled = False
+					mt.handle_type_enabled = False
 					
 				pass
 			else:
 				handle_type = get_handle_type(self.active_keyframe,
 					self.active_handle)
 				if handle_type:
-					context.window_manager.motion_trail.handle_type_old = \
-						handle_type
-					context.window_manager.motion_trail.handle_type = \
-						handle_type
+					mt.handle_type_old = handle_type
+					mt.handle_type = handle_type
 				else:
-					context.window_manager.motion_trail.handle_type_enabled = \
-						False
+					mt.handle_type_enabled = False
 		elif event.type == 'LEFTMOUSE' and event.value == 'PRESS' and \
 		self.drag:
 			# stop drag
 			self.drag = False
 			self.lock = True
-			context.window_manager.motion_trail.force_update = True
-			context.window_manager.motion_trail.backed_up_keyframes = False
+			mt.force_update = True
+			mt.backed_up_keyframes = False
 			bpy.ops.ed.undo_push(message="Confirmed Motion Trail drag")
 			no_passthrough = True
 
@@ -1891,7 +1886,7 @@ class MotionTrailOperator(bpy.types.Operator):
 			self.active_handle = False
 			self.active_timebead = False
 			self.active_frame = False
-			context.window_manager.motion_trail.handle_type_enabled = False
+			mt.handle_type_enabled = False
 
 		if context.area:  # not available if other window-type is fullscreen
 			context.area.tag_redraw()
@@ -1923,7 +1918,9 @@ class MotionTrailOperator(bpy.types.Operator):
 					kmis.append(kmi)
 					self.transform_key = kmi.type
 
-		if not context.window_manager.motion_trail.enabled:
+		mt: MotionTrailProps = context.window_manager.motion_trail
+
+		if not mt.enabled:
 			# enable
 			self.active_keyframe = False
 			self.active_handle = False
@@ -1934,25 +1931,34 @@ class MotionTrailOperator(bpy.types.Operator):
 			self.lock = True
 			self.perspective = context.region_data.perspective_matrix
 			self.displayed = []
-			context.window_manager.motion_trail.force_update = True
-			context.window_manager.motion_trail.backed_up_keyframes = False
-			context.window_manager.motion_trail.handle_type_enabled = False
-			self.cached = {
-					"path": {}, "keyframes": {},
-					"timebeads_timing": {}, "timebeads_speed": {}
-					}
+			self.paths = {}
+			self.keyframes = {}
+			self.handles = {}
+			self.timebeads = {}
+			self.spines = {} 
+
+			self.highlighted_coord = None
+			self.last_frame = -1
+
+			mt.force_update = True
+			mt.backed_up_keyframes = False
+			mt.handle_type_enabled = False
+			getter = get_matrix_any_depsgraph if mt.use_depsgraph else get_matrix_any_custom_eval
+			self.cache = matrix_cache(getter)
 
 			for kmi in kmis:
 				kmi.active = False
 
 			MotionTrailOperator.handle_add(self, context)
-			context.window_manager.motion_trail.enabled = True
+			mt.enabled = True
 
 			if context.area:
 				context.area.tag_redraw()
 
 			context.window_manager.modal_handler_add(self)
 			bpy.ops.ed.undo_push(message="Started Motion Trail modal operator")
+
+			self._timer = wm.event_timer_add(0.0, window = context.window)
 			return {'RUNNING_MODAL'}
 
 		else:
@@ -1960,16 +1966,20 @@ class MotionTrailOperator(bpy.types.Operator):
 			for kmi in kmis:
 				kmi.active = True
 			MotionTrailOperator.handle_remove()
-			context.window_manager.motion_trail.enabled = False
+			mt.enabled = False
 
 			if context.area:
 				context.area.tag_redraw()
 
 			return {'FINISHED'}
 
+	def cancel(self, context):
+		context.window_manager.event_timer_remove(self._timer)
+
 def load_defaults(context):
 	prefs = context.preferences.addons[__name__].preferences
-	for p in configurable_props:
+	flat_props = flatten(configurable_props)
+	for p in flat_props:
 		default = getattr(prefs.default_trail_settings, p)
 		setattr(context.window_manager.motion_trail, p, default)
 
@@ -1984,7 +1994,8 @@ class MotionTrailLoadDefaults(bpy.types.Operator):
 
 def save_defaults(context):
 	prefs = context.preferences.addons[__name__].preferences
-	for p in configurable_props:
+	flat_props = flatten(configurable_props)
+	for p in flat_props:
 		current = getattr(context.window_manager.motion_trail, p)
 		setattr(prefs.default_trail_settings, p, current)
 
@@ -2022,7 +2033,7 @@ class MotionTrailPanel(bpy.types.Panel):
 		return context.active_object.mode in ('OBJECT', 'POSE')
 
 	def draw(self, context):
-		mt = context.window_manager.motion_trail
+		mt: MotionTrailProps = context.window_manager.motion_trail
 
 		if (not mt.loaded_defaults):
 			load_defaults(context)
@@ -2034,7 +2045,7 @@ class MotionTrailPanel(bpy.types.Panel):
 		else:
 			col.operator("view3d.motion_trail", text="Disable motion trail")
 
-		col.prop(mt, "use_depsgraph")
+		self.layout.column().prop(mt, "use_depsgraph")
 
 		box = self.layout.box()
 		box.prop(mt, "mode")
@@ -2107,6 +2118,7 @@ class MotionTrailPanel(bpy.types.Panel):
 		box = self.layout.box()
 		col = box.column(align=True)
 		col.row().prop(mt, "selection_color")
+		col.row().prop(mt, "highlight_color")
 		col.row().prop(mt, "select_key")
 		col.row().prop(mt, "select_threshold")
 		col.row().prop(mt, "deselect_nohit_key")
@@ -2139,7 +2151,7 @@ class MotionTrailPanel(bpy.types.Panel):
 			row = col.row()
 			for s in spineColorStrings:
 				row.prop(mt, s)
-			
+		
 		self.layout.column().operator("view3d.motion_trail_load_defaults")
 		self.layout.column().operator("view3d.motion_trail_save_defaults")
 
@@ -2318,7 +2330,7 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			min=0.0
 			)
 	deselect_passthrough: BoolProperty(name="Deselect passthrough",
-			description="When something in the motion trail is deselected, whether to pass that button press to the rest of blender or not",
+			description="When something in the motion trail is deselected, whether to pass that button press to the rest of Blender or not",
 			default=True
 			)
 
@@ -2509,17 +2521,110 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			subtype='COLOR'
 			)
 
+	highlight_color: FloatVectorProperty(name="Highlight color",
+			description="Color that something you're about to select will be highlighted in",
+			default=(0.0, 1.0, 0.7, 1.0),
+			min=0.0, soft_max=1.0,
+			size=4,
+			subtype='COLOR'
+			)
+
 	use_depsgraph: BoolProperty(name="Use depsgraph",
-			description="Whether to use the depsgraph or not.\nChanging this takes effect only when motion trails are not active.\n\nUsing the depsgraph currently has the following ups and downs:\n+ Completely accurate motion trails that factor in all constraints, drivers, and so on.\n- Less performant.\n- Constantly resets un-keyframed changes to objects with keyframes.\n- Dragging may shift at the start.\n- The trail will not calculate when the viewport is not interacted with",
+			description="Whether to use the depsgraph or not.\nChanging this takes effect only when motion trails are not active.\n\nUsing the depsgraph currently has the following ups and downs:\n+ Completely accurate motion trails that factor in all constraints, drivers, and so on.\n- Constantly resets un-keyframed changes to objects with keyframes.\n- Does not update with the graph editor or others.\n- Less performant",
 			default=False
 			)
+
+	# From here on till the end, this code is structured to be easily deletable
+
+	master_version: bpy.props.IntVectorProperty(
+		default=(-1, -1, -1)
+		)
+
+	experimental_version: bpy.props.IntVectorProperty(
+		default=(-1, -1, -1)
+		)
+
+	version_checked: bpy.props.BoolVectorProperty(
+		default=(False, False),
+		size=2
+		)
+
+
+import urllib.request
+import re
+SOURCE_URL = "https://raw.githubusercontent.com/a-One-Fan/Blender-Motion-Trail-Update/one/src/animation_motion_trail_updated.py"
+SOURCE_URL_EXPERIMENTAL = "https://raw.githubusercontent.com/a-One-Fan/Blender-Motion-Trail-Update/other_one/src/animation_motion_trail_updated.py"
+
+def get_version(link):
+	response = urllib.request.urlopen(link)
+
+	gpl_done = False
+	while not gpl_done:
+		line = response.readline()
+		
+		if response.isclosed():
+			return -1
+		
+		if line.find(b"END GPL") > -1:
+			gpl_done = True
+
+	gotten_version = None
+	while gotten_version == None:
+		line = response.readline()
+
+		if response.isclosed():
+			return -2
+		
+		if line.find(b"version") > -1:
+			match = re.search(r"\(([0-9]+),\s*([0-9]+),\s*([0-9]+)\)", line.decode())
+			if not match:
+				return -3
+			gotten_version = (int(match[1]), int(match[2]), int(match[3]))
+
+	response.close()
+
+	return gotten_version
+
+class MotionTrailCheckUpdate(bpy.types.Operator):
+	bl_idname="info.motion_trail_check_update"
+	bl_label="Check available versions"
+	bl_description="Check the versions of the motion trail addon available on github"
+	
+	def execute(self, context):
+		mt: MotionTrailProps = context.window_manager.motion_trail
+
+		mt.version_checked = (False, False)
+
+		version_regular = get_version(SOURCE_URL)
+		version_experimental = get_version(SOURCE_URL_EXPERIMENTAL)
+
+		if type(version_regular) is not int:
+			mt.master_version = version_regular
+			mt.version_checked[0] = True
+
+		if type(version_experimental) is not int:
+			mt.experimental_version = version_experimental
+			mt.version_checked[1] = True
+
+		return {'FINISHED'}
+
+# returns tup1 < tup2
+def compare_ver(tup1, tup2):
+	for i in range(len(tup1)):
+		if tup1[i]<tup2[i]:
+			return True
+		if tup1[i]>tup2[i]:
+			return False
+	return False
+
+# == END of deleteable code ==
 			
 configurable_props = ["use_depsgraph", "select_key", "select_threshold", "deselect_nohit_key", "deselect_always_key", "deselect_passthrough", "mode", "path_style", 
 "simple_color", "speed_color_min", "speed_color_max", "accel_color_neg", "accel_color_static", "accel_color_pos",
-"keyframe_color", "frame_color", "selection_color", "selection_color_dark", "handle_color", "handle_line_color", "timebead_color", 
+"keyframe_color", "frame_color", "selection_color", "selection_color_dark", "highlight_color", "handle_color", "handle_line_color", "timebead_color", 
 "text_color", "selected_text_color", "path_width", "path_resolution", "path_before", "path_after",
-"keyframe_numbers", "frame_display", "handle_display", "handle_length", "handle_direction", "spine_x_color", "spine_y_color", "spine_z_color", "pXspines", "pYspines", "pZspines",
-"nXspines", "nYspines", "nZspines", "spine_length", "spine_step", "spine_offset"]
+"keyframe_numbers", "frame_display", "handle_display", "handle_length", "handle_direction", "show_spines", "spine_length", "spine_step", "spine_offset",
+["pXspines", "pYspines", "pZspines"], ["nXspines", "nYspines", "nZspines"], ["spine_x_color", "spine_y_color", "spine_z_color"]]
 			
 class MotionTrailPreferences(bpy.types.AddonPreferences):
 	bl_idname = __name__
@@ -2529,11 +2634,32 @@ class MotionTrailPreferences(bpy.types.AddonPreferences):
 	def draw(self, context):
 		layout = self.layout
 		col = layout.column()
+
+		mt: MotionTrailProps = context.window_manager.motion_trail
+
+		#deletable code
+		col.operator("info.motion_trail_check_update")
+		if mt.version_checked[0] or mt.version_checked[1]:
+			if mt.version_checked[0]:
+				col.row().label(text="Current master version: {}.{}.{}".format(*mt.master_version))
+				if compare_ver(bl_info["version"], mt.master_version):
+					col.row().label(text="Please update!")
+			if mt.version_checked[1]:
+				col.row().label(text="Current experimental version: {}.{}.{}".format(*mt.experimental_version))
+		else:
+			col.row().label(text="Version not checked yet...")
+		#end of deletable code
+
 		col.label(text=DESELECT_WARNING)
 		col.label(text="Default values for all settings:")
 		col.label(text="")
 		for p in configurable_props:
-			col.row().prop(self.default_trail_settings, p)
+			if type(p) is list:
+				row = col.row()
+				for subp in p:
+					row.prop(self.default_trail_settings, subp)
+			else:
+				col.row().prop(self.default_trail_settings, p)
 
 classes = (
 		MotionTrailProps,
@@ -2542,6 +2668,7 @@ classes = (
 		MotionTrailPreferences,
 		MotionTrailLoadDefaults,
 		MotionTrailSaveDefaults,
+		MotionTrailCheckUpdate,
 		)
 
 

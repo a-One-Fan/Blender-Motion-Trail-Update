@@ -1916,6 +1916,13 @@ class MotionTrailOperator(bpy.types.Operator):
 			self.lock = True
 			self.perspective = context.region_data.perspective_matrix
 			self.displayed = []
+			self.paths = {}
+			self.keyframes = {}
+			self.handles = {}
+			self.timebeads = {}
+			self.spines = {} 
+
+			self.highlighted_coord = None
 			self.last_frame = -1
 
 			mt.force_update = True

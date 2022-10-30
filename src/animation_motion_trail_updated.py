@@ -1618,8 +1618,8 @@ def force_update_callback(self, context):
 	except:
 		if global_mtrail_handler_update:
 			bpy.types.SpaceGraphEditor.draw_handler_remove(global_mtrail_handler_update, 'WINDOW')
-		#if global_mtrail_msgbus_owner:
-		#	bpy.msgbus.clear_by_owner(global_mtrail_msgbus_owner)
+		if global_mtrail_msgbus_owner:
+			bpy.msgbus.clear_by_owner(global_mtrail_msgbus_owner)
 		
 		return
 	
@@ -1629,7 +1629,7 @@ def force_update_callback(self, context):
 global_mtrail_handler_calc = None
 global_mtrail_handler_draw = None
 global_mtrail_handler_update = None
-#global_mtrail_msgbus_owner = object()
+global_mtrail_msgbus_owner = None
 
 class MotionTrailOperator(bpy.types.Operator):
 	bl_idname = "view3d.motion_trail"
@@ -1655,19 +1655,19 @@ class MotionTrailOperator(bpy.types.Operator):
 			global_mtrail_handler_update = \
 			MotionTrailOperator._handle_update = bpy.types.SpaceGraphEditor.draw_handler_add(
 			force_update_callback, (self, context), 'WINDOW', 'POST_PIXEL')
+
+			global global_mtrail_msgbus_owner
+			bpy.msgbus.subscribe_rna(
+    			key=(bpy.types.Keyframe, "co_ui"), # why doesn't simply "co" work?
+    			owner=global_mtrail_msgbus_owner,
+    			args=(self, context),
+    			notify=force_update_callback
+			)
 		
 		global global_mtrail_handler_draw
 		global_mtrail_handler_draw = \
 		MotionTrailOperator._handle_draw = bpy.types.SpaceView3D.draw_handler_add(
 			draw_callback, (self, context), 'WINDOW', 'POST_PIXEL')
-
-		#global global_mtrail_msgbus_owner
-		#bpy.msgbus.subscribe_rna(
-    	#	key=(bpy.types.Keyframe, "co_ui"), # why doesn't simply "co" work?
-    	#	owner=global_mtrail_msgbus_owner,
-    	#	args=(self, context),
-    	#	notify=force_update_callback
-		#)
 
 	@staticmethod
 	def handle_remove():
@@ -1686,12 +1686,16 @@ class MotionTrailOperator(bpy.types.Operator):
 				bpy.types.SpaceGraphEditor.draw_handler_remove(MotionTrailOperator._handle_update, 'WINDOW')
 			except:
 				pass
+
+		if MotionTrailOperator._handle_update is not None:
+			try:
+				bpy.msgbus.clear_by_owner(global_mtrail_msgbus_owner)
+			except:
+				pass
 			
 		MotionTrailOperator._handle_calc = None
 		MotionTrailOperator._handle_draw = None
 		MotionTrailOperator._handle_update = None
-
-		#bpy.msgbus.clear_by_owner(global_mtrail_msgbus_owner)
 
 	def modal(self, context, event):
 		# XXX Required, or custom transform.translate will break!

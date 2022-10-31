@@ -28,6 +28,7 @@ bl_info = {
 	"category": "Animation",
 }
 
+from typing import List
 import gpu
 from gpu_extras.batch import batch_for_shader
 import blf
@@ -1116,6 +1117,35 @@ def draw_callback(self, context):
 				poss.clear()
 				cols.clear()
 
+	# Draw constraining indicator
+	
+	if mt.use_constraints:
+		constraint_colors = [\
+			[[0.0, 0.0, 0.0, 1.0], [1.0, 0.1, 0.1, 1.0]],
+			[[0.0, 0.0, 0.0, 1.0], [0.1, 1.0, 0.1, 1.0]],
+			[[0.0, 0.0, 0.0, 1.0], [0.1, 0.1, 1.0, 1.0]]]
+
+		constraint_texts = ["X", "Y", "Z"]
+		orient_texts = ["(Global)", "(Local)"]
+
+		#TODO: less hardcoded text positions?
+		blf.size(0, 12, 130)
+		blf.position(0, 10, 40, 0)
+		blf.color(0, 0.0, 0.0, 0.0, 1.0)
+		blf.draw(0, "Constraints: ")
+
+		blf.size(0, 12, 170)
+		for i in range(3):
+			blf.position(0, 150 + i*30, 40, 0)
+			blf.color(0, *constraint_colors[i][self.constraint_axes[i]])
+			blf.draw(0, constraint_texts[i])
+
+		if self.constraint_axes[0] or self.constraint_axes[1] or self.constraint_axes[2]:
+			blf.color(0, 0.0, 0.0, 0.0, 1.0)
+			blf.size(0, 12, 100)
+			blf.position(0, 250, 40, 0)
+			blf.draw(0, orient_texts[self.constraint_orientation])
+
 	# restore opengl defaults
 	gpu.state.point_size_set(1.0) # TODO: is this the correct value?
 
@@ -1639,6 +1669,13 @@ class MotionTrailOperator(bpy.types.Operator):
 	_handle_update = None
 	_timer = None
 
+	drag: bool 
+	lock: bool
+
+	# Please keep 3 items long
+	constraint_axes: List[bool] = [False, False, False]
+	constraint_orientation: bool = 0 # 0 = Global, 1 = Local
+
 	@staticmethod
 	def handle_add(self, context):
 
@@ -1715,6 +1752,38 @@ class MotionTrailOperator(bpy.types.Operator):
 		#	return {'PASS_THROUGH'}
 
 		no_passthrough = False
+
+		if event.type in ['X', 'Y', 'Z'] and event.value == 'PRESS':
+			no_passthrough = True
+			#self.constraint_axes = [False, False, False]
+			new_constraint = []
+			if not event.shift:
+				if event.type == 'X':
+					new_constraint = [True, False, False]
+				elif event.type == 'Y':
+					new_constraint = [False, True, False]
+				else:
+					new_constraint = [False, False, True]
+			else:
+				if event.type == 'X':
+					new_constraint = [False, True, True]
+				elif event.type == 'Y':
+					new_constraint = [True, False, True]
+				else:
+					new_constraint = [True, True, False]
+
+			if self.constraint_axes == new_constraint:
+				if not self.constraint_orientation:
+					self.constraint_orientation = True
+				else:
+					self.constraint_orientation = False
+					new_constraint = [False, False, False]
+			else:
+				self.constraint_orientation = False
+			
+			self.constraint_axes = new_constraint
+
+		# TODO: Copypasted code, any better approach? /\
 
 		if (not context.active_object or
 				context.active_object.mode not in ('OBJECT', 'POSE')):
@@ -1936,6 +2005,8 @@ class MotionTrailOperator(bpy.types.Operator):
 			self.handles = {}
 			self.timebeads = {}
 			self.spines = {} 
+			self.constraint_axes = [False, False, False]
+			constraint_orientation = False
 
 			self.highlighted_coord = None
 			self.last_frame = -1
@@ -2046,6 +2117,7 @@ class MotionTrailPanel(bpy.types.Panel):
 			col.operator("view3d.motion_trail", text="Disable motion trail")
 
 		self.layout.column().prop(mt, "use_depsgraph")
+		self.layout.column().prop(mt, "use_constraints")
 
 		box = self.layout.box()
 		box.prop(mt, "mode")
@@ -2297,6 +2369,12 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			("len", "Directional length", "Use the length of the handle, positive for right and negative for left")),
 			default='wtime'
 			)
+
+	use_constraints: BoolProperty(name="Constraining",
+			description="Whether to enable constraining or not. Press (shift+) X, Y or Z to constrain",
+			default=True,
+			)
+	
 			
 	#Key stuff
 	select_key: EnumProperty(name="Selection key",
@@ -2390,7 +2468,6 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			min=1,
 			soft_max=10
 			)
-
 
 	#Colors
 	simple_color: FloatVectorProperty(name="Color",
@@ -2619,7 +2696,7 @@ def compare_ver(tup1, tup2):
 
 # == END of deleteable code ==
 			
-configurable_props = ["use_depsgraph", "select_key", "select_threshold", "deselect_nohit_key", "deselect_always_key", "deselect_passthrough", "mode", "path_style", 
+configurable_props = ["use_depsgraph", "use_constraints", "select_key", "select_threshold", "deselect_nohit_key", "deselect_always_key", "deselect_passthrough", "mode", "path_style", 
 "simple_color", "speed_color_min", "speed_color_max", "accel_color_neg", "accel_color_static", "accel_color_pos",
 "keyframe_color", "frame_color", "selection_color", "selection_color_dark", "highlight_color", "handle_color", "handle_line_color", "timebead_color", 
 "text_color", "selected_text_color", "path_width", "path_resolution", "path_before", "path_after",

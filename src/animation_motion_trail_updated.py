@@ -927,6 +927,30 @@ def draw_callback(self, context):
 				poss.clear()
 				cols.clear()
 
+	# Draw rotation spines
+	if mt.show_spines:
+		colored_line_shader.bind()
+		colored_line_shader.uniform_float("lineWidth", 2)
+		poss = []
+		cols = []
+		for frame, locs in self.spines.items():
+			if frame < limit_min or frame > limit_max:
+				continue
+			
+			to_use = (mt.pXspines, mt.pYspines, mt.pZspines, mt.nXspines, mt.nYspines, mt.nZspines)
+			to_use_colors = (mt.spine_x_color, mt.spine_y_color, mt.spine_z_color, mt.spine_x_color, mt.spine_y_color, mt.spine_z_color)
+			for i in range(6):
+				if to_use[i]:
+					cols.append(to_use_colors[i])
+					poss.append((locs[0][0], locs[0][1], 0.0))
+					cols.append(to_use_colors[i])
+					poss.append((locs[1][i][0], locs[1][i][1], 0.0))
+			if(not (cols == []) and not (poss == [])):
+				batch = batch_for_shader(colored_line_shader, 'LINES', {"pos": poss, "color": cols})
+				batch.draw(colored_line_shader)
+				poss.clear()
+				cols.clear()
+
 	if self.highlighted_coord:
 		colored_points_shader.bind()
 
@@ -1093,32 +1117,7 @@ def draw_callback(self, context):
 					blf.color(0, * c)
 					blf.draw(0, text)
 
-	# Draw rotation spines
-	if mt.show_spines:
-		colored_line_shader.bind()
-		colored_line_shader.uniform_float("lineWidth", 2)
-		poss = []
-		cols = []
-		for frame, locs in self.spines.items():
-			if frame < limit_min or frame > limit_max:
-				continue
-			
-			to_use = (mt.pXspines, mt.pYspines, mt.pZspines, mt.nXspines, mt.nYspines, mt.nZspines)
-			to_use_colors = (mt.spine_x_color, mt.spine_y_color, mt.spine_z_color, mt.spine_x_color, mt.spine_y_color, mt.spine_z_color)
-			for i in range(6):
-				if to_use[i]:
-					cols.append(to_use_colors[i])
-					poss.append((locs[0][0], locs[0][1], 0.0))
-					cols.append(to_use_colors[i])
-					poss.append((locs[1][i][0], locs[1][i][1], 0.0))
-			if(not (cols == []) and not (poss == [])):
-				batch = batch_for_shader(colored_line_shader, 'LINES', {"pos": poss, "color": cols})
-				batch.draw(colored_line_shader)
-				poss.clear()
-				cols.clear()
-
 	# Draw constraining indicator
-	
 	if mt.use_constraints:
 		constraint_colors = [\
 			[[0.0, 0.0, 0.0, 1.0], [1.0, 0.1, 0.1, 1.0]],

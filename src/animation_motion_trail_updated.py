@@ -51,6 +51,9 @@ import traceback
 from functools import reduce
 from collections.abc import Callable
 
+from bpy.types import Object, PoseBone, Context
+from mathutils import Matrix, Vector, Quaternion, Euler
+
 # Linear interpolation for 4-element tuples
 def lerp4(fac, tup1, tup2):
 	return (* [tup1[i] * fac + tup2[i]*(1.0-fac) for i in range(4)],)
@@ -91,16 +94,16 @@ class fake_fcurve():
 
 
 class matrix_cache():
-	__mats: dict[(float, bpy.types.Object|bpy.types.Bone), (mathutils.Matrix, mathutils.Vector, mathutils.Quaternion, mathutils.Vector)]
-	getter: Callable[[float, bpy.types.Object|bpy.types.Bone, bpy.types.Context], mathutils.Matrix]
+	__mats: dict[(float, Object|PoseBone), (Matrix, Vector, Quaternion, Vector)]
+	getter: Callable[[float, Object|PoseBone, Context], Matrix]
 
-	def __init__(self, _getter: Callable[[float, bpy.types.Object|bpy.types.Bone, bpy.types.Context], mathutils.Matrix]):
+	def __init__(self, _getter: Callable[[float, Object|PoseBone, Context], Matrix]):
 		self.__mats = {}
 		self.getter = _getter
 
 	def __build_entry(self, frame, obj, context):
 
-		mat: mathutils.Matrix = self.getter(frame, obj, context)
+		mat: Matrix = self.getter(frame, obj, context)
 		decomposed = mat.decompose()
 		self.__mats[(frame, obj)] = (mat, *decomposed)
 
@@ -208,7 +211,7 @@ def screen_to_world(context, x, y):
 # turn 3d world coordinates vector into screen coordinate integers (x,y)
 def world_to_screen(context, vector):
 	prj = context.region_data.perspective_matrix @ \
-		mathutils.Vector((vector[0], vector[1], vector[2], 1.0))
+		Vector((vector[0], vector[1], vector[2], 1.0))
 	width_half = context.region.width / 2.0
 	height_half = context.region.height / 2.0
 
@@ -241,20 +244,20 @@ defaultLoc = None, defaultRot = None, defaultScale = None):
 	
 	loc = defaultLoc
 	if loccurves[0] is not None:
-		loc = mathutils.Vector([c.evaluate(frame) for c in loccurves])
+		loc = Vector([c.evaluate(frame) for c in loccurves])
 	
 	rot = defaultRot
 	if rotcurves[0] is not None:
 		if rotrange == 4:
-			rot = mathutils.Quaternion([c.evaluate(frame) for c in rotcurves])
+			rot = Quaternion([c.evaluate(frame) for c in rotcurves])
 		else:
-			rot = mathutils.Euler([c.evaluate(frame) for c in rotcurves])
+			rot = Euler([c.evaluate(frame) for c in rotcurves])
 			
 	scale = defaultScale
 	if sclcurves[0] is not None:
-		scale = mathutils.Vector([c.evaluate(frame) for c in sclcurves])
+		scale = Vector([c.evaluate(frame) for c in sclcurves])
 	
-	return mathutils.Matrix.LocRotScale(loc, rot, scale)
+	return Matrix.LocRotScale(loc, rot, scale)
 
 # Get the locrotscale matrix from the fcurves for a given frame and action for an object
 # (or posebone, for which this works fine as well)
@@ -280,7 +283,7 @@ def get_matrix_obj_parents(obj, frame, do_anim=True):
 	if do_anim:
 		mat = get_matrix_frame(obj, frame, obj.animation_data.action)
 	else:
-		mat = mathutils.Matrix()
+		mat = Matrix()
 
 	parentMat = obj.matrix_parent_inverse
 	if obj.parent:
@@ -301,7 +304,7 @@ def get_matrix_bone_parents_as(pose_bone, frame, do_anim = True):
 	if do_anim:
 		animMat = get_matrix_frame(pose_bone, frame, ob.animation_data.action)
 	else:
-		animMat = mathutils.Matrix()
+		animMat = Matrix()
 		
 	parentMat = None
 	parentOffsetMat = None
@@ -309,7 +312,7 @@ def get_matrix_bone_parents_as(pose_bone, frame, do_anim = True):
 		parentMat = get_matrix_bone_parents_as(pose_bone.parent, frame)
 		parentOffsetMat = pose_bone.parent.bone.matrix_local.inverted() @ pose_bone.bone.matrix_local
 	else:
-		parentMat = mathutils.Matrix()
+		parentMat = Matrix()
 		parentOffsetMat = pose_bone.bone.matrix_local
 		
 	res = parentMat @ parentOffsetMat @ animMat
@@ -324,14 +327,14 @@ def get_matrix_bone_parents(pose_bone, frame, do_anim = True):
 	get_matrix_bone_parents_as(pose_bone, frame, do_anim)
 
 # Get the world-ish matrix of a bone or object
-def get_matrix_any_custom_eval(frame: float, thing: bpy.types.Object | bpy.types.PoseBone, do_anim = True) -> mathutils.Matrix:
-	if type(thing) is bpy.types.PoseBone:
+def get_matrix_any_custom_eval(frame: float, thing: Object | PoseBone, do_anim = True) -> Matrix:
+	if type(thing) is PoseBone:
 		return get_matrix_bone_parents(thing, frame, do_anim)
 	return get_matrix_obj_parents(thing, frame, do_anim)
 
 # Get matrix for child of constraint
 def evaluate_childof(constraint, frame):
-	mat = mathutils.Matrix()
+	mat = Matrix()
 	try:
 		if constraint.subtarget:
 			mat = get_matrix_bone_parents(constraint.target.\
@@ -356,7 +359,7 @@ def evaluate_childof(constraint, frame):
 			for i in range(6, 9):
 				if not bools[i]:
 					disassembledScl[i-6] = zeros[i]
-			mat = mathutils.Matrix.LocRotScale(disassembledLoc, disassembledRot, disassembledScl)
+			mat = Matrix.LocRotScale(disassembledLoc, disassembledRot, disassembledScl)
 	
 	except Exception as e:
 		print(e)
@@ -370,24 +373,24 @@ constraint_funcs = {'CHILD_OF': evaluate_childof}
 
 # Get matrices from all constraints?
 def evaluate_constraints(mat, constraints, frame, ob):
-	accumulatedMat = mathutils.Matrix()
+	accumulatedMat = Matrix()
 	for c in constraints:
 		f = constraint_funcs.get(c.type)
 		if f is None or not c.enabled or c.influence == 0.0:
 			continue
 		constraintMat = f(c, frame)
 		if c.influence != 1.0:
-			constraintMat = constraintMat.lerp(mathutils.Matrix(), 1.0-c.influence)
+			constraintMat = constraintMat.lerp(Matrix(), 1.0-c.influence)
 		accumulatedMat = accumulatedMat @ constraintMat
 	return accumulatedMat @ mat
 
-def get_matrix_any_depsgraph(frame: float, target: bpy.types.Object | bpy.types.PoseBone, context: bpy.types.Context) -> mathutils.Matrix:
+def get_matrix_any_depsgraph(frame: float, target: Object | PoseBone, context: Context) -> Matrix:
 	oldframe = context.scene.frame_float
-	isBone = type(target) is bpy.types.PoseBone
+	isBone = type(target) is PoseBone
 
 	context.scene.frame_float = frame
 	dg = context.evaluated_depsgraph_get()
-	boneMat = mathutils.Matrix()
+	boneMat = Matrix()
 	
 	ob = target.id_data if isBone else target
 		
@@ -409,7 +412,7 @@ def get_inverse_parents(frame, ob, context):
 
 def get_inverse_parents_depsgraph(frame, ob, context):
 	mat = ''
-	if type(ob) is bpy.types.PoseBone:
+	if type(ob) is PoseBone:
 		mat = get_matrix_frame(ob, frame, ob.id_data.animation_data.action)
 	else:
 		mat = get_matrix_frame(ob, frame, ob.animation_data.action)
@@ -641,11 +644,11 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 					# handles for location mode
 					if mt.mode == 'location':
 						if kf.co[0] not in handle_difs:
-							handle_difs[kf.co[0]] = {"left": mathutils.Vector(),
-								"right": mathutils.Vector(), "keyframe_loc": None}
+							handle_difs[kf.co[0]] = {"left": Vector(),
+								"right": Vector(), "keyframe_loc": None}
 								
-						ldiff = mathutils.Vector(kf.handle_left[:]) - mathutils.Vector(kf.co[:])
-						rdiff = mathutils.Vector(kf.handle_right[:]) - mathutils.Vector(kf.co[:])
+						ldiff = Vector(kf.handle_left[:]) - Vector(kf.co[:])
+						rdiff = Vector(kf.handle_right[:]) - Vector(kf.co[:])
 						hdir = mt.handle_direction
 						lco = 0.0
 						rco = 0.0
@@ -654,14 +657,14 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 							lco = ldiff.normalized()[1]
 							rco = rdiff.normalized()[1]
 						elif hdir == 'wtime':
-							lco = sum(ldiff.normalized() * mathutils.Vector((0.25, 0.75)))
-							rco = sum(rdiff.normalized() * mathutils.Vector((0.25, 0.75)))
+							lco = sum(ldiff.normalized() * Vector((0.25, 0.75)))
+							rco = sum(rdiff.normalized() * Vector((0.25, 0.75)))
 						elif hdir == 'location':
 							lco = ldiff.normalized()[0]
 							rco = rdiff.normalized()[0]
 						elif hdir == 'wloc':
-							lco = sum(ldiff.normalized() * mathutils.Vector((0.75, 0.25)))
-							rco = sum(rdiff.normalized() * mathutils.Vector((0.75, 0.25)))
+							lco = sum(ldiff.normalized() * Vector((0.75, 0.25)))
+							rco = sum(rdiff.normalized() * Vector((0.75, 0.25)))
 						elif hdir == 'len':
 							lco = -ldiff.length
 							rco = rdiff.length
@@ -682,8 +685,7 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 					keyframes[kf.co[0]] = [x, y]
 					if mt.mode != 'speed':
 						# can't select keyframes in speed mode
-						click.append([kf.co[0], "keyframe",
-							mathutils.Vector([x, y]), action_ob, child])
+						click.append([kf.co[0], "keyframe", Vector([x, y]), action_ob, child])
 			self.keyframes[display_ob.name] = keyframes
 			# handles are only shown in location-altering mode
 			if mt.mode == 'location' and mt.handle_display:
@@ -714,10 +716,8 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 											)
 					handles[frame] = {"left": [x_left, y_left],
 									"right": [x_right, y_right]}
-					click.append([frame, "handle_left",
-						mathutils.Vector([x_left, y_left]), action_ob, child])
-					click.append([frame, "handle_right",
-						mathutils.Vector([x_right, y_right]), action_ob, child])
+					click.append([frame, "handle_left", Vector([x_left, y_left]), action_ob, child])
+					click.append([frame, "handle_right", Vector([x_right, y_right]), action_ob, child])
 				self.handles[display_ob.name] = handles
 
 			# calculate timebeads for timing mode
@@ -732,8 +732,7 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 					x, y = world_to_screen(context, loc)
 					timebeads[frame] = [x, y]
 					click.append(
-							[frame, "timebead", mathutils.Vector([x, y]),
-							action_ob, child]
+							[frame, "timebead", Vector([x, y]), action_ob, child]
 							)
 				self.timebeads[display_ob.name] = timebeads
 
@@ -744,16 +743,16 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 				for fc in curves:
 					for i, kf in enumerate(fc.keyframe_points):
 						if i != 0:
-							angle = mathutils.Vector([-1, 0]).angle(
-												mathutils.Vector(kf.handle_left) -
-												mathutils.Vector(kf.co), 0
+							angle = Vector([-1, 0]).angle(
+												Vector(kf.handle_left) -
+												Vector(kf.co), 0
 												)
 							if angle != 0:
 								angles[kf.co[0]]["left"].append(angle)
 						if i != len(fc.keyframe_points) - 1:
-							angle = mathutils.Vector([1, 0]).angle(
-												mathutils.Vector(kf.handle_right) -
-												mathutils.Vector(kf.co), 0
+							angle = Vector([1, 0]).angle(
+												Vector(kf.handle_right) -
+												Vector(kf.co), 0
 												)
 							if angle != 0:
 								angles[kf.co[0]]["right"].append(angle)
@@ -773,7 +772,7 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 						timebeads[bead_frame] = [x, y]
 						click.append(
 								[bead_frame, "timebead",
-								mathutils.Vector([x, y]),
+								Vector([x, y]),
 								action_ob, child]
 								)
 					if sides["right"]:
@@ -789,7 +788,7 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 						timebeads[bead_frame] = [x, y]
 						click.append(
 								[bead_frame, "timebead",
-								mathutils.Vector([x, y]),
+								Vector([x, y]),
 								action_ob, child]
 								)
 				self.timebeads[display_ob.name] = timebeads
@@ -806,7 +805,7 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 					resLocs = []
 					vecs = ((slen, 0, 0), (0, slen, 0), (0, 0, slen), (-slen, 0, 0), (0, -slen, 0), (0, 0, -slen))
 					for i in range(6):
-						vec = mathutils.Vector(vecs[i])
+						vec = Vector(vecs[i])
 						vec.rotate(rot)
 						resLocs.append(world_to_screen(context, loc + vec))
 					
@@ -818,7 +817,7 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 				for x, y, color, frame, action_ob, child in path:
 					click.append(
 							[frame, "frame",
-							mathutils.Vector([x, y]),
+							Vector([x, y]),
 							action_ob, child]
 							)
 
@@ -1259,7 +1258,7 @@ active_timebead, keyframes_ori, handles_ori, inverse_getter):
 		range_min = round(ranges[0])
 		range_max = round(ranges[-1])
 		range = range_max - range_min
-		dx_screen = -(mathutils.Vector([event.mouse_region_x,
+		dx_screen = -(Vector([event.mouse_region_x,
 			event.mouse_region_y]) - drag_mouse_ori)[0]
 		dx_screen = dx_screen / context.region.width * range
 		new_frame = frame + dx_screen
@@ -1328,9 +1327,9 @@ active_timebead, keyframes_ori, handles_ori, inverse_getter):
 					# last keyframe, nothing after it
 					range = [locs_ori[i - 1][0], f_ori]
 				else:
-					current = mathutils.Vector(coords)
-					next = mathutils.Vector(locs_ori[i + 1][1])
-					previous = mathutils.Vector(locs_ori[i - 1][1])
+					current = Vector(coords)
+					next = Vector(locs_ori[i + 1][1])
+					previous = Vector(locs_ori[i - 1][1])
 					angle_to_next = d.angle(next - current, 0)
 					angle_to_previous = d.angle(previous - current, 0)
 					if angle_to_previous < angle_to_next:
@@ -1343,7 +1342,7 @@ active_timebead, keyframes_ori, handles_ori, inverse_getter):
 			# keyframe not found, is impossible, but better safe than sorry
 			return(active_keyframe, active_timebead, keyframes_ori)
 		# calculate strength of movement
-		d_screen = mathutils.Vector([event.mouse_region_x,
+		d_screen = Vector([event.mouse_region_x,
 			event.mouse_region_y]) - drag_mouse_ori
 		if d_screen.length != 0:
 			d_screen = d_screen.length / (abs(d_screen[0]) / d_screen.length *
@@ -1389,7 +1388,7 @@ active_timebead, keyframes_ori, handles_ori, inverse_getter):
 		locx = fcx.evaluate(frame_ori)
 		locy = fcy.evaluate(frame_ori)
 		locz = fcz.evaluate(frame_ori)
-		loc_ori = mathutils.Vector([locx, locy, locz])  # bonespace
+		loc_ori = Vector([locx, locy, locz])  # bonespace
 		keyframes = [kf for kf in keyframes_ori[objectname]]
 		keyframes.append(frame_ori)
 		keyframes.sort()
@@ -1397,11 +1396,11 @@ active_timebead, keyframes_ori, handles_ori, inverse_getter):
 		kf_prev = keyframes[frame_index - 1]
 		kf_next = keyframes[frame_index + 1]
 		vec_prev = (
-				(mathutils.Matrix.Translation(-loc_ori) @ mat) @ \
-				mathutils.Vector(keyframes_ori[objectname][kf_prev][1])).normalized()
+				(Matrix.Translation(-loc_ori) @ mat) @ \
+				Vector(keyframes_ori[objectname][kf_prev][1])).normalized()
 		vec_next = (
-				(mathutils.Matrix.Translation(-loc_ori) @ mat) @ \
-				mathutils.Vector(keyframes_ori[objectname][kf_next][1])).normalized()
+				(Matrix.Translation(-loc_ori) @ mat) @ \
+				Vector(keyframes_ori[objectname][kf_next][1])).normalized()
 		d_normal = d.copy().normalized()
 		dist_to_next = (d_normal - vec_next).length
 		dist_to_prev = (d_normal - vec_prev).length
@@ -1428,9 +1427,9 @@ active_timebead, keyframes_ori, handles_ori, inverse_getter):
 											handles_ori[objectname][kf_bead]["left"][i][0] +
 											d_frame, kf_bead - 1
 											)
-						angle = mathutils.Vector([-1, 0]).angle(
-											mathutils.Vector(kf.handle_left) -
-											mathutils.Vector(kf.co), 0
+						angle = Vector([-1, 0]).angle(
+											Vector(kf.handle_left) -
+											Vector(kf.co), 0
 											)
 						if angle != 0:
 							angles.append(angle)
@@ -1440,9 +1439,9 @@ active_timebead, keyframes_ori, handles_ori, inverse_getter):
 											handles_ori[objectname][kf_bead]["right"][i][0] +
 											d_frame, kf_bead + 1
 											)
-						angle = mathutils.Vector([1, 0]).angle(
-											mathutils.Vector(kf.handle_right) -
-											mathutils.Vector(kf.co), 0
+						angle = Vector([1, 0]).angle(
+											Vector(kf.handle_right) -
+											Vector(kf.co), 0
 											)
 						if angle != 0:
 							angles.append(angle)
@@ -1820,7 +1819,7 @@ class MotionTrailOperator(bpy.types.Operator):
 
 				anim_data_getter = get_original_animation_data_dg if mt.use_depsgraph else get_original_animation_data_ce
 				self.keyframes_ori, self.handles_ori = anim_data_getter(context, self.keyframes)
-				self.drag_mouse_ori = mathutils.Vector([event.mouse_region_x,
+				self.drag_mouse_ori = Vector([event.mouse_region_x,
 					event.mouse_region_y])
 				self.drag = True
 				self.lock = False
@@ -1855,7 +1854,7 @@ class MotionTrailOperator(bpy.types.Operator):
 		elif not self.drag and not event.shift and not event.alt and not event.ctrl:
 			# Select or highlight
 			threshold = mt.select_threshold
-			clicked = mathutils.Vector([event.mouse_region_x,
+			clicked = Vector([event.mouse_region_x,
 				event.mouse_region_y])
 
 			#context.window_manager.motion_trail.force_update = True

@@ -386,20 +386,20 @@ def evaluate_constraints(mat, constraints, frame, ob):
 
 def get_matrix_any_depsgraph(frame: float, target: Object | PoseBone, context: Context) -> Matrix:
 	oldframe = context.scene.frame_float
-	isBone = type(target) is PoseBone
-
 	context.scene.frame_float = frame
-	dg = context.evaluated_depsgraph_get()
-	boneMat = Matrix()
 	
+	dg = context.evaluated_depsgraph_get()
+	
+	isBone = type(target) is PoseBone
 	ob = target.id_data if isBone else target
 		
 	evalledOb = ob.evaluated_get(dg)
 
 	if isBone:
-		boneMat = evalledOb.pose.bones[target.name].matrix
+		resMat = evalledOb.matrix_world @ evalledOb.pose.bones[target.name].matrix
+	else:
+		resMat = evalledOb.matrix_world
 
-	resMat = evalledOb.matrix_world @ boneMat
 	context.scene.frame_float = oldframe
 	# TODO: When updates are forced with DG on, playback can freeze... This may be due to setting the frame in the DG functions. Is this fixable?
 	return resMat

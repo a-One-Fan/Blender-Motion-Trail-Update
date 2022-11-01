@@ -387,7 +387,7 @@ def evaluate_constraints(mat, constraints, frame, ob):
 def get_matrix_any_depsgraph(frame: float, target: Object | PoseBone, context: Context) -> Matrix:
 	oldframe = context.scene.frame_float
 	context.scene.frame_float = frame
-	
+
 	dg = context.evaluated_depsgraph_get()
 	
 	isBone = type(target) is PoseBone
@@ -1117,7 +1117,7 @@ def draw_callback(self, context):
 					blf.draw(0, text)
 
 	# Draw constraining indicator
-	if mt.use_constraints:
+	if self.drag:
 		constraint_colors = [\
 			[[0.0, 0.0, 0.0, 1.0], [1.0, 0.1, 0.1, 1.0]],
 			[[0.0, 0.0, 0.0, 1.0], [0.1, 1.0, 0.1, 1.0]],
@@ -1753,8 +1753,8 @@ class MotionTrailOperator(bpy.types.Operator):
 
 		if event.type in ['X', 'Y', 'Z'] and event.value == 'PRESS':
 			no_passthrough = True
-			#self.constraint_axes = [False, False, False]
 			new_constraint = []
+
 			if not event.shift:
 				if event.type == 'X':
 					new_constraint = [True, False, False]
@@ -1823,6 +1823,10 @@ class MotionTrailOperator(bpy.types.Operator):
 					event.mouse_region_y])
 				self.drag = True
 				self.lock = False
+
+				self.constraint_axes = [False, False, False]
+				self.constraint_orientation = False
+
 			else:
 				# stop drag
 				self.drag = False
@@ -2115,7 +2119,6 @@ class MotionTrailPanel(bpy.types.Panel):
 			col.operator("view3d.motion_trail", text="Disable motion trail")
 
 		self.layout.column().prop(mt, "use_depsgraph")
-		self.layout.column().prop(mt, "use_constraints")
 
 		box = self.layout.box()
 		box.prop(mt, "mode")
@@ -2366,11 +2369,6 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			("wloc", "Weighted Location", "0.25*time + 0.75*location"),
 			("len", "Directional length", "Use the length of the handle, positive for right and negative for left")),
 			default='wtime'
-			)
-
-	use_constraints: BoolProperty(name="Constraining",
-			description="Whether to enable constraining or not. Press (shift+) X, Y or Z to constrain",
-			default=True,
 			)
 	
 			
@@ -2694,7 +2692,7 @@ def compare_ver(tup1, tup2):
 
 # == END of deleteable code ==
 			
-configurable_props = ["use_depsgraph", "use_constraints", "select_key", "select_threshold", "deselect_nohit_key", "deselect_always_key", "deselect_passthrough", "mode", "path_style", 
+configurable_props = ["use_depsgraph", "select_key", "select_threshold", "deselect_nohit_key", "deselect_always_key", "deselect_passthrough", "mode", "path_style", 
 "simple_color", "speed_color_min", "speed_color_max", "accel_color_neg", "accel_color_static", "accel_color_pos",
 "keyframe_color", "frame_color", "selection_color", "selection_color_dark", "highlight_color", "handle_color", "handle_line_color", "timebead_color", 
 "text_color", "selected_text_color", "path_width", "path_resolution", "path_before", "path_after",

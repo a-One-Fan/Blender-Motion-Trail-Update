@@ -2417,7 +2417,8 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 
 	show_spines: BoolProperty(name="Spines",
 			description="Show spines for visualizing rotation along the motion trail",
-			default=False
+			default=False,
+			update=internal_update,
 			)
 
 
@@ -2451,19 +2452,22 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			description="Apply this euler rotation to the motion trail rotation to adjust where spines are",
 			default=(0.0, 0.0, 0.0),
 			size=3,
-			subtype='EULER'
+			subtype='EULER',
+			update=internal_update,
 			)
 	
 	spine_length: FloatProperty(name="Length",
 			description="How long spines should be",
 			default=1.0,
+			update=internal_update,
 			)
 
 	spine_step: IntProperty(name="Step",
 			description="How many frames to step across for each spine, higher = less spines",
 			default=1,
 			min=1,
-			soft_max=10
+			soft_max=10,
+			update=internal_update,
 			)
 
 	#Colors

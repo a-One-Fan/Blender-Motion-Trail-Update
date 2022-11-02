@@ -807,6 +807,7 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 					for i in range(6):
 						vec = Vector(vecs[i])
 						vec.rotate(rot)
+						vec.rotate(mt.spine_offset) # Is this slow enough to warrant an if?
 						resLocs.append(world_to_screen(context, loc + vec))
 					
 					self.spines[frame] = (baseLoc, resLocs)

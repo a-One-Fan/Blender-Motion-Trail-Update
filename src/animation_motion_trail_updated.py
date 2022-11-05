@@ -561,7 +561,7 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 			for fc in curves:
 				for kf in fc.keyframe_points:
 					# handles for location mode
-					if mt.mode == 'location':
+					if mt.mode == 'values':
 						if kf.co[0] not in handle_difs:
 							handle_difs[kf.co[0]] = {"left": Vector(),
 								"right": Vector(), "keyframe_loc": None}
@@ -578,7 +578,7 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 						elif hdir == 'wtime':
 							lco = sum(ldiff.normalized() * Vector((0.25, 0.75)))
 							rco = sum(rdiff.normalized() * Vector((0.25, 0.75)))
-						elif hdir == 'location':
+						elif hdir == 'value':
 							lco = ldiff.normalized()[0]
 							rco = rdiff.normalized()[0]
 						elif hdir == 'wloc':
@@ -606,8 +606,8 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 						# can't select keyframes in speed mode
 						click.append([kf.co[0], "keyframe", Vector([x, y])])
 			self.keyframes[ob] = keyframes
-			# handles are only shown in location-altering mode
-			if mt.mode == 'location' and mt.handle_display:
+			# handles are only shown in value-altering mode
+			if mt.mode == 'values' and mt.handle_display:
 				# calculate handle positions
 				handles = {}
 				for frame, vecs in handle_difs.items():
@@ -913,8 +913,8 @@ def draw_callback(self, context):
 				point_poss.clear()
 				point_cols.clear()
 
-	# handles are only shown in location mode
-	if mt.mode == 'location':
+	# handles are only shown in value mode
+	if mt.mode == 'values':
 		colored_line_shader.bind()
 		colored_line_shader.uniform_float("lineWidth", 2)
 		poss = []
@@ -1059,8 +1059,7 @@ active_timebead, keyframes_ori, handles_ori, inverse_getter):
 	mt: MotionTrailProps = context.window_manager.motion_trail
 
 	# change 3d-location of keyframe
-	if mt.mode == 'location' and \
-	active_keyframe:
+	if mt.mode == 'values' and active_keyframe:
 		ob, frame, frame_ori = active_keyframe
 		mat = inverse_getter(frame, ob, context)
 		
@@ -1092,7 +1091,7 @@ active_timebead, keyframes_ori, handles_ori, inverse_getter):
 					break
 
 	# change 3d-location of handle
-	elif mt.mode == 'location' and active_handle:
+	elif mt.mode == 'values' and active_handle:
 		ob, frame, side = active_handle
 		mat = inverse_getter(frame, ob, context)
 
@@ -1108,6 +1107,7 @@ active_timebead, keyframes_ori, handles_ori, inverse_getter):
 				if kf.co[0] == frame:
 					if side == "left":
 						# change handle type, if necessary
+						# TODO: function for this, makes code unreadable
 						if kf.handle_left_type in (
 								'AUTO',
 								'AUTO_CLAMPED',
@@ -1369,8 +1369,8 @@ def cancel_drag(context, active_keyframe, active_handle, active_timebead,
 keyframes_ori, handles_ori):
 	mt: MotionTrailProps = context.window_manager.motion_trail
 
-	# revert change in 3d-location of active keyframe and its handles
-	if mt.mode == 'location' and active_keyframe:
+	# revert change in values of active keyframe and its handles
+	if mt.mode == 'values' and active_keyframe:
 		objectname, frame, frame_ori, active_ob, child = active_keyframe
 		curves = get_curves(active_ob, child)
 		for i, curve in enumerate(curves):
@@ -1382,8 +1382,8 @@ keyframes_ori, handles_ori):
 					break
 		mt.backed_up_keyframes = False
 
-	# revert change in 3d-location of active handle
-	elif mt.mode == 'location' and active_handle:
+	# revert change in value of active handle
+	elif mt.mode == 'values' and active_handle:
 		objectname, frame, side, active_ob, child = active_handle
 		curves = get_curves(active_ob, child)
 		for i, curve in enumerate(curves):
@@ -2010,6 +2010,11 @@ class MotionTrailPanel(bpy.types.Panel):
 
 		self.layout.column().prop(mt, "use_depsgraph")
 
+		row = self.layout.column().row()
+		row.prop(mt, "do_location")
+		row.prop(mt, "do_rotation")
+		row.prop(mt, "do_scale")
+
 		box = self.layout.box()
 		box.prop(mt, "mode")
 		# box.prop(mt, "calculate")
@@ -2062,7 +2067,7 @@ class MotionTrailPanel(bpy.types.Panel):
 
 		box = self.layout.box()
 		col = box.column(align=True)
-		if mt.mode == 'location':
+		if mt.mode == 'values':
 			col.prop(mt, "handle_display",
 				text="Handles")
 			if mt.handle_display:
@@ -2189,11 +2194,11 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			update=internal_update
 			)
 	mode: EnumProperty(name="Mode", items=(
-			("location", "Location", "Change path that is followed"),
+			("values", "Values", "Alter values of the keyframes"),
 			("speed", "Speed", "Change speed between keyframes"),
 			("timing", "Timing", "Change position of keyframes on timeline")),
 			description="Enable editing of certain properties in the 3d-view",
-			default='location',
+			default='values',
 			update=internal_update
 			)
 	path_after: IntProperty(name="After",
@@ -2254,11 +2259,24 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			items=(
 			("time", "Time", "Use only the time coordinate of the handles"),
 			("wtime", "Weighted Time", "0.75*time + 0.25*location"),
-			("location", "Location", "Use only the location coordinate of the handles"),
+			("value", "Value", "Use only the value coordinate of the handles"),
 			("wloc", "Weighted Location", "0.25*time + 0.75*location"),
 			("len", "Directional length", "Use the length of the handle, positive for right and negative for left")),
 			default='wtime'
 			)
+
+	do_location: BoolProperty(name="Location",
+			description="Show and work with location keyframes",
+			default=True
+			)
+	do_rotation: BoolProperty(name="Rotation",
+			description="Show and work with rotation keyframes",
+			default=False
+			)
+	do_scale: BoolProperty(name="Scale",
+			description="Show and work with scale keyframes",
+			default=False
+			)	
 	
 			
 	#Key stuff

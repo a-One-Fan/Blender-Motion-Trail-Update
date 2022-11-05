@@ -51,7 +51,7 @@ import traceback
 from functools import reduce
 from collections.abc import Callable
 
-from bpy.types import Object, PoseBone, Context, Action
+from bpy.types import Object, PoseBone, Context, Action, FCurve
 from mathutils import Matrix, Vector, Quaternion, Euler
 
 # Linear interpolation for 4-element tuples
@@ -93,7 +93,7 @@ class fake_fcurve():
 		return([])
 
 
-class matrix_cache():
+class MatrixCache():
 	__mats: dict[(float, Object|PoseBone), (Matrix, Vector, Quaternion, Vector)]
 	getter: Callable[[float, Object|PoseBone, Context], Matrix]
 
@@ -128,7 +128,7 @@ class matrix_cache():
 		return self.__mats[(frame, obj)][3]
 
 
-def get_curves_action(obj: Object | PoseBone, action: Action):
+def get_curves_action(obj: Object | PoseBone, action: Action) -> List[List[FCurve]]:
 	""" Get f-curves for [[loc], [rot], [scale]] from an Object or PoseBone and an associated action. Rotation fcurves may be 4 if quaternion is used."""
 	locpath = obj.path_from_id("location")
 	rotpath = ""
@@ -161,10 +161,14 @@ def get_curves_action(obj: Object | PoseBone, action: Action):
 	return curves
 
 def get_curves(obj: Object | PoseBone):
-	"""Get f-curves for [[loc], [rot], [scale]] from an Object or PoseBone and its default action. Rotation fcurves may be 4 if quaternion is used."""
+	"""Get f-curves for [[loc], [rot], [scale]] from an Object or PoseBone and its default action. Rotation fcurves may be 4 if quaternion is used. Returns [] if no action."""
 	animDataContainer = obj
 	if type(obj) is PoseBone:
 		animDataContainer = obj.id_data
+
+	if not animDataContainer.action:
+		return []
+	
 	return get_curves_action(obj, animDataContainer.animation_data.action)
 
 # turn screen coordinates (x,y) into world coordinates vector
@@ -362,78 +366,63 @@ def get_inverse_parents_depsgraph(frame, ob, context):
 	return (get_matrix_any_depsgraph(frame, ob, context) @ mat.inverted()).inverted()
 
 # get position of keyframes and handles at the start of dragging
-def get_original_animation_data(context, keyframes, location_getter):
+def get_original_animation_data(context, keyframes, cache: MatrixCache):
 	keyframes_ori = {}
 	handles_ori = {}
 
 	if context.active_object and context.active_object.mode == 'POSE':
-		armature_ob = context.active_object
-		objects = [[armature_ob, pb, armature_ob] for pb in
-					context.selected_pose_bones]
+		objects = [pb for pb in context.selected_pose_bones]
 	else:
-		objects = [[ob, False, False] for ob in context.selected_objects]
+		objects = [ob for ob in context.selected_objects]
 
-	for action_ob, child, offset_ob in objects:
-		if not action_ob.animation_data:
-			continue
-		curves = get_curves(action_ob, child)
+	for ob in objects:
+		curves = get_curves(ob)
 		if len(curves) == 0:
 			continue
-		fcx, fcy, fcz = curves
-		if child:
-			display_ob = child
-		else:
-			display_ob = action_ob
 
-		# get keyframe positions
-		keyframes_ori[display_ob.name] = {}
-		for frame in keyframes[display_ob.name]:
-			loc = location_getter(frame, display_ob, context)
-			keyframes_ori[display_ob.name][frame] = [frame, loc]
+		# Get keyframe positions
+		# TODO: Should a raw PB/Object be used as a dict key?
+		# ???: is keyframes_ori in world space? Is keyframes_ori necessary?
+		keyframes_ori[ob] = {}
+		for frame in keyframes[ob]:
+			loc = cache.get_location(frame, ob, context)
+			rot = cache.get_rotation(frame, ob, context)
+			scale = cache.get_scale(frame, ob, context)
+			keyframes_ori[ob][frame] = [frame, [loc, rot, scale]]
 
 		# get handle positions
-		handles_ori[display_ob.name] = {}
-		for frame in keyframes[display_ob.name]:
-			handles_ori[display_ob.name][frame] = {}
-			left_x = [frame, fcx.evaluate(frame)]
-			right_x = [frame, fcx.evaluate(frame)]
-			for kf in fcx.keyframe_points:
-				if kf.co[0] == frame:
-					left_x = kf.handle_left[:]
-					right_x = kf.handle_right[:]
-					break
-			left_y = [frame, fcy.evaluate(frame)]
-			right_y = [frame, fcy.evaluate(frame)]
-			for kf in fcy.keyframe_points:
-				if kf.co[0] == frame:
-					left_y = kf.handle_left[:]
-					right_y = kf.handle_right[:]
-					break
-			left_z = [frame, fcz.evaluate(frame)]
-			right_z = [frame, fcz.evaluate(frame)]
-			for kf in fcz.keyframe_points:
-				if kf.co[0] == frame:
-					left_z = kf.handle_left[:]
-					right_z = kf.handle_right[:]
-					break
-			handles_ori[display_ob.name][frame]["left"] = [left_x, left_y,
-				left_z]
-			handles_ori[display_ob.name][frame]["right"] = [right_x, right_y,
-				right_z]
+		handles_ori[ob] = {}
+		for frame in keyframes[ob]:
+			handles_ori[ob][frame] = [[], []]
+			for i in range(len(curves)): # For each category of fcurves
+				handles_ori[ob][frame][0].append([])
+				handles_ori[ob][frame][1].append([])
 
-	return(keyframes_ori, handles_ori)
+				for j in range(len(curves[i])):
+					fcurve = curves[i][j]
+					left = 0
+					right = 0
 
-def get_uncached_location_dg(frame, ob, context):
-	return get_matrix_any_depsgraph(frame, ob, context).to_translation()
+					# TODO: Is there a better way to get this?
+					for kf in fcurve.keyframe_points:
+						if kf.co[0] == frame:
+							left = kf.handle_left[:]
+							right = kf.handle_right[:]
+							break
 
-def get_uncached_location_ce(frame, ob, context):
-	return get_matrix_any_custom_eval(frame, ob, context).to_translation()
+					handles_ori[ob][frame][0][i].append(left)
+					handles_ori[ob][frame][0][i].append(right)
+
+	return (keyframes_ori, handles_ori)
 
 def get_original_animation_data_dg(context, keyframes):
-	return get_original_animation_data(context, keyframes, get_uncached_location_dg)
+	# TODO: Move cache up?
+	newCache = MatrixCache(get_matrix_any_depsgraph)
+	return get_original_animation_data(context, keyframes, newCache)
 
 def get_original_animation_data_ce(context, keyframes):
-	return get_original_animation_data(context, keyframes, get_uncached_location_ce)
+	newCache = MatrixCache(get_matrix_any_custom_eval)
+	return get_original_animation_data(context, keyframes, newCache)
 
 # callback function that calculates positions of all things that need be drawn
 def calc_callback(self, context, inverse_getter, matrix_getter):
@@ -487,7 +476,7 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 		self.highlighted_coord = False
 	
 	if selection_change or not self.lock or mt.force_update:
-		self.cache = matrix_cache(matrix_getter)
+		self.cache = MatrixCache(matrix_getter)
 
 	self.perspective = context.region_data.perspective_matrix.copy()
 	self.displayed = objects  # store, so it can be checked next time
@@ -1959,7 +1948,7 @@ class MotionTrailOperator(bpy.types.Operator):
 			mt.backed_up_keyframes = False
 			mt.handle_type_enabled = False
 			getter = get_matrix_any_depsgraph if mt.use_depsgraph else get_matrix_any_custom_eval
-			self.cache = matrix_cache(getter)
+			self.cache = MatrixCache(getter)
 
 			for kmi in kmis:
 				kmi.active = False

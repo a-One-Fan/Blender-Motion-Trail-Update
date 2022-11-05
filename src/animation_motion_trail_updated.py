@@ -365,8 +365,8 @@ def get_inverse_parents_depsgraph(frame, ob, context):
 		
 	return (get_matrix_any_depsgraph(frame, ob, context) @ mat.inverted()).inverted()
 
-# get position of keyframes and handles at the start of dragging
-def get_original_animation_data(context, keyframes, cache: MatrixCache):
+def get_original_animation_data(context, keyframes: dict[(any, List[float])], cache: MatrixCache):
+	""" Get position of keyframes and handles at the start of dragging."""
 	keyframes_ori = {}
 	handles_ori = {}
 

@@ -51,7 +51,7 @@ import traceback
 from functools import reduce
 from collections.abc import Callable
 
-from bpy.types import Object, PoseBone, Context
+from bpy.types import Object, PoseBone, Context, Action
 from mathutils import Matrix, Vector, Quaternion, Euler
 
 # Linear interpolation for 4-element tuples
@@ -70,7 +70,7 @@ def flatten(deeplist):
 
 # fake fcurve class, used if no fcurve is found for a path
 class fake_fcurve():
-	def __init__(self, object, index, rotation=False, scale=False):
+	def __init__(self, object: Object | PoseBone, index, rotation=False, scale=False):
 		# location
 		if not rotation and not scale:
 			self.loc = object.location[index]
@@ -126,74 +126,46 @@ class matrix_cache():
 	def get_scale(self, frame, obj, context):
 		self.__guarantee_entry(frame, obj, context)
 		return self.__mats[(frame, obj)][3]
-		
 
-# get location curves of the given object
-def get_curves(object, child=False):
-	if object.animation_data and object.animation_data.action:
-		action = object.animation_data.action
-		if child:
-			# posebone
-			curves = [
-					fc for fc in action.fcurves if len(fc.data_path) >= 14 and
-					fc.data_path[-9:] == '.location' and
-					child.name in fc.data_path.split("\"")
-					]
-		else:
-			# normal object
-			curves = [fc for fc in action.fcurves if fc.data_path == 'location']
 
-	elif object.animation_data and object.animation_data.use_nla:
-		curves = []
-		strips = []
-		for track in object.animation_data.nla_tracks:
-			not_handled = [s for s in track.strips]
-			while not_handled:
-				current_strip = not_handled.pop(-1)
-				if current_strip.action:
-					strips.append(current_strip)
-				if current_strip.strips:
-					# meta strip
-					not_handled += [s for s in current_strip.strips]
-
-		for strip in strips:
-			if child:
-				# posebone
-				curves = [
-						fc for fc in strip.action.fcurves if
-						len(fc.data_path) >= 14 and fc.data_path[-9:] == '.location' and
-						child.name in fc.data_path.split("\"")
-						]
-			else:
-				# normal object
-				curves = [fc for fc in strip.action.fcurves if fc.data_path == 'location']
-			if curves:
-				# use first strip with location fcurves
-				break
+def get_curves_action(obj: Object | PoseBone, action: Action):
+	""" Get f-curves for [[loc], [rot], [scale]] from an Object or PoseBone and an associated action. Rotation fcurves may be 4 if quaternion is used."""
+	locpath = obj.path_from_id("location")
+	rotpath = ""
+	
+	quat = True
+	if obj.rotation_mode == 'QUATERNION':
+		rotpath = obj.path_from_id("rotation_quaternion")
 	else:
-		# should not happen?
-		curves = []
+		rotpath = obj.path_from_id('rotation_euler')
+		quat = False
+	sclpath = obj.path_from_id("scale")
 
-	# ensure we have three curves per object
-	fcx = None
-	fcy = None
-	fcz = None
-	for fc in curves:
-		if fc.array_index == 0:
-			fcx = fc
-		elif fc.array_index == 1:
-			fcy = fc
-		elif fc.array_index == 2:
-			fcz = fc
-	if fcx is None:
-		fcx = fake_fcurve(object, 0)
-	if fcy is None:
-		fcy = fake_fcurve(object, 1)
-	if fcz is None:
-		fcz = fake_fcurve(object, 2)
+	rotrange = 4
+	if not quat:
+		rotrange = 3
+	
+	loccurves = [action.fcurves.find(locpath, index=i) for i in range(3)]
+	rotcurves = [action.fcurves.find(rotpath, index=i) for i in range(rotrange)]
+	sclcurves = [action.fcurves.find(sclpath, index=i) for i in range(3)]
 
-	return([fcx, fcy, fcz])
+	curves = [loccurves, rotcurves, sclcurves]
+	curves_fakes = [(False, False), (obj.rotation_mode, False), (False, True)]
+	curves_ranges = [3, rotrange, 3]
 
+	for i in range(3):
+		for j in range(curves_ranges[i]):
+			if curves[i][j] is None:
+				curves[i][j] = fake_fcurve(obj, j, curves_fakes[i][0], curves_fakes[i][1])
+	
+	return curves
+
+def get_curves(obj: Object | PoseBone):
+	"""Get f-curves for [[loc], [rot], [scale]] from an Object or PoseBone and its default action. Rotation fcurves may be 4 if quaternion is used."""
+	animDataContainer = obj
+	if type(obj) is PoseBone:
+		animDataContainer = obj.id_data
+	return get_curves_action(obj, animDataContainer.animation_data.action)
 
 # turn screen coordinates (x,y) into world coordinates vector
 def screen_to_world(context, x, y):
@@ -231,50 +203,20 @@ def world_to_screen(context, vector):
 
 	return(x, y)
 
-# Turn location, rotation and scale in an action into a usable matrix
-def get_matrix_action(action, frame, locpath, rotpath, sclpath, quat,
-defaultLoc = None, defaultRot = None, defaultScale = None):
-	rotrange = 4
-	if not quat:
-		rotrange = 3
+
+def get_matrix_frame(obj: Object | PoseBone, frame, action):
+	""" Get a LocRotScale matrix assembled from the respective f-curves for a given frame, for the object or posebone and the given action."""
+
+	curves = get_curves_action(obj, action)
 	
-	loccurves = [action.fcurves.find(locpath, index=i) for i in range(3)]
-	rotcurves = [action.fcurves.find(rotpath, index=i) for i in range(rotrange)]
-	sclcurves = [action.fcurves.find(sclpath, index=i) for i in range(3)]
-	
-	loc = defaultLoc
-	if loccurves[0] is not None:
-		loc = Vector([c.evaluate(frame) for c in loccurves])
-	
-	rot = defaultRot
-	if rotcurves[0] is not None:
-		if rotrange == 4:
-			rot = Quaternion([c.evaluate(frame) for c in rotcurves])
-		else:
-			rot = Euler([c.evaluate(frame) for c in rotcurves])
-			
-	scale = defaultScale
-	if sclcurves[0] is not None:
-		scale = Vector([c.evaluate(frame) for c in sclcurves])
+	loc = Vector([c.evaluate(frame) for c in curves[0]])
+	if obj.rotation_mode == 'QUATERNION':
+		rot = Quaternion([c.evaluate(frame) for c in curves[1]])
+	else:
+		rot = Euler([c.evaluate(frame) for c in curves[1]])
+	scale = Vector([c.evaluate(frame) for c in curves[2]])
 	
 	return Matrix.LocRotScale(loc, rot, scale)
-
-# Get the locrotscale matrix from the fcurves for a given frame and action for an object
-# (or posebone, for which this works fine as well)
-def get_matrix_frame(obj, frame, action):
-	locpath = obj.path_from_id("location")
-	rotpath = ""
-	
-	quat = True
-	if obj.rotation_mode == 'QUATERNION':
-		rotpath = obj.path_from_id("rotation_quaternion")
-	else:
-		rotpath = obj.path_from_id('rotation_euler')
-		quat = False
-	sclpath = obj.path_from_id("scale")
-	
-	return get_matrix_action(action, frame, locpath, rotpath, sclpath, quat,
-	obj.location, obj.rotation_quaternion if quat else obj.rotation_euler, obj.scale)
 	
 # Get the world-ish matrix for an object, factoring in its parents recursively, if any
 def get_matrix_obj_parents(obj, frame, do_anim=True):
@@ -574,7 +516,6 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 							context.scene.frame_current +
 							mt.path_after
 							)
-			fcx, fcy, fcz = curves
 			if child:
 				display_ob = child
 			else:

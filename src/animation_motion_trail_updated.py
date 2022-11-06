@@ -669,13 +669,13 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 
 			if mt.mode != 'speed':
 				# can't select keyframes in speed mode
-				for kf_frame, [[x, y], kf_channels] in enumerate(self.keyframes[ob]):
-					click.append( [kf_frame, "keyframe", Vector([x, y]), kf_channels] )
+				for kf_frame, [coords, kf_channels] in self.keyframes[ob].items():
+					click.append( [kf_frame, "keyframe", Vector(coords), kf_channels] )
 
 			# handles are only shown in value-altering mode
 			if mt.mode == 'values' and mt.handle_display:
 				# calculate handle positions
-				handles = {}
+				handles = [{}, {}, {}]
 
 				for i in range(3):
 					if not channels[i]: 
@@ -715,8 +715,8 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 					frame = range_min + i * dframe
 					loc = self.cache.get_location(frame, ob, context)
 					x, y = world_to_screen(context, loc)
-					timebeads[frame] = [x, y]
-					click.append( [frame, "timebead", Vector([x, y])] )
+					timebeads[frame] = [[x, y], channels]
+					click.append( [frame, "timebead", Vector([x, y]), channels] )
 				self.timebeads[ob] = timebeads
 
 			# calculate timebeads for speed mode
@@ -779,8 +779,8 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 				else:
 					self.timebeads[ob] = merge_dicts(timebead_container)
 
-				for bead_frame, [[x, y], bead_channels] in enumerate(self.timebeads):
-					click.append( [bead_frame, "timebead", Vector([x, y]), bead_channels] )
+				for bead_frame, [coords, bead_channels] in self.timebeads[ob].items():
+					click.append( [bead_frame, "timebead", Vector(coords), bead_channels] )
 
 			if mt.show_spines:
 				for frame in range(range_min, range_max + 1, mt.spine_step):

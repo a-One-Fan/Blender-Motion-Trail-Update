@@ -2578,7 +2578,7 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			)
 	handle_color_fac: FloatProperty(name="Color factor",
 			description="Factor for how much of the added or multiplied color is included in the final handle color",
-			default=0.5,
+			default=1.0,
 			soft_min=0.0, soft_max=1.0,
 			)
 

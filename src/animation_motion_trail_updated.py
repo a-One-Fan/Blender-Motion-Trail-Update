@@ -2026,11 +2026,9 @@ class MotionTrailPanel(bpy.types.Panel):
 		row = col.row()
 
 		if mt.path_display:
-			row.prop(mt, "path_display",
-				icon="DOWNARROW_HLT", text="", emboss=False)
+			row.prop(mt, "path_display", icon="DOWNARROW_HLT", text="", emboss=False)
 		else:
-			row.prop(mt, "path_display",
-				icon="RIGHTARROW", text="", emboss=False)
+			row.prop(mt, "path_display", icon="RIGHTARROW", text="", emboss=False)
 
 		row.label(text="Path options")
 
@@ -2049,10 +2047,8 @@ class MotionTrailPanel(bpy.types.Panel):
 				col.row().prop(mt, "accel_color_pos")
 				
 			grouped = col.column(align=True)
-			grouped.prop(mt, "path_width",
-				text="Width")
-			grouped.prop(mt,
-				"path_step")
+			grouped.prop(mt, "path_width", text="Width")
+			grouped.prop(mt, "path_step")
 			row = grouped.row(align=True)
 			row.prop(mt, "path_before")
 			row.prop(mt, "path_after")

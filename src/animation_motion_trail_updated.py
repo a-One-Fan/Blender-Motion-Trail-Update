@@ -885,7 +885,7 @@ def draw_callback(self, context):
 	else:
 		colored_line_shader.bind()
 		colored_line_shader.uniform_float("lineWidth", width)
-		for objectname, path in self.paths.items():
+		for ob, path in self.paths.items():
 			for i, [x, y, color, frame] in enumerate(path):
 				if frame < limit_min or frame > limit_max:
 					continue
@@ -952,11 +952,11 @@ def draw_callback(self, context):
 		colored_points_shader.bind()
 		point_poss = []
 		point_cols = []
-		for objectname, path in self.paths.items():
+		for ob, path in self.paths.items():
 			for x, y, color, frame in path:
 				if frame < limit_min or frame > limit_max:
 					continue
-				if self.active_frame and objectname == self.active_frame[0] \
+				if self.active_frame and ob == self.active_frame[0] \
 				and abs(frame - self.active_frame[1]) < 1e-4:
 					point_cols.append(mt.selection_color)
 					point_poss.append((x, y))
@@ -976,7 +976,7 @@ def draw_callback(self, context):
 		point_poss = []
 		point_cols = []
 		for ob, values in self.timebeads.items():
-			for frame, coords, channels in values.items():
+			for frame, [coords, channels] in values.items():
 				if frame < limit_min or frame > limit_max:
 					continue
 				if self.active_timebead and \
@@ -1000,25 +1000,25 @@ def draw_callback(self, context):
 		colored_line_shader.uniform_float("lineWidth", 2)
 		poss = []
 		cols = []
-		for objectname, values in self.handles.items():
+		for ob, values in self.handles.items():
 			for frame, sides in values.items():
 				if frame < limit_min or frame > limit_max:
 					continue
 				for side, coords in sides.items():
 					if self.active_handle and \
-					objectname == self.active_handle[0] and \
+					ob == self.active_handle[0] and \
 					side == self.active_handle[2] and \
 					abs(frame - self.active_handle[1]) < 1e-4:
 						cols.append(mt.selection_color_dark)
-						poss.append((self.keyframes[objectname][frame][0],
-							self.keyframes[objectname][frame][1], 0.0))
+						poss.append((self.keyframes[ob][frame][0],
+							self.keyframes[ob][frame][1], 0.0))
 						cols.append(mt.selection_color_dark)
 						poss.append((coords[0], coords[1], 0.0))
 						
 					else:
 						cols.append(mt.handle_line_color)
-						poss.append((self.keyframes[objectname][frame][0],
-							self.keyframes[objectname][frame][1], 0.0))
+						poss.append((self.keyframes[ob][frame][0],
+							self.keyframes[ob][frame][1], 0.0))
 						cols.append(mt.handle_line_color)
 						poss.append((coords[0], coords[1], 0.0))
 			if(not (cols == []) and not (poss == [])):
@@ -1032,13 +1032,13 @@ def draw_callback(self, context):
 		gpu.state.point_size_set(4.0)
 		point_poss = []
 		point_cols = []
-		for objectname, values in self.handles.items():
+		for ob, values in self.handles.items():
 			for frame, sides in values.items():
 				if frame < limit_min or frame > limit_max:
 					continue
 				for side, coords in sides.items():
 					if self.active_handle and \
-					objectname == self.active_handle[0] and \
+					ob == self.active_handle[0] and \
 					side == self.active_handle[2] and \
 					abs(frame - self.active_handle[1]) < 1e-4:
 						point_poss.append((coords[0], coords[1]))
@@ -1057,12 +1057,12 @@ def draw_callback(self, context):
 	gpu.state.point_size_set(6.0)
 	point_poss = []
 	point_cols = []
-	for objectname, values in self.keyframes.items():
-		for frame, coords in values.items():
+	for ob, values in self.keyframes.items():
+		for frame, [coords, channels] in values.items():
 			if frame < limit_min or frame > limit_max:
 				continue
 			if self.active_keyframe and \
-			objectname == self.active_keyframe[0] and \
+			ob == self.active_keyframe[0] and \
 			abs(frame - self.active_keyframe[1]) < 1e-4:
 				point_poss.append((coords[0], coords[1]))
 				point_cols.append(mt.selection_color)
@@ -1079,8 +1079,8 @@ def draw_callback(self, context):
 	if mt.keyframe_numbers:
 		blf.size(0, 12, 72)
 		blf.color(0, 1.0, 1.0, 0.0, 1.0)
-		for objectname, values in self.keyframes.items():
-			for frame, coords in values.items():
+		for ob, values in self.keyframes.items():
+			for frame, [coords, channels]  in values.items():
 				if frame < limit_min or frame > limit_max:
 					continue
 				blf.position(0, coords[0] + 3, coords[1] + 3, 0)
@@ -1092,7 +1092,7 @@ def draw_callback(self, context):
 				else:
 					text = text[0] + "." + text[1][0]
 				if self.active_keyframe and \
-				objectname == self.active_keyframe[0] and \
+				ob == self.active_keyframe[0] and \
 				abs(frame - self.active_keyframe[1]) < 1e-4:
 					c = mt.selected_text_color
 					blf.color(0, * c)

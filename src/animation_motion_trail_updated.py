@@ -111,21 +111,25 @@ class MatrixCache():
 		if not (frame, obj) in self.__mats:
 			self.__build_entry(frame, obj, context)
 
-	def get_matrix(self, frame, obj, context):
+	def get_matrix(self, frame, obj, context) -> Matrix:
 		self.__guarantee_entry(frame, obj, context)
 		return self.__mats[(frame, obj)][0]
 
-	def get_location(self, frame, obj, context):
+	def get_location(self, frame, obj, context) -> Vector:
 		self.__guarantee_entry(frame, obj, context)
 		return self.__mats[(frame, obj)][1]
 
-	def get_rotation(self, frame, obj, context):
+	def get_rotation(self, frame, obj, context) -> Quaternion:
 		self.__guarantee_entry(frame, obj, context)
 		return self.__mats[(frame, obj)][2]
 
-	def get_scale(self, frame, obj, context):
+	def get_scale(self, frame, obj, context) -> Vector:
 		self.__guarantee_entry(frame, obj, context)
 		return self.__mats[(frame, obj)][3]
+
+	def get_tuple(self, frame, obj, context):
+		self.__guarantee_entry(frame, obj, context)
+		return [self.__mats[(frame, obj)][i] for i in range(1, 3)]
 
 
 def get_curves_action(obj: Object | PoseBone, action: Action) -> List[List[FCurve]]:
@@ -509,7 +513,7 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 					continue
 				x, y = world_to_screen(context, loc)
 				if mt.path_style == 'simple':
-					path.append([x, y, [0.0, 0.0, 0.0], frame])
+					path.append([x, y, [0.0, 0.0, 0.0, 1.0], frame])
 				else:
 					dloc = (loc - prev_loc).length
 					path.append([x, y, dloc, frame])
@@ -551,88 +555,103 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 					else:
 						path[i][2] = mt.accel_color_static
 			self.paths[ob] = path
+
+
+
 			# get keyframes and handles
 			keyframes = {}
-			handle_difs = {}
+			handle_difs = [{}, {}, {}]
 			kf_time = []
 			click = []
 
-			for fc in curves:
-				for kf in fc.keyframe_points:
-					# handles for location mode
-					if mt.mode == 'values':
-						if kf.co[0] not in handle_difs:
-							handle_difs[kf.co[0]] = {"left": Vector(),
-								"right": Vector(), "keyframe_loc": None}
-								
-						ldiff = Vector(kf.handle_left[:]) - Vector(kf.co[:])
-						rdiff = Vector(kf.handle_right[:]) - Vector(kf.co[:])
-						hdir = mt.handle_direction
-						lco = 0.0
-						rco = 0.0
-						
-						if hdir == 'time':
-							lco = ldiff.normalized()[1]
-							rco = rdiff.normalized()[1]
-						elif hdir == 'wtime':
-							lco = sum(ldiff.normalized() * Vector((0.25, 0.75)))
-							rco = sum(rdiff.normalized() * Vector((0.25, 0.75)))
-						elif hdir == 'value':
-							lco = ldiff.normalized()[0]
-							rco = rdiff.normalized()[0]
-						elif hdir == 'wloc':
-							lco = sum(ldiff.normalized() * Vector((0.75, 0.25)))
-							rco = sum(rdiff.normalized() * Vector((0.75, 0.25)))
-						elif hdir == 'len':
-							lco = -ldiff.length
-							rco = rdiff.length
-						
-						handle_difs[kf.co[0]]["left"][fc.array_index] = lco
-						handle_difs[kf.co[0]]["right"][fc.array_index] = rco
-					# keyframes
-					if kf.co[0] in kf_time:
-						continue
-					kf_time.append(kf.co[0])
-					co = kf.co[0]
+			# TODO: should this be called "categories"?
+			channels = [mt.do_location, mt.do_rotation, mt.do_scale]
 
-					loc = self.cache.get_location(co, ob, context)
-					if handle_difs:
-						handle_difs[co]["keyframe_loc"] = loc
+			for i in range(3):
+				if not channels[i]: 
+					continue
 
-					x, y = world_to_screen(context, loc)
-					keyframes[kf.co[0]] = [x, y]
-					if mt.mode != 'speed':
-						# can't select keyframes in speed mode
-						click.append([kf.co[0], "keyframe", Vector([x, y])])
+				for fc in curves[i]:
+					for kf in fc.keyframe_points:
+						# handles for values mode
+						if mt.mode == 'values':
+							if kf.co[0] not in handle_difs[i]:
+								handle_difs[i][kf.co[0]] = {"left": Vector(), "right": Vector(), "keyframe_loc": None}
+									
+							ldiff = Vector(kf.handle_left[:]) - Vector(kf.co[:])
+							rdiff = Vector(kf.handle_right[:]) - Vector(kf.co[:])
+							hdir = mt.handle_direction
+							lco = 0.0
+							rco = 0.0
+							
+							if hdir == 'time':
+								lco = ldiff.normalized()[1]
+								rco = rdiff.normalized()[1]
+							elif hdir == 'wtime':
+								lco = sum(ldiff.normalized() * Vector((0.25, 0.75)))
+								rco = sum(rdiff.normalized() * Vector((0.25, 0.75)))
+							elif hdir == 'value':
+								lco = ldiff.normalized()[0]
+								rco = rdiff.normalized()[0]
+							elif hdir == 'wloc':
+								lco = sum(ldiff.normalized() * Vector((0.75, 0.25)))
+								rco = sum(rdiff.normalized() * Vector((0.75, 0.25)))
+							elif hdir == 'len':
+								lco = -ldiff.length
+								rco = rdiff.length
+							
+							handle_difs[i][kf.co[0]]["left"][fc.array_index] = lco
+							handle_difs[i][kf.co[0]]["right"][fc.array_index] = rco
+
+						# keyframes
+						if kf.co[0] in kf_time:
+							continue
+						kf_time.append(kf.co[0])
+						kf_frame = kf.co[0]
+
+						loc = self.cache.get_location(kf_frame, ob, context)
+						handle_difs[i][kf_frame]["keyframe_loc"] = loc
+
+						x, y = world_to_screen(context, loc)
+						keyframes[i][kf.co[0]] = [x, y]
+						if mt.mode != 'speed':
+							# can't select keyframes in speed mode
+							click.append([kf.co[0], "keyframe", Vector([x, y])])
+
 			self.keyframes[ob] = keyframes
+
+
 			# handles are only shown in value-altering mode
 			if mt.mode == 'values' and mt.handle_display:
 				# calculate handle positions
 				handles = {}
-				for frame, vecs in handle_difs.items():
 
-					# Back to world space?
-					mat = inverse_getter(frame, ob, context)
-					vec_left = vecs["left"] @ mat
-					vec_right = vecs["right"] @ mat
-						
-					hlen = mt.handle_length
-					vec_left = vec_left * hlen
-					vec_right = vec_right * hlen
-					if vecs["keyframe_loc"] is not None:
-						vec_keyframe = vecs["keyframe_loc"] # TODO: is this a cache? Kill it if so!
-					else:
-						vec_keyframe = self.cache.get_location(frame, ob, context)
-					x_left, y_left = world_to_screen(
-											context, vec_left * 2 + vec_keyframe
-											)
-					x_right, y_right = world_to_screen(
-											context, vec_right * 2 + vec_keyframe
-											)
-					handles[frame] = {"left": [x_left, y_left],
-									"right": [x_right, y_right]}
-					click.append([frame, "handle_left", Vector([x_left, y_left])])
-					click.append([frame, "handle_right", Vector([x_right, y_right])])
+				for i in range(3):
+					if not channels[i]: 
+						continue
+
+					for frame, vecs in handle_difs[i].items():
+
+						# Back to world space?
+						mat = inverse_getter(frame, ob, context)
+						vec_left = vecs["left"] @ mat
+						vec_right = vecs["right"] @ mat
+							
+						hlen = mt.handle_length
+						vec_left = vec_left * hlen
+						vec_right = vec_right * hlen
+						if vecs["keyframe_loc"] is not None:
+							vec_keyframe = vecs["keyframe_loc"]
+						else:
+							vec_keyframe = self.cache.get_location(frame, ob, context) # TODO: impossible if?
+
+						x_left, y_left = world_to_screen(context, vec_left * 2 + vec_keyframe)
+						x_right, y_right = world_to_screen(context, vec_right * 2 + vec_keyframe)
+						handles[i][frame] = {"left": [x_left, y_left],
+										"right": [x_right, y_right]}
+						click.append([frame, "handle_left", Vector([x_left, y_left])])
+						click.append([frame, "handle_right", Vector([x_right, y_right])])
+				
 				self.handles[ob] = handles
 
 			# calculate timebeads for timing mode
@@ -651,53 +670,58 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 
 			# calculate timebeads for speed mode
 			if mt.mode == 'speed':
-				angles = dict([[kf, {"left": [], "right": []}] for kf in
-							  self.keyframes[ob]])
-				for fc in curves:
-					for i, kf in enumerate(fc.keyframe_points):
-						if i != 0:
-							angle = Vector([-1, 0]).angle(
-												Vector(kf.handle_left) -
-												Vector(kf.co), 0
-												)
-							if angle != 0:
-								angles[kf.co[0]]["left"].append(angle)
-						if i != len(fc.keyframe_points) - 1:
-							angle = Vector([1, 0]).angle(
-												Vector(kf.handle_right) -
-												Vector(kf.co), 0
-												)
-							if angle != 0:
-								angles[kf.co[0]]["right"].append(angle)
-				timebeads = {}
-				kf_time.sort()
-				for frame, sides in angles.items():
-					if sides["left"]:
-						perc = (sum(sides["left"]) / len(sides["left"])) / \
-							(math.pi / 2)
-						perc = max(0.4, min(1, perc * 5))
-						previous = kf_time[kf_time.index(frame) - 1]
-						bead_frame = frame - perc * ((frame - previous - 2) / 2)
+				self.timebeads[ob] = [{}, {}, {}]
 
-						loc = self.cache.get_location(bead_frame, ob, context)
+				for i in range(3):
+					if not channels[i]: 
+						continue
 
-						x, y = world_to_screen(context, loc)
-						timebeads[bead_frame] = [x, y]
-						click.append( [bead_frame, "timebead", Vector([x, y])] )
-					if sides["right"]:
-						perc = (sum(sides["right"]) / len(sides["right"])) / \
-							(math.pi / 2)
-						perc = max(0.4, min(1, perc * 5))
-						next = kf_time[kf_time.index(frame) + 1]
-						bead_frame = frame + perc * ((next - frame - 2) / 2)
+					angles = dict([[kf, {"left": [], "right": []}] for kf in self.keyframes[ob][i]])
+					for fc in curves[i]:
+						for i, kf in enumerate(fc.keyframe_points):
+							if i != 0:
+								angle = Vector([-1, 0]).angle(
+													Vector(kf.handle_left) -
+													Vector(kf.co), 0
+													)
+								if angle != 0:
+									angles[kf.co[0]]["left"].append(angle)
+							if i != len(fc.keyframe_points) - 1:
+								angle = Vector([1, 0]).angle(
+													Vector(kf.handle_right) -
+													Vector(kf.co), 0
+													)
+								if angle != 0:
+									angles[kf.co[0]]["right"].append(angle)
+					timebeads = {}
+					kf_time.sort()
+					for frame, sides in angles.items():
+						if sides["left"]:
+							perc = (sum(sides["left"]) / len(sides["left"])) / \
+								(math.pi / 2)
+							perc = max(0.4, min(1, perc * 5))
+							previous = kf_time[kf_time.index(frame) - 1]
+							bead_frame = frame - perc * ((frame - previous - 2) / 2)
 
-						loc = self.cache.get_location(bead_frame, ob, frame)
+							loc = self.cache.get_location(bead_frame, ob, context)
 
-						x, y = world_to_screen(context, loc)
-						timebeads[bead_frame] = [x, y]
-						click.append( [bead_frame, "timebead", Vector([x, y])] )
+							x, y = world_to_screen(context, loc)
+							timebeads[bead_frame] = [x, y]
+							click.append( [bead_frame, "timebead", Vector([x, y])] )
+						if sides["right"]:
+							perc = (sum(sides["right"]) / len(sides["right"])) / \
+								(math.pi / 2)
+							perc = max(0.4, min(1, perc * 5))
+							next = kf_time[kf_time.index(frame) + 1]
+							bead_frame = frame + perc * ((next - frame - 2) / 2)
 
-				self.timebeads[ob] = timebeads
+							loc = self.cache.get_location(bead_frame, ob, frame)
+
+							x, y = world_to_screen(context, loc)
+							timebeads[bead_frame] = [x, y]
+							click.append( [bead_frame, "timebead", Vector([x, y])] )
+
+				self.timebeads[ob][i] = timebeads
 
 			if mt.show_spines:
 				for frame in range(range_min, range_max + 1, mt.spine_step):
@@ -725,7 +749,6 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 					click.append( [frame, "frame", Vector([x, y])] )
 
 			self.click[ob] = click
-			# TODO: Again, should we use references here? Maybe yes
 
 		#context.preferences.edit.use_global_undo = global_undo
 
@@ -2262,15 +2285,18 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 
 	do_location: BoolProperty(name="Location",
 			description="Show and work with location keyframes",
-			default=True
+			default=True,
+			update=internal_update
 			)
 	do_rotation: BoolProperty(name="Rotation",
 			description="Show and work with rotation keyframes",
-			default=False
+			default=False,
+			update=internal_update
 			)
 	do_scale: BoolProperty(name="Scale",
 			description="Show and work with scale keyframes",
-			default=False
+			default=False,
+			update=internal_update
 			)	
 	
 			

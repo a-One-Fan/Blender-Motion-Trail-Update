@@ -2679,7 +2679,7 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			default=False
 			)
 
-	# From here on till the end, this code is structured to be easily deletable
+	# !! From here on till the end, this code is structured to be easily deletable; Look for another chunk of deletable code shortly below!
 
 	master_version: bpy.props.IntVectorProperty(
 		default=(-1, -1, -1)
@@ -2783,7 +2783,7 @@ class MotionTrailPreferences(bpy.types.AddonPreferences):
 
 		mt: MotionTrailProps = context.window_manager.motion_trail
 
-		#deletable code
+		# !! Deletable code part 2
 		col.operator("info.motion_trail_check_update")
 		if mt.version_checked[0] or mt.version_checked[1]:
 			if mt.version_checked[0]:

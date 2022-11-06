@@ -67,6 +67,9 @@ def mul4(tup1, tup2):
 def mulscalar(tup, scalar):
 	return (* [tup[i]*scalar for i in range(4)],)
 
+def make_chan(i):
+	return tuple([j == i for j in range(3)])
+
 # Flattens recursively.
 def flatten(deeplist):
 	flatlist = []
@@ -517,12 +520,12 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 	self.last_frame = context.scene.frame_float
 
 	# dictionaries with key: objectname
-	self.paths = {} 	 # value: list of lists with x, y, color and frame
-	self.keyframes = {}  # value: dict with frame as key and [x,y] as value
-	self.handles = {}    # value: dict of dicts
-	self.timebeads = {}  # value: dict with frame as key and [x,y] as value
-	self.click = {} 	 # value: list of lists with frame, type, loc-vector
-	self.spines = {}     # value: dict with frame as key and [x0,y0, [(x1, y1), (x2,y2), ...]] as values, for 1..6 where xy1,2,3 = +x,+y,+z and x4,5,6 = -x,-y,-z
+	self.paths = {} 	           # value: list of lists with x, y, color and frame
+	self.keyframes = {}            # value: dict with frame as key and [x,y] as value
+	self.handles = {}    # value: {ob: [{frame: {"left": co, "right":co}, ...} x3], ...}
+	self.timebeads = {}            # value: dict with frame as key and [x,y] as value
+	self.click = {} 	           # value: list of lists with frame, type, loc-vector
+	self.spines = {}               # value: dict with frame as key and [x0,y0, [(x1, y1), (x2,y2), ...]] as values, for 1..6 where xy1,2,3 = +x,+y,+z and x4,5,6 = -x,-y,-z
 	if selection_change:
 		# value: editbone inverted rotation matrix or None
 		self.active_keyframe = False
@@ -622,9 +625,6 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 			# TODO: should this be called "categories"?
 			channels = (mt.do_location, mt.do_rotation, mt.do_scale)
 
-			def make_chan(i):
-				return tuple([j == i for j in range(3)])
-
 			for chan in range(3):
 				if not channels[chan]: 
 					continue
@@ -687,11 +687,11 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 				# calculate handle positions
 				handles = [{}, {}, {}]
 
-				for i in range(3):
-					if not channels[i]: 
+				for chan in range(3):
+					if not channels[chan]: 
 						continue
 
-					for frame, vecs in handle_difs[i].items():
+					for frame, vecs in handle_difs[chan].items():
 
 						# Back to world space?
 						mat = inverse_getter(frame, ob, context)
@@ -706,12 +706,12 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 						x_left, y_left = world_to_screen(context, vec_left * 2 + vec_keyframe)
 						x_right, y_right = world_to_screen(context, vec_right * 2 + vec_keyframe)
 
-						handles[i][frame] = {"left": [x_left, y_left], "right": [x_right, y_right]}
+						handles[chan][frame] = {"left": [x_left, y_left], "right": [x_right, y_right]}
 
 						click.append([frame, "handle_left", Vector([x_left, y_left]), make_chan(chan)])
 						click.append([frame, "handle_right", Vector([x_right, y_right]), make_chan(chan)])
 				
-				self.handles[ob] = {} # TODO: Handle merging
+				self.handles[ob] = handles # !! Handles are stored unmerged.
 
 			# calculate timebeads for timing mode
 			if mt.mode == 'timing':
@@ -896,7 +896,7 @@ def draw_callback(self, context):
 		colored_line_shader.bind()
 		colored_line_shader.uniform_float("lineWidth", width)
 		simple_color = mt.simple_color
-		for objectname, path in self.paths.items():
+		for ob, path in self.paths.items():
 			for x, y, color, frame in path:
 				if frame < limit_min or frame > limit_max:
 					continue
@@ -1026,52 +1026,55 @@ def draw_callback(self, context):
 		colored_line_shader.uniform_float("lineWidth", 2)
 		poss = []
 		cols = []
-		for ob, values in self.handles.items():
-			for frame, sides in values.items():
-				if frame < limit_min or frame > limit_max:
-					continue
-				for side, coords in sides.items():
-					if self.active_handle and \
-					ob == self.active_handle[0] and \
-					side == self.active_handle[2] and \
-					abs(frame - self.active_handle[1]) < 1e-4:
-						cols.append(mt.selection_color_dark)
-						poss.append((self.keyframes[ob][frame][0],
-							self.keyframes[ob][frame][1], 0.0))
-						cols.append(mt.selection_color_dark)
-						poss.append((coords[0], coords[1], 0.0))
-						
-					else:
-						cols.append(mt.handle_line_color)
-						poss.append((self.keyframes[ob][frame][0],
-							self.keyframes[ob][frame][1], 0.0))
-						cols.append(mt.handle_line_color)
-						poss.append((coords[0], coords[1], 0.0))
+
+		for chan in range(3): #TODO: Less magic numbers!
+			for ob, values in self.handles.items():
+				for frame, sides in values[chan].items():
+					if frame < limit_min or frame > limit_max:
+						continue
+					for side, coords in sides.items():
+						if self.active_handle and \
+						ob == self.active_handle[0] and \
+						side == self.active_handle[2] and \
+						abs(frame - self.active_handle[1]) < 1e-4:
+							cols.append(mt.selection_color_dark)
+							poss.append((self.keyframes[ob][frame][0][0],
+								self.keyframes[ob][frame][0][1], 0.0))
+							cols.append(mt.selection_color_dark)
+							poss.append((coords[0], coords[1], 0.0))
+							
+						else:
+							cols.append(mt.handle_line_color)
+							poss.append((self.keyframes[ob][frame][0][0],
+								self.keyframes[ob][frame][0][1], 0.0))
+							cols.append(mt.handle_line_color)
+							poss.append((coords[0], coords[1], 0.0))
 			if(not (cols == []) and not (poss == [])):
 				batch = batch_for_shader(colored_line_shader, 'LINES', {"pos": poss, "color": cols})
 				batch.draw(colored_line_shader)
 				poss.clear()
-				cols.clear()
+				cols.clear() #TODO: Less drawcalls? Not a big performance concern, sadly, compared to dg
 
 		# draw handles
 		colored_points_shader.bind()
 		gpu.state.point_size_set(4.0)
 		point_poss = []
 		point_cols = []
-		for ob, values in self.handles.items():
-			for frame, sides in values.items():
-				if frame < limit_min or frame > limit_max:
-					continue
-				for side, coords in sides.items():
-					if self.active_handle and \
-					ob == self.active_handle[0] and \
-					side == self.active_handle[2] and \
-					abs(frame - self.active_handle[1]) < 1e-4:
-						point_poss.append((coords[0], coords[1]))
-						point_cols.append(mt.selection_color)
-					else:
-						point_poss.append((coords[0], coords[1]))
-						point_cols.append(colors_cooked[channels])
+		for chan in range(3):
+			for ob, values in self.handles.items():
+				for frame, sides in values[chan].items():
+					if frame < limit_min or frame > limit_max:
+						continue
+					for side, coords in sides.items():
+						if self.active_handle and \
+						ob == self.active_handle[0] and \
+						side == self.active_handle[2] and \
+						abs(frame - self.active_handle[1]) < 1e-4:
+							point_poss.append((coords[0], coords[1]))
+							point_cols.append(mt.selection_color)
+						else:
+							point_poss.append((coords[0], coords[1]))
+							point_cols.append(colors_cooked[make_chan(chan)])
 		if(not (point_poss == []) and not (point_cols == [])):
 			batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
 			batch.draw(colored_points_shader)
@@ -2001,7 +2004,7 @@ class MotionTrailOperator(bpy.types.Operator):
 			self.displayed = []
 			self.paths = {}
 			self.keyframes = {}
-			self.handles = {}
+			self.handles = [{}, {}, {}]
 			self.timebeads = {}
 			self.spines = {} 
 			self.constraint_axes = [False, False, False]

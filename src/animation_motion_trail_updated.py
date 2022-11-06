@@ -1898,7 +1898,8 @@ class MotionTrailOperator(bpy.types.Operator):
 			self.timebeads = {}
 			self.spines = {} 
 			self.constraint_axes = [False, False, False]
-			constraint_orientation = False
+			self.constraint_orientation = False
+			self.affect_all_channels = False
 
 			self.highlighted_coord = None
 			self.last_frame = -1

@@ -793,14 +793,22 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 			if mt.show_spines:
 				for frame in range(range_min, range_max + 1, mt.spine_step):
 					loc = self.cache.get_location(frame, ob, context)
-					rot = self.cache.get_rotation(frame, ob, context)
+					if mt.spine_do_rotation:
+						rot = self.cache.get_rotation(frame, ob, context)
+					else:
+						rot = Euler()
+
+					if mt.spine_do_scale:
+						scl = self.cache.get_scale(frame, ob, context)
+					else:
+						scl = Vector((1.0, 1.0, 1.0))
 
 					baseLoc = world_to_screen(context, loc)
 
 					slen = mt.spine_length
 
 					resLocs = []
-					vecs = ((slen, 0, 0), (0, slen, 0), (0, 0, slen), (-slen, 0, 0), (0, -slen, 0), (0, 0, -slen))
+					vecs = ((slen * scl[0], 0, 0), (0, slen * scl[1], 0), (0, 0, slen * scl[2]), (-slen * scl[0], 0, 0), (0, -slen * scl[1], 0), (0, 0, -slen * scl[2]))
 					for i in range(6):
 						vec = Vector(vecs[i])
 						vec.rotate(rot)
@@ -2218,9 +2226,13 @@ class MotionTrailPanel(bpy.types.Panel):
 			pSpineStrings = ["pXspines", "pYspines", "pZspines"]
 			nSpineStrings = ["nXspines", "nYspines", "nZspines"]
 			spineColorStrings = ["spine_x_color", "spine_y_color", "spine_z_color"]
+			
+			spine_do_row = col.row()
+			spine_do_row.prop(mt, "spine_do_rotation")
+			spine_do_row.prop(mt, "spine_do_scale")
 
-			col.row().prop(mt, "spine_length")
 			col.row().prop(mt, "spine_step")
+			col.row().prop(mt, "spine_length")
 			col.row().prop(mt, "spine_offset")
 
 			row = col.row()
@@ -2491,6 +2503,17 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			min=1,
 			soft_max=10,
 			update=internal_update,
+			)
+
+	spine_do_rotation: BoolProperty(name="Do Rotation",
+			description="Whether the spines will rotate themselves with the object's rotation",
+			default=True,
+			update=internal_update
+			)
+	spine_do_scale: BoolProperty(name="Do Scale",
+			description="Whether the spines will scale their length with the object's scale",
+			default=False,
+			update=internal_update
 			)
 
 	#Colors

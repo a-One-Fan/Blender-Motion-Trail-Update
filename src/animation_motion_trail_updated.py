@@ -2740,7 +2740,8 @@ def compare_ver(tup1, tup2):
 			
 configurable_props = ["use_depsgraph", "select_key", "select_threshold", "deselect_nohit_key", "deselect_always_key", "deselect_passthrough", "mode", "path_style", 
 "simple_color", "speed_color_min", "speed_color_max", "accel_color_neg", "accel_color_static", "accel_color_pos",
-"keyframe_color", "frame_color", "selection_color", "selection_color_dark", "highlight_color", "handle_line_color", "timebead_color", 
+"keyframe_color", "frame_color", "selection_color", "selection_color_dark", "highlight_color", 
+["handle_color_loc", "handle_color_rot", "handle_color_scl"], "handle_color_fac", "handle_line_color", "timebead_color", 
 "text_color", "selected_text_color", "path_width", "path_step", "path_before", "path_after",
 "keyframe_numbers", "frame_display", "handle_display", "handle_length", "handle_direction", "show_spines", "spine_length", "spine_step", "spine_offset",
 ["pXspines", "pYspines", "pZspines"], ["nXspines", "nYspines", "nZspines"], ["spine_x_color", "spine_y_color", "spine_z_color"]]

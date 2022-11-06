@@ -619,7 +619,7 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 				for fc in curves[i]:
 					for kf in fc.keyframe_points:
 						# handles for values mode
-						if mt.mode == 'values':
+						if True:
 							if kf.co[0] not in handle_difs[i]:
 								handle_difs[i][kf.co[0]] = {"left": Vector(), "right": Vector(), "keyframe_loc": None}
 									
@@ -659,7 +659,6 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 
 							x, y = world_to_screen(context, loc)
 							keyframes[i][kf_frame] = [[x, y], channels]
-
 				lasti = i
 
 			if sum(channels) <= 1:
@@ -667,7 +666,7 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 			else:
 				self.keyframes[ob] = merge_dicts(keyframes)
 
-			if mt.mode != 'speed':
+			if mt.mode == 'values':
 				# can't select keyframes in speed mode
 				for kf_frame, [coords, kf_channels] in self.keyframes[ob].items():
 					click.append( [kf_frame, "keyframe", Vector(coords), kf_channels] )
@@ -724,12 +723,12 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 				timebead_container = [{}, {}, {}]
 				lasti = 0
 
-				for i in range(3):
-					if not channels[i]: 
+				for chan in range(3):
+					if not channels[chan]: 
 						continue
 
-					angles = dict([[kf, {"left": [], "right": []}] for kf in self.keyframes[ob][i]])
-					for fc in curves[i]:
+					angles = dict([[kf_frame, {"left": [], "right": []}] for kf_frame, [kf, kf_channels] in keyframes[chan].items()])
+					for fc in curves[chan]:
 						for i, kf in enumerate(fc.keyframe_points):
 							if i != 0:
 								angle = Vector([-1, 0]).angle(
@@ -737,6 +736,9 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 													Vector(kf.co), 0
 													)
 								if angle != 0:
+									print(angles)
+									print(kf.co[0])
+									print(angles[kf.co[0]])
 									angles[kf.co[0]]["left"].append(angle)
 							if i != len(fc.keyframe_points) - 1:
 								angle = Vector([1, 0]).angle(
@@ -766,13 +768,13 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 							next = kf_time[kf_time.index(frame) + 1]
 							bead_frame = frame + perc * ((next - frame - 2) / 2)
 
-							loc = self.cache.get_location(bead_frame, ob, frame)
+							loc = self.cache.get_location(bead_frame, ob, context)
 
 							x, y = world_to_screen(context, loc)
 							timebeads[bead_frame] = [[x, y], channels]
 
-					timebead_container[i] = timebeads
-					lasti = i
+					timebead_container[chan] = timebeads
+					lasti = chan
 
 				if sum(channels) <= 1:
 					self.timebeads[ob] = timebead_container[lasti]

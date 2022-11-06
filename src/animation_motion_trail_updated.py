@@ -453,6 +453,7 @@ def merge_items(enum1, enum2, mergec = 3):
 			res.append([enum1[i][0], [enum1[i][1][0], indices_merged]])
 			i += 1
 			j += 1
+			continue
 		if enum1[i][0] < enum2[j][0]:
 			res.append([enum1[i][0], enum1[i][1]])
 			i += 1
@@ -615,11 +616,14 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 			# get keyframes and handles
 			keyframes = [{}, {}, {}]
 			handle_difs = [{}, {}, {}]
-			kf_time = []
+			kf_time = [[], [], []]
 			click = []
 
 			# TODO: should this be called "categories"?
 			channels = (mt.do_location, mt.do_rotation, mt.do_scale)
+
+			def make_chan(i):
+				return tuple([j == i for j in range(3)])
 
 			for chan in range(3):
 				if not channels[chan]: 
@@ -658,14 +662,14 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 							handle_difs[chan][kf.co[0]]["right"][fc.array_index] = rco
 
 						# keyframes
-						if kf.co[0] in kf_time:
+						if kf.co[0] in kf_time[chan]:
 							continue
-						kf_time.append(kf.co[0])
+						kf_time[chan].append(kf.co[0])
 						kf_frame = kf.co[0]
 
 						loc = self.cache.get_location(kf_frame, ob, context)
 						x, y = world_to_screen(context, loc)
-						keyframes[chan][kf_frame] = [[x, y], channels]
+						keyframes[chan][kf_frame] = [[x, y], make_chan(chan)]
 				lasti = chan
 
 			if sum(channels) <= 1:
@@ -697,22 +701,22 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 						hlen = mt.handle_length
 						vec_left = vec_left * hlen
 						vec_right = vec_right * hlen
-						vec_keyframe = self.cache.get_location(frame, ob, context) # TODO: impossible if?
+						vec_keyframe = self.cache.get_location(frame, ob, context)
 
 						x_left, y_left = world_to_screen(context, vec_left * 2 + vec_keyframe)
 						x_right, y_right = world_to_screen(context, vec_right * 2 + vec_keyframe)
 
 						handles[i][frame] = {"left": [x_left, y_left], "right": [x_right, y_right]}
 
-						click.append([frame, "handle_left", Vector([x_left, y_left]), channels])
-						click.append([frame, "handle_right", Vector([x_right, y_right]), channels])
+						click.append([frame, "handle_left", Vector([x_left, y_left]), make_chan(chan)])
+						click.append([frame, "handle_right", Vector([x_right, y_right]), make_chan(chan)])
 				
 				self.handles[ob] = {} # TODO: Handle merging
 
 			# calculate timebeads for timing mode
 			if mt.mode == 'timing':
 				timebeads = {}
-				n = mt.timebeads * (len(kf_time) - 1)
+				n = mt.timebeads * (len(kf_time[0]) + len(kf_time[1]) + len(kf_time[2]) - 1) # TODO: Is this correct?
 				dframe = (range_max - range_min) / (n + 1)
 
 				for i in range(1, n + 1):
@@ -720,7 +724,7 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 					loc = self.cache.get_location(frame, ob, context)
 					x, y = world_to_screen(context, loc)
 					timebeads[frame] = [[x, y], channels]
-					click.append( [frame, "timebead", Vector([x, y]), channels] )
+					click.append( [frame, "timebead", Vector([x, y]), make_chan(chan)] )
 				self.timebeads[ob] = timebeads
 
 			# calculate timebeads for speed mode
@@ -750,13 +754,13 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 								if angle != 0:
 									angles[kf.co[0]]["right"].append(angle)
 					timebeads = {}
-					kf_time.sort()
+					kf_time[chan].sort()
 					for frame, sides in angles.items():
 						if sides["left"]:
 							perc = (sum(sides["left"]) / len(sides["left"])) / \
 								(math.pi / 2)
 							perc = max(0.4, min(1, perc * 5))
-							previous = kf_time[kf_time.index(frame) - 1]
+							previous = kf_time[chan][kf_time[chan].index(frame) - 1]
 							bead_frame = frame - perc * ((frame - previous - 2) / 2)
 
 							loc = self.cache.get_location(bead_frame, ob, context)
@@ -767,13 +771,13 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 							perc = (sum(sides["right"]) / len(sides["right"])) / \
 								(math.pi / 2)
 							perc = max(0.4, min(1, perc * 5))
-							next = kf_time[kf_time.index(frame) + 1]
+							next = kf_time[chan][kf_time[chan].index(frame) + 1]
 							bead_frame = frame + perc * ((next - frame - 2) / 2)
 
 							loc = self.cache.get_location(bead_frame, ob, context)
 
 							x, y = world_to_screen(context, loc)
-							timebeads[bead_frame] = [[x, y], channels]
+							timebeads[bead_frame] = [[x, y], make_chan(chan)]
 
 					timebead_container[chan] = timebeads
 					lasti = chan
@@ -1091,9 +1095,6 @@ def draw_callback(self, context):
 			else:
 				point_poss.append((coords[0], coords[1]))
 				point_cols.append(colors_cooked[channels])
-				print(channels)
-				print(colors_cooked[channels])
-				print("\n")
 	if(not (point_poss == []) and not (point_cols == [])):
 		batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
 		batch.draw(colored_points_shader)

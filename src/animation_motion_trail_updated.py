@@ -428,7 +428,7 @@ def get_original_animation_data_ce(context, keyframes):
 	newCache = MatrixCache(get_matrix_any_custom_eval)
 	return get_original_animation_data(context, keyframes, newCache)
 
-def merge_enumerated(enum1, enum2, mergec = 3):
+def merge_items(enum1, enum2, mergec = 3):
 	"""Merge 2 sorted lists of structure [[frame, stuff, [bool, bool, bool, ... mergec times]], ...]"""
 
 	def mergetruth(l1, l2):
@@ -451,25 +451,25 @@ def merge_enumerated(enum1, enum2, mergec = 3):
 			res.append([enum2[j][0], enum2[j][1]])
 			j += 1
 						
-		while i<len(enum1):
-			res.append([enum1[i][0], enum1[i][1]])
-			i += 1
+	while i<len(enum1):
+		res.append([enum1[i][0], enum1[i][1]])
+		i += 1
 
-		while j<len(enum2):
-			res.append([enum2[j][0], enum2[j][1]])
-			j += 1
+	while j<len(enum2):
+		res.append([enum2[j][0], enum2[j][1]])
+		j += 1
 
 	return res
 
 def merge_dicts(dict_list):
 	"""Merge dicts in a list, with structure [Dict(frame, [stuff, [bool, bool, ...]])] into a single Dict(frame, [stuff, [bool, bool, bool]])"""
 
-	enumerated = [enumerate(a_dict) for a_dict in dict_list]
+	itemized = [list(a_dict.items()) for a_dict in dict_list]
 
-	merged_lists = merge_enumerated(enumerated[0], merge_enumerated(enumerated[1], enumerated[2]))
+	merged_lists = merge_items(itemized[0], merge_items(itemized[1], itemized[2]))
 	final_dict = {}
 	for elem in merged_lists:
-		final_dict[elem[0]] = [elem[1], elem[2]]
+		final_dict[elem[0]] = elem[1]
 
 	return final_dict
 
@@ -612,16 +612,16 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 			# TODO: should this be called "categories"?
 			channels = [mt.do_location, mt.do_rotation, mt.do_scale]
 
-			for i in range(3):
-				if not channels[i]: 
+			for chan in range(3):
+				if not channels[chan]: 
 					continue
 
-				for fc in curves[i]:
+				for fc in curves[chan]:
 					for kf in fc.keyframe_points:
 						# handles for values mode
 						if mt.mode == "values":
-							if kf.co[0] not in handle_difs[i]:
-								handle_difs[i][kf.co[0]] = {"left": Vector(), "right": Vector()}
+							if kf.co[0] not in handle_difs[chan]:
+								handle_difs[chan][kf.co[0]] = {"left": Vector(), "right": Vector()}
 									
 							ldiff = Vector(kf.handle_left[:]) - Vector(kf.co[:])
 							rdiff = Vector(kf.handle_right[:]) - Vector(kf.co[:])
@@ -645,8 +645,8 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 								lco = -ldiff.length
 								rco = rdiff.length
 							
-							handle_difs[i][kf.co[0]]["left"][fc.array_index] = lco
-							handle_difs[i][kf.co[0]]["right"][fc.array_index] = rco
+							handle_difs[chan][kf.co[0]]["left"][fc.array_index] = lco
+							handle_difs[chan][kf.co[0]]["right"][fc.array_index] = rco
 
 						# keyframes
 						if kf.co[0] in kf_time:
@@ -654,9 +654,10 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 						kf_time.append(kf.co[0])
 						kf_frame = kf.co[0]
 
+						loc = self.cache.get_location(kf_frame, ob, context)
 						x, y = world_to_screen(context, loc)
-						keyframes[i][kf_frame] = [[x, y], channels]
-				lasti = i
+						keyframes[chan][kf_frame] = [[x, y], channels]
+				lasti = chan
 
 			if sum(channels) <= 1:
 				self.keyframes[ob] = keyframes[lasti]
@@ -691,8 +692,9 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 
 						x_left, y_left = world_to_screen(context, vec_left * 2 + vec_keyframe)
 						x_right, y_right = world_to_screen(context, vec_right * 2 + vec_keyframe)
-						handles[i][frame] = {"left": [x_left, y_left],
-										"right": [x_right, y_right]}
+
+						handles[i][frame] = {"left": [x_left, y_left], "right": [x_right, y_right]}
+
 						click.append([frame, "handle_left", Vector([x_left, y_left]), channels])
 						click.append([frame, "handle_right", Vector([x_right, y_right]), channels])
 				
@@ -730,9 +732,6 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 													Vector(kf.co), 0
 													)
 								if angle != 0:
-									print(angles)
-									print(kf.co[0])
-									print(angles[kf.co[0]])
 									angles[kf.co[0]]["left"].append(angle)
 							if i != len(fc.keyframe_points) - 1:
 								angle = Vector([1, 0]).angle(

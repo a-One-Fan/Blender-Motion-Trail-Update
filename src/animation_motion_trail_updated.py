@@ -700,8 +700,8 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 						x_right, y_right = world_to_screen(context, vec_right * 2 + vec_keyframe)
 						handles[i][frame] = {"left": [x_left, y_left],
 										"right": [x_right, y_right]}
-						click.append([frame, "handle_left", Vector([x_left, y_left])])
-						click.append([frame, "handle_right", Vector([x_right, y_right])])
+						click.append([frame, "handle_left", Vector([x_left, y_left]), channels])
+						click.append([frame, "handle_right", Vector([x_right, y_right]), channels])
 				
 				self.handles[ob] = {} # TODO: Handle merging
 
@@ -805,7 +805,7 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 			if mt.frame_display:
 				path = self.paths[ob]
 				for x, y, color, frame in path:
-					click.append( [frame, "frame", Vector([x, y])] )
+					click.append( [frame, "frame", Vector([x, y]), channels] )
 
 			self.click[ob] = click
 
@@ -1862,7 +1862,7 @@ class MotionTrailOperator(bpy.types.Operator):
 			for ob, values in self.click.items():
 				if found:
 					break
-				for frame, type, coord in values:
+				for frame, type, coord, channels in values:
 					if frame < frame_min or frame > frame_max:
 						continue
 					if (coord - clicked).length <= threshold:

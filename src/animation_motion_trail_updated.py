@@ -58,6 +58,15 @@ from mathutils import Matrix, Vector, Quaternion, Euler
 def lerp4(fac, tup1, tup2):
 	return (* [tup1[i] * fac + tup2[i]*(1.0-fac) for i in range(4)],)
 
+def add4(tup1, tup2):
+	return (* [tup1[i] + tup2[i] for i in range(4)],)
+
+def mul4(tup1, tup2):
+	return (* [tup1[i]*tup2[i] for i in range(4)],)
+
+def mulscalar(tup, scalar):
+	return (* [tup[i]*scalar for i in range(4)],)
+
 # Flattens recursively.
 def flatten(deeplist):
 	flatlist = []
@@ -432,7 +441,7 @@ def merge_items(enum1, enum2, mergec = 3):
 	"""Merge 2 sorted lists of structure [[frame, stuff, [bool, bool, bool, ... mergec times]], ...]"""
 
 	def mergetruth(l1, l2):
-		return [l1[i] or l2[i] for i in range(mergec)]
+		return tuple([l1[i] or l2[i] for i in range(mergec)])
 
 	i, j = 0, 0
 	res = []
@@ -610,7 +619,7 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 			click = []
 
 			# TODO: should this be called "categories"?
-			channels = [mt.do_location, mt.do_rotation, mt.do_scale]
+			channels = (mt.do_location, mt.do_rotation, mt.do_scale)
 
 			for chan in range(3):
 				if not channels[chan]: 
@@ -848,6 +857,24 @@ def draw_callback(self, context):
 		limit_max = context.scene.frame_current + mt.path_after
 	else:
 		limit_max = 1e6
+
+	colors_cooked = {}
+	chans = [(True, False, False), (False, True, False), (False, False, True), (True, True, False), (False, True, True), (True, False, True), (True, True, True)]
+	colors_base = [tuple(mt.handle_color_loc), tuple(mt.handle_color_rot), tuple(mt.handle_color_scl)]
+	zeroadd = [0.0, 0.0, 0.0, 0.0]
+	zeromul = [1.0, 1.0, 1.0, 1.0]
+	for c in chans:
+		colors_add = [(colors_base[i] if c[i] else zeroadd) for i in range(3)]
+		colors_mul = [(colors_base[i] if c[i] else zeromul) for i in range(3)]
+
+		mulled = mul4(colors_mul[0], mul4(colors_mul[1], colors_mul[2]))
+		added = add4(colors_add[0], add4(colors_add[1], colors_add[2]))
+
+		final = lerp4(mt.handle_color_fac, added, mulled)
+
+		colors_cooked[c] = final
+
+
 	# draw motion path
 	width = mt.path_width
 	#uniform_line_shader = gpu.shader.from_builtin('3D_POLYLINE_UNIFORM_COLOR')
@@ -1040,7 +1067,7 @@ def draw_callback(self, context):
 						point_cols.append(mt.selection_color)
 					else:
 						point_poss.append((coords[0], coords[1]))
-						point_cols.append(mt.handle_color)
+						point_cols.append(colors_cooked[channels])
 		if(not (point_poss == []) and not (point_cols == [])):
 			batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
 			batch.draw(colored_points_shader)
@@ -1063,7 +1090,10 @@ def draw_callback(self, context):
 				point_cols.append(mt.selection_color)
 			else:
 				point_poss.append((coords[0], coords[1]))
-				point_cols.append(mt.handle_color)
+				point_cols.append(colors_cooked[channels])
+				print(channels)
+				print(colors_cooked[channels])
+				print("\n")
 	if(not (point_poss == []) and not (point_cols == [])):
 		batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
 		batch.draw(colored_points_shader)
@@ -2157,7 +2187,15 @@ class MotionTrailPanel(bpy.types.Panel):
 
 		box = self.layout.box()
 		col = box.column(align=True)
-		col.row().prop(mt, "handle_color")
+		col.row().label(text="Handle colors:")
+		handle_color_row = col.row()
+		handle_color_row.prop(mt, "handle_color_loc", text="Loc")
+		handle_color_row.prop(mt, "handle_color_rot", text="Rot")
+		handle_color_row.prop(mt, "handle_color_scl", text="Scale")
+
+		handle_fac_row = col.row()
+		handle_fac_row.prop(mt, "handle_color_fac")
+		#handle_fac_row.prop(mt, "handle_color_mul", "Mul fac")
 		col.row().prop(mt, "selection_color")
 		col.row().prop(mt, "highlight_color")
 		col.row().prop(mt, "select_key")
@@ -2515,13 +2553,34 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			size=4,
 			subtype='COLOR'
 			)
-	handle_color: FloatVectorProperty(name="Handle color",
-			description="Color that unselected handles and keyframes will be colored in",
-			default=(1.0, 1.0, 0.0, 1.0),
+
+	handle_color_loc: FloatVectorProperty(name="Location handle color",
+			description="Color that unselected location handles and keyframes will be colored in",
+			default=(1.0, 0.1, 0.1, 1.0),
 			min=0.0, soft_max=1.0,
 			size=4,
 			subtype='COLOR'
 			)
+	handle_color_rot: FloatVectorProperty(name="Rotation handle color",
+			description="Color that unselected rotation handles and keyframes will be colored in",
+			default=(0.1, 1.0, 0.1, 1.0),
+			min=0.0, soft_max=1.0,
+			size=4,
+			subtype='COLOR'
+			)
+	handle_color_scl: FloatVectorProperty(name="Scale handle color",
+			description="Color that unselected scale handles and keyframes will be colored in",
+			default=(0.1, 0.1, 1.0, 1.0),
+			min=0.0, soft_max=1.0,
+			size=4,
+			subtype='COLOR'
+			)
+	handle_color_fac: FloatProperty(name="Color factor",
+			description="Factor for how much of the added or multiplied color is included in the final handle color",
+			default=0.5,
+			soft_min=0.0, soft_max=1.0,
+			)
+
 	handle_line_color: FloatVectorProperty(name="Handle line color",
 			description="Color that unselected handle lines will be colored in",
 			default=(0.0, 0.0, 0.0, 1.0),
@@ -2680,7 +2739,7 @@ def compare_ver(tup1, tup2):
 			
 configurable_props = ["use_depsgraph", "select_key", "select_threshold", "deselect_nohit_key", "deselect_always_key", "deselect_passthrough", "mode", "path_style", 
 "simple_color", "speed_color_min", "speed_color_max", "accel_color_neg", "accel_color_static", "accel_color_pos",
-"keyframe_color", "frame_color", "selection_color", "selection_color_dark", "highlight_color", "handle_color", "handle_line_color", "timebead_color", 
+"keyframe_color", "frame_color", "selection_color", "selection_color_dark", "highlight_color", "handle_line_color", "timebead_color", 
 "text_color", "selected_text_color", "path_width", "path_step", "path_before", "path_after",
 "keyframe_numbers", "frame_display", "handle_display", "handle_length", "handle_direction", "show_spines", "spine_length", "spine_step", "spine_offset",
 ["pXspines", "pYspines", "pZspines"], ["nXspines", "nYspines", "nZspines"], ["spine_x_color", "spine_y_color", "spine_z_color"]]

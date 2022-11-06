@@ -170,7 +170,7 @@ def get_curves(obj: Object | PoseBone):
 	if type(obj) is PoseBone:
 		animDataContainer = obj.id_data
 
-	if not animDataContainer.action:
+	if not animDataContainer.animation_data.action:
 		return []
 	
 	return get_curves_action(obj, animDataContainer.animation_data.action)

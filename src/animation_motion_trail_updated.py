@@ -649,18 +649,18 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 							handle_difs[i][kf.co[0]]["right"][fc.array_index] = rco
 
 						# keyframes
-						if kf.co[0] in kf_time:
-							continue
-						kf_time.append(kf.co[0])
-						kf_frame = kf.co[0]
+							if kf.co[0] in kf_time:
+								continue
+							kf_time.append(kf.co[0])
+							kf_frame = kf.co[0]
 
-						loc = self.cache.get_location(kf_frame, ob, context)
-						handle_difs[i][kf_frame]["keyframe_loc"] = loc
+							loc = self.cache.get_location(kf_frame, ob, context)
+							handle_difs[i][kf_frame]["keyframe_loc"] = loc
 
-						x, y = world_to_screen(context, loc)
-						keyframes[i][kf_frame] = [[x, y], channels]
+							x, y = world_to_screen(context, loc)
+							keyframes[i][kf_frame] = [[x, y], channels]
 
-					lasti = i
+				lasti = i
 
 			if sum(channels) <= 1:
 				self.keyframes[ob] = keyframes[lasti]

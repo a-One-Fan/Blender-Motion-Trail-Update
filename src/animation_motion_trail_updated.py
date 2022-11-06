@@ -619,9 +619,9 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 				for fc in curves[i]:
 					for kf in fc.keyframe_points:
 						# handles for values mode
-						if True:
+						if mt.mode == "values":
 							if kf.co[0] not in handle_difs[i]:
-								handle_difs[i][kf.co[0]] = {"left": Vector(), "right": Vector(), "keyframe_loc": None}
+								handle_difs[i][kf.co[0]] = {"left": Vector(), "right": Vector()}
 									
 							ldiff = Vector(kf.handle_left[:]) - Vector(kf.co[:])
 							rdiff = Vector(kf.handle_right[:]) - Vector(kf.co[:])
@@ -649,16 +649,13 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 							handle_difs[i][kf.co[0]]["right"][fc.array_index] = rco
 
 						# keyframes
-							if kf.co[0] in kf_time:
-								continue
-							kf_time.append(kf.co[0])
-							kf_frame = kf.co[0]
+						if kf.co[0] in kf_time:
+							continue
+						kf_time.append(kf.co[0])
+						kf_frame = kf.co[0]
 
-							loc = self.cache.get_location(kf_frame, ob, context)
-							handle_difs[i][kf_frame]["keyframe_loc"] = loc
-
-							x, y = world_to_screen(context, loc)
-							keyframes[i][kf_frame] = [[x, y], channels]
+						x, y = world_to_screen(context, loc)
+						keyframes[i][kf_frame] = [[x, y], channels]
 				lasti = i
 
 			if sum(channels) <= 1:
@@ -666,7 +663,7 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 			else:
 				self.keyframes[ob] = merge_dicts(keyframes)
 
-			if mt.mode == 'values':
+			if mt.mode != 'speed':
 				# can't select keyframes in speed mode
 				for kf_frame, [coords, kf_channels] in self.keyframes[ob].items():
 					click.append( [kf_frame, "keyframe", Vector(coords), kf_channels] )
@@ -690,10 +687,7 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 						hlen = mt.handle_length
 						vec_left = vec_left * hlen
 						vec_right = vec_right * hlen
-						if vecs["keyframe_loc"] is not None:
-							vec_keyframe = vecs["keyframe_loc"]
-						else:
-							vec_keyframe = self.cache.get_location(frame, ob, context) # TODO: impossible if?
+						vec_keyframe = self.cache.get_location(frame, ob, context) # TODO: impossible if?
 
 						x_left, y_left = world_to_screen(context, vec_left * 2 + vec_keyframe)
 						x_right, y_right = world_to_screen(context, vec_right * 2 + vec_keyframe)

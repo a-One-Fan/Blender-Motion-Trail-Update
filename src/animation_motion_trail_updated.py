@@ -500,8 +500,7 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 			# get location data of motion path
 			path = []
 			speeds = []
-			# TODO: Un-invert step size. People know what step sizes are, this is already a property used in Blender as well.
-			step = 11 - mt.path_resolution
+			step = mt.path_step
 
 			prev_loc = self.cache.get_location(range_min - 1, ob, context)
 			for frame in range(range_min, range_max + 1, step):
@@ -2053,7 +2052,7 @@ class MotionTrailPanel(bpy.types.Panel):
 			grouped.prop(mt, "path_width",
 				text="Width")
 			grouped.prop(mt,
-				"path_resolution")
+				"path_step")
 			row = grouped.row(align=True)
 			row.prop(mt, "path_before")
 			row.prop(mt, "path_after")
@@ -2220,10 +2219,9 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			description="Display path options",
 			default=True
 			)
-	path_resolution: IntProperty(name="Resolution",
-			description="10 is smoothest, but could be "
-						"slow when adjusting keyframes, handles or timebeads",
-			default=10,
+	path_step: IntProperty(name="Step",
+			description="Step size for the frames the motion trail consists of\nIncrease to improve performance",
+			default=1,
 			min=1,
 			max=10,
 			update=internal_update
@@ -2607,7 +2605,7 @@ def compare_ver(tup1, tup2):
 configurable_props = ["use_depsgraph", "select_key", "select_threshold", "deselect_nohit_key", "deselect_always_key", "deselect_passthrough", "mode", "path_style", 
 "simple_color", "speed_color_min", "speed_color_max", "accel_color_neg", "accel_color_static", "accel_color_pos",
 "keyframe_color", "frame_color", "selection_color", "selection_color_dark", "highlight_color", "handle_color", "handle_line_color", "timebead_color", 
-"text_color", "selected_text_color", "path_width", "path_resolution", "path_before", "path_after",
+"text_color", "selected_text_color", "path_width", "path_step", "path_before", "path_after",
 "keyframe_numbers", "frame_display", "handle_display", "handle_length", "handle_direction", "show_spines", "spine_length", "spine_step", "spine_offset",
 ["pXspines", "pYspines", "pZspines"], ["nXspines", "nYspines", "nZspines"], ["spine_x_color", "spine_y_color", "spine_z_color"]]
 			

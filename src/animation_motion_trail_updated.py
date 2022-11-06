@@ -428,6 +428,51 @@ def get_original_animation_data_ce(context, keyframes):
 	newCache = MatrixCache(get_matrix_any_custom_eval)
 	return get_original_animation_data(context, keyframes, newCache)
 
+def merge_enumerated(enum1, enum2, mergec = 3):
+	"""Merge 2 sorted lists of structure [[frame, stuff, [bool, bool, bool, ... mergec times]], ...]"""
+
+	def mergetruth(l1, l2):
+		return [l1[i] or l2[i] for i in range(mergec)]
+
+	i, j = 0, 0
+	res = []
+	while i<len(enum1) and j<len(enum2):
+		if enum1[i][0] == enum2[j][0]:
+			indices1 = enum1[i][1][1]
+			indices2 = enum2[i][1][1]
+			indices_merged = mergetruth(indices1, indices2)
+			res.append([enum1[i][0], [enum1[i][1][0], indices_merged]])
+			i += 1
+			j += 1
+		if enum1[i][0] < enum2[j][0]:
+			res.append([enum1[i][0], enum1[i][1]])
+			i += 1
+		else:
+			res.append([enum2[j][0], enum2[j][1]])
+			j += 1
+						
+		while i<len(enum1):
+			res.append([enum1[i][0], enum1[i][1]])
+			i += 1
+
+		while j<len(enum2):
+			res.append([enum2[j][0], enum2[j][1]])
+			j += 1
+
+	return res
+
+def merge_dicts(dict_list):
+	"""Merge dicts in a list, with structure [Dict(frame, [stuff, [bool, bool, ...]])] into a single Dict(frame, [stuff, [bool, bool, bool]])"""
+
+	enumerated = [enumerate(a_dict) for a_dict in dict_list]
+
+	merged_lists = merge_enumerated(enumerated[0], merge_enumerated(enumerated[1], enumerated[2]))
+	final_dict = {}
+	for elem in merged_lists:
+		final_dict[elem[0]] = [elem[1], elem[2]]
+
+	return final_dict
+
 # callback function that calculates positions of all things that need be drawn
 def calc_callback(self, context, inverse_getter, matrix_getter):
 	# Remove handler if file was changed and we lose access to self
@@ -559,7 +604,7 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 
 
 			# get keyframes and handles
-			keyframes = {}
+			keyframes = [{}, {}, {}]
 			handle_difs = [{}, {}, {}]
 			kf_time = []
 			click = []
@@ -613,13 +658,19 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 						handle_difs[i][kf_frame]["keyframe_loc"] = loc
 
 						x, y = world_to_screen(context, loc)
-						keyframes[i][kf.co[0]] = [x, y]
-						if mt.mode != 'speed':
-							# can't select keyframes in speed mode
-							click.append([kf.co[0], "keyframe", Vector([x, y])])
+						keyframes[i][kf_frame] = [[x, y], channels]
 
-			self.keyframes[ob] = keyframes
+					lasti = i
 
+			if sum(channels) <= 1:
+				self.keyframes[ob] = keyframes[lasti]
+			else:
+				self.keyframes[ob] = merge_dicts(keyframes)
+
+			if mt.mode != 'speed':
+				# can't select keyframes in speed mode
+				for kf_frame, [[x, y], kf_channels] in enumerate(self.keyframes[ob]):
+					click.append( [kf_frame, "keyframe", Vector([x, y]), kf_channels] )
 
 			# handles are only shown in value-altering mode
 			if mt.mode == 'values' and mt.handle_display:
@@ -652,7 +703,7 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 						click.append([frame, "handle_left", Vector([x_left, y_left])])
 						click.append([frame, "handle_right", Vector([x_right, y_right])])
 				
-				self.handles[ob] = handles
+				self.handles[ob] = {} # TODO: Handle merging
 
 			# calculate timebeads for timing mode
 			if mt.mode == 'timing':
@@ -707,7 +758,7 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 							loc = self.cache.get_location(bead_frame, ob, context)
 
 							x, y = world_to_screen(context, loc)
-							timebeads[bead_frame] = [x, y]
+							timebeads[bead_frame] = [[x, y], channels]
 						if sides["right"]:
 							perc = (sum(sides["right"]) / len(sides["right"])) / \
 								(math.pi / 2)
@@ -724,59 +775,12 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 					lasti = i
 
 				if sum(channels) <= 1:
-					self.timebeads = timebead_container[lasti]
-					for bead_frame, [x, y] in enumerate(timebeads[lasti]):
-						click.append( [bead_frame, "timebead", Vector([x, y]), [lasti]] )
+					self.timebeads[ob] = timebead_container[lasti]
 				else:
-					# Merge timebeads into one
-					enumerated = [enumerate(timebeads[i]) for i in range(3)]
+					self.timebeads[ob] = merge_dicts(timebead_container)
 
-					def maketruth(i, inlist = [False, False, False]):
-						reslist = inlist.copy()
-						reslist[i] = True
-						return reslist
-
-					def mergetruth(l1, l2):
-						return [l1[i] or l2[i] for i in range(3)]
-
-					enumerated_extra = [[elem.append(maketruth(i)) for elem in enumerated[i]] for i in range(3)]
-					new_timebeads = {}
-
-					def merge(enum1, enum2):
-						i, j = 0, 0
-						res = []
-						while i<len(enum1) and j<len(enum2):
-							if enum1[i][0] == enum2[j][0]:
-								indices1 = enum1[i][2]
-								indices2 = enum2[i][2]
-								indices_merged = mergetruth(indices1, indices2)
-								res.append([enum1[i][0], enum1[i][1], indices_merged])
-								i += 1
-								j += 1
-							if enum1[i][0] < enum2[j][0]:
-								res.append([enum1[i][0], enum1[i][1], enum1[i][2]])
-								i += 1
-							else:
-								res.append([enum2[j][0], enum2[j][1], enum2[j][2]])
-								j += 1
-						
-						while i<len(enum1):
-							res.append([enum1[i][0], enum1[i][1], enum1[i][2]])
-							i += 1
-
-						while j<len(enum2):
-							res.append([enum2[j][0], enum2[j][1], enum2[j][2]])
-							j += 1
-
-						return res
-						 
-					merged = merge(enumerated_extra[0], merge(enumerated_extra[1], enumerated_extra[2]))
-
-					for i in range(len(merged)):
-						new_timebeads[merged[i][0]] = [merged[i][1], merged[i][2]]
-						click.append( [merged[i][0], "timebead", Vector(merged[i][1]), [merged[i][2]]] )
-
-					self.timebeads = new_timebeads
+				for bead_frame, [[x, y], bead_channels] in enumerate(self.timebeads):
+					click.append( [bead_frame, "timebead", Vector([x, y]), bead_channels] )
 
 			if mt.show_spines:
 				for frame in range(range_min, range_max + 1, mt.spine_step):

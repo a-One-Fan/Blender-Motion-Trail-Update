@@ -2150,7 +2150,6 @@ class MotionTrailPanel(bpy.types.Panel):
 				col.prop(mt, "handle_direction")
 				col.prop(mt, "handle_length")
 				
-				col.row().prop(mt, "handle_color")
 				col.row().prop(mt, "handle_line_color")
 				col.row().prop(mt, "selection_color_dark")
 		else:
@@ -2158,6 +2157,7 @@ class MotionTrailPanel(bpy.types.Panel):
 
 		box = self.layout.box()
 		col = box.column(align=True)
+		col.row().prop(mt, "handle_color")
 		col.row().prop(mt, "selection_color")
 		col.row().prop(mt, "highlight_color")
 		col.row().prop(mt, "select_key")
@@ -2516,7 +2516,7 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			subtype='COLOR'
 			)
 	handle_color: FloatVectorProperty(name="Handle color",
-			description="Color that unselected handles will be colored in",
+			description="Color that unselected handles and keyframes will be colored in",
 			default=(1.0, 1.0, 0.0, 1.0),
 			min=0.0, soft_max=1.0,
 			size=4,

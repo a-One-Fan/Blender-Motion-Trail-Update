@@ -670,7 +670,8 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 
 			# calculate timebeads for speed mode
 			if mt.mode == 'speed':
-				self.timebeads[ob] = [{}, {}, {}]
+				timebead_container = [{}, {}, {}]
+				lasti = 0
 
 				for i in range(3):
 					if not channels[i]: 
@@ -707,7 +708,6 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 
 							x, y = world_to_screen(context, loc)
 							timebeads[bead_frame] = [x, y]
-							click.append( [bead_frame, "timebead", Vector([x, y])] )
 						if sides["right"]:
 							perc = (sum(sides["right"]) / len(sides["right"])) / \
 								(math.pi / 2)
@@ -718,10 +718,65 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 							loc = self.cache.get_location(bead_frame, ob, frame)
 
 							x, y = world_to_screen(context, loc)
-							timebeads[bead_frame] = [x, y]
-							click.append( [bead_frame, "timebead", Vector([x, y])] )
+							timebeads[bead_frame] = [[x, y], channels]
 
-				self.timebeads[ob][i] = timebeads
+					timebead_container[i] = timebeads
+					lasti = i
+
+				if sum(channels) <= 1:
+					self.timebeads = timebead_container[lasti]
+					for bead_frame, [x, y] in enumerate(timebeads[lasti]):
+						click.append( [bead_frame, "timebead", Vector([x, y]), [lasti]] )
+				else:
+					# Merge timebeads into one
+					enumerated = [enumerate(timebeads[i]) for i in range(3)]
+
+					def maketruth(i, inlist = [False, False, False]):
+						reslist = inlist.copy()
+						reslist[i] = True
+						return reslist
+
+					def mergetruth(l1, l2):
+						return [l1[i] or l2[i] for i in range(3)]
+
+					enumerated_extra = [[elem.append(maketruth(i)) for elem in enumerated[i]] for i in range(3)]
+					new_timebeads = {}
+
+					def merge(enum1, enum2):
+						i, j = 0, 0
+						res = []
+						while i<len(enum1) and j<len(enum2):
+							if enum1[i][0] == enum2[j][0]:
+								indices1 = enum1[i][2]
+								indices2 = enum2[i][2]
+								indices_merged = mergetruth(indices1, indices2)
+								res.append([enum1[i][0], enum1[i][1], indices_merged])
+								i += 1
+								j += 1
+							if enum1[i][0] < enum2[j][0]:
+								res.append([enum1[i][0], enum1[i][1], enum1[i][2]])
+								i += 1
+							else:
+								res.append([enum2[j][0], enum2[j][1], enum2[j][2]])
+								j += 1
+						
+						while i<len(enum1):
+							res.append([enum1[i][0], enum1[i][1], enum1[i][2]])
+							i += 1
+
+						while j<len(enum2):
+							res.append([enum2[j][0], enum2[j][1], enum2[j][2]])
+							j += 1
+
+						return res
+						 
+					merged = merge(enumerated_extra[0], merge(enumerated_extra[1], enumerated_extra[2]))
+
+					for i in range(len(merged)):
+						new_timebeads[merged[i][0]] = [merged[i][1], merged[i][2]]
+						click.append( [merged[i][0], "timebead", Vector(merged[i][1]), [merged[i][2]]] )
+
+					self.timebeads = new_timebeads
 
 			if mt.show_spines:
 				for frame in range(range_min, range_max + 1, mt.spine_step):
@@ -916,12 +971,12 @@ def draw_callback(self, context):
 		gpu.state.point_size_set(4.0)
 		point_poss = []
 		point_cols = []
-		for objectname, values in self.timebeads.items():
-			for frame, coords in values.items():
+		for ob, values in self.timebeads.items():
+			for frame, coords, channels in values.items():
 				if frame < limit_min or frame > limit_max:
 					continue
 				if self.active_timebead and \
-				objectname == self.active_timebead[0] and \
+				ob == self.active_timebead[0] and \
 				abs(frame - self.active_timebead[1]) < 1e-4:
 					point_cols.append(mt.selection_color)
 					point_poss.append((coords[0], coords[1]))

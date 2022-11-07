@@ -1178,11 +1178,11 @@ def drag(self, context, event, inverse_getter):
 				continue
 
 			for fcurv in range(len(curves[chan])):
-				for kf in curve.keyframe_points:
+				for kf in curves[chan][fcurv].keyframe_points:
 					if kf.co[0] == frame:
-						kf.co[1] = new_loc[i]
-						kf.handle_left[1] = self.keyframes_ori[ob][chan][fcurv][frame][1][1] + d[i]
-						kf.handle_right[1] = self.keyframes_ori[ob][chan][fcurv][frame][2][1] + d[i]
+						kf.co[1] = self.keyframes_ori[ob][chan][fcurv][frame][0][1] + d[fcurv]
+						kf.handle_left[1] = self.keyframes_ori[ob][chan][fcurv][frame][1][1] + d[fcurv]
+						kf.handle_right[1] = self.keyframes_ori[ob][chan][fcurv][frame][2][1] + d[fcurv]
 						break
 
 	# change 3d-location of handle
@@ -1456,7 +1456,7 @@ def drag(self, context, event, inverse_getter):
 			bead_frame = kf_bead + perc * ((kf_next - kf_bead - 2) / 2)
 		active_timebead = [ob, bead_frame, frame_ori]
 
-	return (active_keyframe, active_timebead)
+	return
 
 
 # revert changes made by dragging
@@ -1536,7 +1536,7 @@ def cancel_drag(self, context):
 					break
 		active_timebead = [objectname, frame_ori, frame_ori, active_ob, child]
 
-	return (active_keyframe, active_timebead)
+	return
 
 
 # return the handle type of the active selection
@@ -1862,11 +1862,11 @@ class MotionTrailOperator(bpy.types.Operator):
 			self.lock = True
 			mt.force_update = True
 			mt.backed_up_keyframes = False
-			self.active_keyframe, self.active_timebead = cancel_drag(self, context)
+			cancel_drag(self, context)
 		elif event.type == 'MOUSEMOVE' and self.drag:
 			# drag
 			inverse_getter = get_inverse_parents_depsgraph if mt.use_depsgraph else get_inverse_parents
-			self.active_keyframe, self.active_timebead = drag(self, context, event, inverse_getter)
+			drag(self, context, event, inverse_getter)
 			no_passthrough = True
 
 		elif not self.drag and not event.shift and not event.alt and not event.ctrl:

@@ -1541,29 +1541,32 @@ def cancel_drag(self, context):
 
 
 # return the handle type of the active selection
-def get_handle_type(active_keyframe, active_handle):
+def get_handle_type(self, active_keyframe, active_handle):
 	if active_keyframe:
-		ob, frame, side = active_keyframe
+		ob, frame, side, chans = active_keyframe
 		side = "both"
 	elif active_handle:
-		ob, frame, side = active_handle
+		ob, frame, side, chans = active_handle
 	else:
 		# no active handle(s)
 		return (False)
 
 	# properties used when changing handle type
-	bpy.context.window_manager.motion_trail.handle_type_frame = frame
-	bpy.context.window_manager.motion_trail.handle_type_side = side
-	bpy.context.window_manager.motion_trail.handle_type_action_ob = ob
+	self.handle_type_frame = frame
+	self.handle_type_side = side
+	self.handle_type_action_ob = ob
 
 	curves = get_curves(ob)
-	for c in curves:
-		for kf in c.keyframe_points:
-			if kf.co[0] == frame:
-				if side in ("left", "both"):
-					return(kf.handle_left_type)
-				else:
-					return(kf.handle_right_type)
+	for chan in range(len(curves)):
+		if not chans[chan]:
+			continue
+		for fcurv in range(len(curves[chan])):
+			for kf in curves[chan][fcurv].keyframe_points:
+				if kf.co[0] == frame:
+					if side in ("left", "both"):
+						return(kf.handle_left_type)
+					else:
+						return(kf.handle_right_type)
 
 	return("AUTO")
 
@@ -1589,10 +1592,10 @@ def set_handle_type(self, context):
 
 	if not mt.handle_type_enabled:
 		return
-	if mt.handle_type_old == mt.handle_type:
+	if self.handle_type_old == mt.handle_type:
 		# function called because of selection change, not change in type
 		return
-	mt.handle_type_old = mt.handle_type
+	self.handle_type_old = mt.handle_type
 
 	frame = mt.handle_type_frame
 	side = mt.handle_type_side
@@ -1935,10 +1938,10 @@ class MotionTrailOperator(bpy.types.Operator):
 					
 				pass
 			else:
-				handle_type = get_handle_type(self.active_keyframe,
+				handle_type = get_handle_type(self, self.active_keyframe,
 					self.active_handle)
 				if handle_type:
-					mt.handle_type_old = handle_type
+					self.handle_type_old = handle_type
 					mt.handle_type = handle_type
 				else:
 					mt.handle_type_enabled = False
@@ -1948,7 +1951,6 @@ class MotionTrailOperator(bpy.types.Operator):
 			self.drag = False
 			self.lock = True
 			mt.force_update = True
-			mt.backed_up_keyframes = False
 			bpy.ops.ed.undo_push(message="Confirmed Motion Trail drag")
 			no_passthrough = True
 
@@ -2265,19 +2267,7 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 	backed_up_keyframes: BoolProperty(default=False)
 
 	handle_type_enabled: BoolProperty(default=False)
-	handle_type_frame: FloatProperty()
-	handle_type_side: StringProperty()
-	handle_type_action_ob: StringProperty()
-
-	handle_type_old: EnumProperty(
-			items=(
-				("AUTO", "", ""),
-				("AUTO_CLAMPED", "", ""),
-				("VECTOR", "", ""),
-				("ALIGNED", "", ""),
-				("FREE", "", "")),
-			default='AUTO'
-			)
+	
 	# visible in user interface
 	calculate: EnumProperty(name="Calculate", items=(
 			("fast", "Fast", "Recommended setting, change if the "

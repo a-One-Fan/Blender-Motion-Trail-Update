@@ -1692,6 +1692,9 @@ class MotionTrailOperator(bpy.types.Operator):
 	active_frame: list[any] 
 	"""If a frame is active, this contains [ob, frame, frame, channels]"""
 
+	highlighted_coord: list[float]
+	"""Coordinates of highlighted point, for highlight on hover."""
+
 	@staticmethod
 	def handle_add(self, context):
 
@@ -1850,6 +1853,7 @@ class MotionTrailOperator(bpy.types.Operator):
 				self.drag_mouse_ori = Vector([event.mouse_region_x, event.mouse_region_y])
 				self.drag = True
 				self.lock = False
+				self.highlighted_coord = False
 
 				self.constraint_axes = [False, False, False]
 				self.constraint_orientation = False
@@ -1862,7 +1866,7 @@ class MotionTrailOperator(bpy.types.Operator):
 		elif event.type == self.transform_key and event.value == 'PRESS':
 			# call default translate()
 			if bpy.ops.transform.translate.poll():
-				bpy.ops.transform.translate('INVOKE_DEFAULT')
+				bpy.ops.transform.translate('INVOKE_DEFAULT') # ? Is this necessary?
 		elif (event.type == 'ESC' and self.drag and event.value == 'PRESS') or \
 			 (event.type == 'RIGHTMOUSE' and self.drag and event.value == 'PRESS'):
 			# cancel drag

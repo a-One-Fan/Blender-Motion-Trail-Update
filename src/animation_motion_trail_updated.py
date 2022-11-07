@@ -1583,22 +1583,29 @@ def insert_keyframe(self, context, frame):
 	bpy.context.window_manager.motion_trail.force_update = True
 	calc_callback(self, context)
 
+def handle_update(self, context):
+	mt: MotionTrailProps = context.window_manager.motion_trail
+	mt.handle_update = True
 
 # change the handle type of the active selection
 def set_handle_type(self, context):
-
+	self: MotionTrailOperator
 	mt: MotionTrailProps = context.window_manager.motion_trail
 
 	if not mt.handle_type_enabled:
 		return
+
 	if self.handle_type_old == mt.handle_type:
 		# function called because of selection change, not change in type
 		return
+
 	self.handle_type_old = mt.handle_type
 
-	frame = mt.handle_type_frame
-	side = mt.handle_type_side
-	action_ob = mt.handle_type_action_ob
+	return
+
+	frame = self.handle_type_frame
+	side = self.handle_type_side
+	action_ob = self.handle_type_action_ob
 	action_ob = bpy.data.objects[action_ob]
 	new_type = mt.handle_type
 
@@ -1753,6 +1760,10 @@ class MotionTrailOperator(bpy.types.Operator):
 			if context.area:
 				context.area.tag_redraw()
 			return {'FINISHED'}
+
+		if mt.handle_update:
+			set_handle_type(self, context)
+			mt.handle_update = False
 
 		if mt.use_depsgraph:
 			calc_callback_dg(self, context)
@@ -1944,7 +1955,7 @@ class MotionTrailOperator(bpy.types.Operator):
 				handle_type = get_handle_type(self, self.active_keyframe,
 					self.active_handle)
 				if handle_type:
-					self.handle_type_old = handle_type
+					mt.handle_type_old = handle_type
 					mt.handle_type = handle_type
 				else:
 					mt.handle_type_enabled = False
@@ -2267,8 +2278,10 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 	force_update: BoolProperty(name="internal use",
 		description="Force calc_callback to fully execute",
 		default=False)
+	"""Force calc_callback to fully execute, clearing its cache. Expensive AND will freeze animations when DG is involved!"""
 		
-	backed_up_keyframes: BoolProperty(default=False)
+	handle_update: BoolProperty(default=False)
+	"""Tell the operator itself to update the handles."""
 
 	handle_type_enabled: BoolProperty(default=False)
 
@@ -2300,7 +2313,7 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			("FREE", "Free", "")),
 			description="Set handle type for the selected handle",
 			default='AUTO',
-			update=set_handle_type
+			update=handle_update
 			)
 	keyframe_numbers: BoolProperty(name="Keyframe numbers",
 			description="Display keyframe numbers",

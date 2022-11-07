@@ -398,21 +398,18 @@ def get_original_animation_data(context, keyframes: dict[(any, List[float])], ca
 
 		# Get keyframe positions
 		# TODO: Should a raw PB/Object be used as a dict key?
-		# ???: is keyframes_ori in world space? Is keyframes_ori necessary?
-		keyframes_ori[ob] = {}
-		for frame in keyframes[ob]:
-			loc = cache.get_location(frame, ob, context)
-			rot = cache.get_rotation(frame, ob, context)
-			scale = cache.get_scale(frame, ob, context)
-			keyframes_ori[ob][frame] = [frame, [loc, rot, scale]]
+		keyframes_ori[ob] = [{}, {}, {}]
+		for chan in range(len(curves)):
+			for frame in keyframes[ob][chan]:
+				keyframes_ori[ob][chan][frame] = [frame, [loc, rot, scale]]
 
 		# get handle positions
 		handles_ori[ob] = {}
-		for frame in keyframes[ob]:
-			handles_ori[ob][frame] = [[], []]
-			for i in range(len(curves)): # For each category of fcurves
-				handles_ori[ob][frame]["left"].append([])
-				handles_ori[ob][frame]["right"].append([])
+		for chan in range(len(curves)):
+			handles_ori[ob][chan] = [{}, {}, {}]
+			for frame in keyframes[ob][chan]:
+				handles_ori[ob][chan][frame]["left"].append([])
+				handles_ori[ob][chan][frame]["right"].append([])
 
 				for j in range(len(curves[i])):
 					fcurve = curves[i][j]
@@ -1185,8 +1182,7 @@ def draw_callback(self, context):
 	gpu.state.point_size_set(1.0) # TODO: is this the correct value?
 
 # change data based on mouse movement
-def drag(context, event, drag_mouse_ori, active_keyframe, active_handle,
-active_timebead, keyframes_ori, handles_ori, inverse_getter):
+def drag(self, context, event, inverse_getter):
 
 	mt: MotionTrailProps = context.window_manager.motion_trail
 
@@ -1195,24 +1191,16 @@ active_timebead, keyframes_ori, handles_ori, inverse_getter):
 		ob, frame, frame_ori = active_keyframe
 		mat = inverse_getter(frame, ob, context)
 		
-		mouse_ori_world = mat @ screen_to_world(context, drag_mouse_ori[0],
-			drag_mouse_ori[1])
+		mouse_ori_world = mat @ screen_to_world(context, self.drag_mouse_ori[0],
+			self.drag_mouse_ori[1])
 		vector = mat @ screen_to_world(context, event.mouse_region_x,
 			event.mouse_region_y)
 		d = vector - mouse_ori_world
 
-		loc_ori_ws = keyframes_ori[ob][frame][1][0]
+		loc_ori_ws = 0 # TODO: Use uncached getter here?
 		loc_ori_ls = mat @ loc_ori_ws
 		new_loc = loc_ori_ls + d
 		curves = get_curves(ob)
-		
-		if not mt.backed_up_keyframes:
-			for i, curve in enumerate(curves):
-				for kf in curve.keyframe_points:
-					if kf.co[0] == frame:
-						mt.keyframe_backup[i] = kf.co[1]
-						break
-			mt.backed_up_keyframes = True
 		
 		for i, curve in enumerate(curves):
 			for kf in curve.keyframe_points:
@@ -1223,12 +1211,12 @@ active_timebead, keyframes_ori, handles_ori, inverse_getter):
 					break
 
 	# change 3d-location of handle
-	elif mt.mode == 'values' and active_handle:
-		ob, frame, side = active_handle
+	elif mt.mode == 'values' and self.active_handle:
+		ob, frame, side = self.active_handle
 		mat = inverse_getter(frame, ob, context)
 
-		mouse_ori_world = mat @ screen_to_world(context, drag_mouse_ori[0],
-			drag_mouse_ori[1])
+		mouse_ori_world = mat @ screen_to_world(context, self.drag_mouse_ori[0],
+			self.drag_mouse_ori[1])
 		vector = mat @ screen_to_world(context, event.mouse_region_x,
 			event.mouse_region_y)
 		d = vector - mouse_ori_world
@@ -1296,7 +1284,7 @@ active_timebead, keyframes_ori, handles_ori, inverse_getter):
 		range_max = round(ranges[-1])
 		range = range_max - range_min
 		dx_screen = -(Vector([event.mouse_region_x,
-			event.mouse_region_y]) - drag_mouse_ori)[0]
+			event.mouse_region_y]) - self.drag_mouse_ori)[0]
 		dx_screen = dx_screen / context.region.width * range
 		new_frame = frame + dx_screen
 		shift_low = max(1e-4, (new_frame - range_min) / (frame - range_min))
@@ -1380,7 +1368,7 @@ active_timebead, keyframes_ori, handles_ori, inverse_getter):
 			return(active_keyframe, active_timebead, keyframes_ori)
 		# calculate strength of movement
 		d_screen = Vector([event.mouse_region_x,
-			event.mouse_region_y]) - drag_mouse_ori
+			event.mouse_region_y]) - self.drag_mouse_ori
 		if d_screen.length != 0:
 			d_screen = d_screen.length / (abs(d_screen[0]) / d_screen.length *
 					  context.region.width + abs(d_screen[1]) / d_screen.length *
@@ -1497,8 +1485,7 @@ active_timebead, keyframes_ori, handles_ori, inverse_getter):
 
 
 # revert changes made by dragging
-def cancel_drag(context, active_keyframe, active_handle, active_timebead,
-keyframes_ori, handles_ori):
+def cancel_drag(self, context):
 	mt: MotionTrailProps = context.window_manager.motion_trail
 
 	# revert change in values of active keyframe and its handles
@@ -1515,8 +1502,8 @@ keyframes_ori, handles_ori):
 		mt.backed_up_keyframes = False
 
 	# revert change in value of active handle
-	elif mt.mode == 'values' and active_handle:
-		objectname, frame, side, active_ob, child = active_handle
+	elif mt.mode == 'values' and self.active_handle:
+		objectname, frame, side, active_ob, child = self.active_handle
 		curves = get_curves(active_ob, child)
 		for i, curve in enumerate(curves):
 			for kf in curve.keyframe_points:
@@ -1677,7 +1664,7 @@ def force_update_callback(self, context):
 		return
 	
 	context.window_manager.motion_trail.force_update = True
-	
+
 
 global_mtrail_handler_calc = None
 global_mtrail_handler_draw = None
@@ -1696,11 +1683,29 @@ class MotionTrailOperator(bpy.types.Operator):
 	_timer = None
 
 	drag: bool 
+	"""Whether or not we're dragging"""
 	lock: bool
+	"""Whether or not we're changing the motion trail"""
 
-	# Please keep 3 items long
-	constraint_axes: List[bool] = [False, False, False]
-	constraint_orientation: bool = 0 # 0 = Global, 1 = Local
+	constraint_axes: list[bool] = [False, False, False]
+	"""Bools for which axes are constrained. Please keep 3 long."""
+	constraint_orientation: bool = 0
+	"""0/False = Global, 1/True = Local"""
+
+	click: dict(Object, list[any])
+	"""Items that may be clicked on. Structure: {ob: [[frame, type, coord, channels], ...], ob2: ...}"""
+
+	keyframe_backup: list[list[float]]
+	"""A list of backed up keyframes for when dragging is started/cancelled. For value mode only, as other modes affect more values..."""
+
+	active_keyframe: list[any]
+	"""If a keyframe is active, this contains [ob, frame, frame, channels]""" 
+	active_handle: list[any]
+	"""If a handle is active, this contains [ob, frame, 'left'/'right', channels]"""
+	active_timebead: list[any]
+	"""If a timebead is active, this contains [ob, frame, frame, channels]"""
+	active_frame: list[any] 
+	"""If a frame is active, this contains [ob, frame, frame, channels]"""
 
 	@staticmethod
 	def handle_add(self, context):
@@ -1847,8 +1852,7 @@ class MotionTrailOperator(bpy.types.Operator):
 
 				anim_data_getter = get_original_animation_data_dg if mt.use_depsgraph else get_original_animation_data_ce
 				self.keyframes_ori, self.handles_ori = anim_data_getter(context, self.keyframes)
-				self.drag_mouse_ori = Vector([event.mouse_region_x,
-					event.mouse_region_y])
+				self.drag_mouse_ori = Vector([event.mouse_region_x, event.mouse_region_y])
 				self.drag = True
 				self.lock = False
 
@@ -1931,15 +1935,15 @@ class MotionTrailOperator(bpy.types.Operator):
 							no_passthrough = True
 
 							if type == "keyframe":
-								self.active_keyframe = [ob, frame, frame]
+								self.active_keyframe = [ob, frame, frame, channels]
 							elif type == "handle_left":
-								self.active_handle = [ob, frame, "left"]
+								self.active_handle = [ob, frame, "left", channels]
 							elif type == "handle_right":
-								self.active_handle = [ob, frame, "right"]
+								self.active_handle = [ob, frame, "right", channels]
 							elif type == "timebead":
-								self.active_timebead = [ob, frame, frame]
+								self.active_timebead = [ob, frame, frame, channels]
 							elif type == "frame":
-								self.active_frame = [ob, frame, frame]
+								self.active_frame = [ob, frame, frame, channels]
 							break
 			if not found:
 				self.highlighted_coord = None
@@ -2282,7 +2286,6 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 		description="Force calc_callback to fully execute",
 		default=False)
 		
-	keyframe_backup: FloatVectorProperty()
 	backed_up_keyframes: BoolProperty(default=False)
 
 	handle_type_enabled: BoolProperty(default=False)

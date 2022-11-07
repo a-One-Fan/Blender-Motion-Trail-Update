@@ -1474,7 +1474,6 @@ def cancel_drag(self, context):
 					kf.handle_left[1] = handles_ori[objectname][frame]["left"][i][1]
 					kf.handle_right[1] = handles_ori[objectname][frame]["right"][i][1]
 					break
-		mt.backed_up_keyframes = False
 
 	# revert change in value of active handle
 	elif mt.mode == 'values' and self.active_handle:
@@ -1812,7 +1811,6 @@ class MotionTrailOperator(bpy.types.Operator):
 				self.drag = False
 				self.lock = True
 				mt.force_update = True
-				mt.backed_up_keyframes = False
 			# default hotkeys should still work
 			if event.type == self.transform_key and event.value == 'PRESS':
 				if bpy.ops.transform.translate.poll():
@@ -1861,7 +1859,6 @@ class MotionTrailOperator(bpy.types.Operator):
 				self.drag = False
 				self.lock = True
 				mt.force_update = True
-				mt.backed_up_keyframes = False
 		elif event.type == self.transform_key and event.value == 'PRESS':
 			# call default translate()
 			if bpy.ops.transform.translate.poll():
@@ -1872,7 +1869,6 @@ class MotionTrailOperator(bpy.types.Operator):
 			self.drag = False
 			self.lock = True
 			mt.force_update = True
-			mt.backed_up_keyframes = False
 			cancel_drag(self, context)
 		elif event.type == 'MOUSEMOVE' and self.drag:
 			# drag
@@ -2034,7 +2030,6 @@ class MotionTrailOperator(bpy.types.Operator):
 			self.last_frame = -1
 
 			mt.force_update = True
-			mt.backed_up_keyframes = False
 			mt.handle_type_enabled = False
 			getter = get_matrix_any_depsgraph if mt.use_depsgraph else get_matrix_any_custom_eval
 			self.cache = MatrixCache(getter)

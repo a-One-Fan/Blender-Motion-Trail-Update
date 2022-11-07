@@ -1153,11 +1153,25 @@ def draw_callback(self, context):
 	# restore opengl defaults
 	gpu.state.point_size_set(1.0) # TODO: is this the correct value?
 
+def swizzle_constraint(vec, constraint):
+	"""Given a 2D vector and a constraint of kind (a, b, c) where 1 or 2 values are True, swizzle a new 3D vector from the respective coords"""
+
+	newvec = Vector((0.0, 0.0, 0.0))
+	coord = 0
+	for i in range(3):
+		if constraint[i]:
+			newvec[i] = vec[coord]
+			coord += 1
+	
+	return newvec
+
+def is_constrained(constraint):
+	return constraint[0] or constraint[1] or constraint[2] 
+
 # change data based on mouse movement
 def drag(self, context, event, inverse_getter):
 	self: MotionTrailOperator # VSCode complains that this type hint is undefined if done in the parameters?!
 	mt: MotionTrailProps = context.window_manager.motion_trail
-
 	# change 3d-location of keyframe
 	if mt.mode == 'values' and self.active_keyframe:
 		ob, frame, frame_ori, chans = self.active_keyframe
@@ -1167,10 +1181,19 @@ def drag(self, context, event, inverse_getter):
 			self.drag_mouse_ori[1])
 		vector = mat @ screen_to_world(context, event.mouse_region_x,
 			event.mouse_region_y)
-		d = vector - mouse_ori_world
 
-		loc_ori_ls = mat @ self.loc_ori_ws
-		new_loc = loc_ori_ls + d
+		d = vector - mouse_ori_world
+		if is_constrained(self.constraint_axes):
+			#mdiff = Vector(self.drag_mouse_ori) - Vector((event.mouse_region_x, event.mouse_region_y))
+			#d = swizzle_constraint(mdiff * 0.05, self.constraint_axes)
+			d = d * Vector(self.constraint_axes)
+
+
+
+		
+
+		#loc_ori_ls = mat @ self.loc_ori_ws
+		#new_loc = loc_ori_ls + d
 		curves = get_curves(ob)
 
 		for chan in range(len(curves)):

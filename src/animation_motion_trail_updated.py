@@ -1668,10 +1668,10 @@ class MotionTrailOperator(bpy.types.Operator):
 	constraint_orientation: bool = 0
 	"""0/False = Global, 1/True = Local"""
 
-	click: dict(Object, list[any])
+	click: dict[Object, list[any]]
 	"""Items that may be clicked on. Structure: {ob: [[frame, type, coord, channels], ...], ob2: ...}"""
 
-	keyframes_ori: dict(Object, list[list[dict(float, list[list[float]])]])
+	keyframes_ori: dict[Object, list[list[dict[float, list[list[float]]]]]]
 	"""{ob: [chan: [fcurve: {frame: ([x, y] x3), ...} x 3/4?] x3?], ...},\n
 	where the 3 Vectors are the coordinates of the keyframe, its left handle, and its right handle."""
 

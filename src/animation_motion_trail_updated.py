@@ -2046,7 +2046,8 @@ class MotionTrailOperator(bpy.types.Operator):
 			context.window_manager.modal_handler_add(self)
 			bpy.ops.ed.undo_push(message="Started Motion Trail modal operator")
 
-			self._timer = wm.event_timer_add(0.0, window = context.window)
+			self._timer = wm.event_timer_add(0.0, window = context.window) # ! Can't undo while this is active
+			#TODO: Workaround?                                                 ^
 			return {'RUNNING_MODAL'}
 
 		else:

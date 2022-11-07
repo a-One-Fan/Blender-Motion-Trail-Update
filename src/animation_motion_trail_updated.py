@@ -2017,6 +2017,7 @@ class MotionTrailOperator(bpy.types.Operator):
 			self.constraint_axes = [False, False, False]
 			self.constraint_orientation = False
 			self.affect_all_channels = False
+			self.handle_type_old = False
 
 			self.highlighted_coord = None
 			self.last_frame = -1

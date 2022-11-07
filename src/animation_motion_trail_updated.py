@@ -370,7 +370,7 @@ def get_matrix_any_depsgraph(frame: float, target: Object | PoseBone, context: C
 # manipulation of keyframes (IE without the very last animation applied)
 # using our own, draw handler-safe methods
 def get_inverse_parents(frame, ob, context):
-	return get_matrix_any_custom_eval(ob, frame, False).inverted()
+	return get_matrix_any_custom_eval(frame, ob, False).inverted()
 
 def get_inverse_parents_depsgraph(frame, ob, context):
 	mat = ''

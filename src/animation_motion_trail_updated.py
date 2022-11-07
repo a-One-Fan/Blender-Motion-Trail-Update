@@ -629,6 +629,8 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 				if not channels[chan]: 
 					continue
 
+				quat = len(curves[chan]) == 4
+
 				for fc in curves[chan]:
 					for kf in fc.keyframe_points:
 						# handles for values mode
@@ -636,30 +638,42 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 							if kf.co[0] not in handle_difs[chan]:
 								handle_difs[chan][kf.co[0]] = {"left": Vector(), "right": Vector()}
 									
-							ldiff = Vector(kf.handle_left[:]) - Vector(kf.co[:])
-							rdiff = Vector(kf.handle_right[:]) - Vector(kf.co[:])
-							hdir = mt.handle_direction
-							lco = 0.0
-							rco = 0.0
-							
-							if hdir == 'time':
-								lco = ldiff.normalized()[1]
-								rco = rdiff.normalized()[1]
-							elif hdir == 'wtime':
-								lco = sum(ldiff.normalized() * Vector((0.25, 0.75)))
-								rco = sum(rdiff.normalized() * Vector((0.25, 0.75)))
-							elif hdir == 'value':
-								lco = ldiff.normalized()[0]
-								rco = rdiff.normalized()[0]
-							elif hdir == 'wloc':
-								lco = sum(ldiff.normalized() * Vector((0.75, 0.25)))
-								rco = sum(rdiff.normalized() * Vector((0.75, 0.25)))
-							elif hdir == 'len':
-								lco = -ldiff.length
-								rco = rdiff.length
-							
-							handle_difs[chan][kf.co[0]]["left"][fc.array_index] = lco
-							handle_difs[chan][kf.co[0]]["right"][fc.array_index] = rco
+							if not quat:
+								ldiff = Vector(kf.handle_left[:]) - Vector(kf.co[:])
+								rdiff = Vector(kf.handle_right[:]) - Vector(kf.co[:])
+
+
+								hdir = mt.handle_direction
+								lco = 0.0
+								rco = 0.0
+								
+								if hdir == 'time':
+									lco = ldiff.normalized()[1]
+									rco = rdiff.normalized()[1]
+								elif hdir == 'wtime':
+									lco = sum(ldiff.normalized() * Vector((0.25, 0.75)))
+									rco = sum(rdiff.normalized() * Vector((0.25, 0.75)))
+								elif hdir == 'value':
+									lco = ldiff.normalized()[0]
+									rco = rdiff.normalized()[0]
+								elif hdir == 'wloc':
+									lco = sum(ldiff.normalized() * Vector((0.75, 0.25)))
+									rco = sum(rdiff.normalized() * Vector((0.75, 0.25)))
+								elif hdir == 'len':
+									lco = -ldiff.length
+									rco = rdiff.length
+								
+								handle_difs[chan][kf.co[0]]["left"][fc.array_index] = lco
+								handle_difs[chan][kf.co[0]]["right"][fc.array_index] = rco
+
+							else:
+								# !! This code running multiple times might sound bad, but consider the worse scenario in which someone shifted a single quaternion keyframe. This handles it.
+								rot = self.cache.get_rotation(kf.co[0], ob, context)
+								vec = mathutils.Vector((0.0, 0.0, 1.0)) # TODO: think of better vector to represent rotation with?
+								vec.rotate(rot)
+
+								handle_difs[chan][kf.co[0]]["left"] = vec
+								handle_difs[chan][kf.co[0]]["right"] = -vec
 
 						# keyframes
 						if kf.co[0] in kf_time[chan]:
@@ -1187,7 +1201,7 @@ active_timebead, keyframes_ori, handles_ori, inverse_getter):
 			event.mouse_region_y)
 		d = vector - mouse_ori_world
 
-		loc_ori_ws = keyframes_ori[ob][frame][1]
+		loc_ori_ws = keyframes_ori[ob][frame][1][0]
 		loc_ori_ls = mat @ loc_ori_ws
 		new_loc = loc_ori_ls + d
 		curves = get_curves(ob)
@@ -2382,6 +2396,7 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			update=internal_update
 			)
 	handle_direction: EnumProperty(name="Handle direction",
+			description="Affect location, euler rotation and scale only, do NOT affect quaternion rotation",
 			items=(
 			("time", "Time", "Use only the time coordinate of the handles"),
 			("wtime", "Weighted Time", "0.75*time + 0.25*location"),

@@ -381,7 +381,7 @@ def get_inverse_parents_depsgraph(frame, ob, context):
 		
 	return (get_matrix_any_depsgraph(frame, ob, context) @ mat.inverted()).inverted()
 
-def get_original_animation_data(context, keyframes: dict[(any, List[float])], cache: MatrixCache):
+def get_original_animation_data(context):
 	"""Get position of keyframes and handles at the start of dragging.\n
 	Returns keyframes_ori: {ob: [chan: [fcurve: {frame: ([x, y] x3), ...} x 3/4?] x3?], ...},\n
 	where the 3 Vectors are the coordinates of the keyframe, its left handle, and its right handle.\n
@@ -402,7 +402,7 @@ def get_original_animation_data(context, keyframes: dict[(any, List[float])], ca
 		keyframes_ori[ob] = [[], [], []]
 		for chan in range(len(curves)):
 			for fcurv in range(len(curves[chan])):
-				keyframes_ori[ob][chan].append([])
+				keyframes_ori[ob][chan].append({})
 				kf: Keyframe
 				for kf in curves[chan][fcurv].keyframe_points:
 					keyframes_ori[ob][chan][fcurv][kf.co[0]] = (kf.co.copy(), kf.handle_left.copy(), kf.handle_right.copy())
@@ -1169,8 +1169,7 @@ def drag(self, context, event, inverse_getter):
 			event.mouse_region_y)
 		d = vector - mouse_ori_world
 
-		loc_ori_ws = 0 # TODO: Use uncached getter here?
-		loc_ori_ls = mat @ loc_ori_ws
+		loc_ori_ls = mat @ self.loc_ori_ws
 		new_loc = loc_ori_ls + d
 		curves = get_curves(ob)
 
@@ -1258,10 +1257,10 @@ def drag(self, context, event, inverse_getter):
 		ranges.sort()
 		range_min = round(ranges[0])
 		range_max = round(ranges[-1])
-		range = range_max - range_min
+		range_len = range_max - range_min
 		dx_screen = -(Vector([event.mouse_region_x,
 			event.mouse_region_y]) - self.drag_mouse_ori)[0]
-		dx_screen = dx_screen / context.region.width * range
+		dx_screen = dx_screen / context.region.width * range_len
 		new_frame = frame + dx_screen
 		shift_low = max(1e-4, (new_frame - range_min) / (frame - range_min))
 		shift_high = max(1e-4, (range_max - new_frame) / (range_max - frame))
@@ -1317,16 +1316,16 @@ def drag(self, context, event, inverse_getter):
 					keyframes_ori[ob].items()]
 		locs_ori.sort()
 		direction = 1
-		range = False
+		range_both = False
 		for i, [f_ori, coords] in enumerate(locs_ori):
 			if abs(frame_ori - f_ori) < 1e-4:
 				if i == 0:
 					# first keyframe, nothing before it
 					direction = -1
-					range = [f_ori, locs_ori[i + 1][0]]
+					range_both = [f_ori, locs_ori[i + 1][0]]
 				elif i == len(locs_ori) - 1:
 					# last keyframe, nothing after it
-					range = [locs_ori[i - 1][0], f_ori]
+					range_both = [locs_ori[i - 1][0], f_ori]
 				else:
 					current = Vector(coords)
 					next = Vector(locs_ori[i + 1][1])
@@ -1336,10 +1335,10 @@ def drag(self, context, event, inverse_getter):
 					if angle_to_previous < angle_to_next:
 						# mouse movement is in direction of previous keyframe
 						direction = -1
-					range = [locs_ori[i - 1][0], locs_ori[i + 1][0]]
+					range_both = [locs_ori[i - 1][0], locs_ori[i + 1][0]]
 				break
 		direction *= -1  # feels more natural in 3d-view
-		if not range:
+		if not range_both:
 			# keyframe not found, is impossible, but better safe than sorry
 			return(active_keyframe, active_timebead, keyframes_ori)
 		# calculate strength of movement
@@ -1352,11 +1351,11 @@ def drag(self, context, event, inverse_getter):
 			d_screen *= direction  # d_screen value ranges from -1.0 to 1.0
 		else:
 			d_screen = 0.0
-		new_frame = d_screen * (range[1] - range[0]) + frame_ori
-		max_frame = range[1]
+		new_frame = d_screen * (range_both[1] - range_both[0]) + frame_ori
+		max_frame = range_both[1]
 		if max_frame == frame_ori:
 			max_frame += 1
-		min_frame = range[0]
+		min_frame = range_both[0]
 		if min_frame == frame_ori:
 			min_frame -= 1
 		new_frame = min(max_frame - 1, max(min_frame + 1, new_frame))
@@ -1457,7 +1456,7 @@ def drag(self, context, event, inverse_getter):
 			bead_frame = kf_bead + perc * ((kf_next - kf_bead - 2) / 2)
 		active_timebead = [ob, bead_frame, frame_ori]
 
-	return(active_keyframe, active_timebead, keyframes_ori)
+	return (active_keyframe, active_timebead)
 
 
 # revert changes made by dragging
@@ -1537,7 +1536,7 @@ def cancel_drag(self, context):
 					break
 		active_timebead = [objectname, frame_ori, frame_ori, active_ob, child]
 
-	return(active_keyframe, active_timebead)
+	return (active_keyframe, active_timebead)
 
 
 # return the handle type of the active selection
@@ -1829,8 +1828,16 @@ class MotionTrailOperator(bpy.types.Operator):
 					insert_keyframe(self, context, self.active_frame)
 					self.active_keyframe = self.active_frame
 					self.active_frame = False
+				
+				if self.active_handle:
+					ob, frame, other, chans = self.active_handle
+				elif self.active_keyframe:
+					ob, frame, other, chans = self.active_keyframe
+				else:
+					ob, frame, other, chans = self.active_timebead
 
-				self.keyframes_ori = get_original_animation_data(context, self.keyframes)
+				self.loc_ori_ws = self.cache.get_location(frame, ob, context)
+				self.keyframes_ori = get_original_animation_data(context)
 				self.drag_mouse_ori = Vector([event.mouse_region_x, event.mouse_region_y])
 				self.drag = True
 				self.lock = False
@@ -1855,15 +1862,11 @@ class MotionTrailOperator(bpy.types.Operator):
 			self.lock = True
 			mt.force_update = True
 			mt.backed_up_keyframes = False
-			self.active_keyframe, self.active_timebead = cancel_drag(context,
-				self.active_keyframe, self.active_handle,
-				self.active_timebead, self.keyframes_ori, self.handles_ori)
+			self.active_keyframe, self.active_timebead = cancel_drag(self, context)
 		elif event.type == 'MOUSEMOVE' and self.drag:
 			# drag
-			self.active_keyframe, self.active_timebead, self.keyframes_ori = \
-				drag(context, event, self.drag_mouse_ori,
-				self.active_keyframe, self.active_handle,
-				self.active_timebead, self.keyframes_ori, self.handles_ori, get_inverse_parents_depsgraph)
+			inverse_getter = get_inverse_parents_depsgraph if mt.use_depsgraph else get_inverse_parents
+			self.active_keyframe, self.active_timebead = drag(self, context, event, inverse_getter)
 			no_passthrough = True
 
 		elif not self.drag and not event.shift and not event.alt and not event.ctrl:
@@ -2267,7 +2270,7 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 	backed_up_keyframes: BoolProperty(default=False)
 
 	handle_type_enabled: BoolProperty(default=False)
-	
+
 	# visible in user interface
 	calculate: EnumProperty(name="Calculate", items=(
 			("fast", "Fast", "Recommended setting, change if the "

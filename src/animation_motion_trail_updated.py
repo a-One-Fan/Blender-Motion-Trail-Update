@@ -51,7 +51,7 @@ import traceback
 from functools import reduce
 from collections.abc import Callable
 
-from bpy.types import Object, PoseBone, Context, Action, FCurve
+from bpy.types import Object, PoseBone, Context, Action, FCurve, Keyframe
 from mathutils import Matrix, Vector, Quaternion, Euler
 
 # Linear interpolation for 4-element tuples
@@ -382,9 +382,11 @@ def get_inverse_parents_depsgraph(frame, ob, context):
 	return (get_matrix_any_depsgraph(frame, ob, context) @ mat.inverted()).inverted()
 
 def get_original_animation_data(context, keyframes: dict[(any, List[float])], cache: MatrixCache):
-	""" Get position of keyframes and handles at the start of dragging."""
+	"""Get position of keyframes and handles at the start of dragging.\n
+	Returns keyframes_ori: {ob: [chan: [fcurve: {frame: ([x, y] x3), ...} x 3/4?] x3?], ...},\n
+	where the 3 Vectors are the coordinates of the keyframe, its left handle, and its right handle.\n
+	The keyframe's frame will be duplicated as it's the key and the 1st coordinate, but no biggie."""
 	keyframes_ori = {}
-	handles_ori = {}
 
 	if context.active_object and context.active_object.mode == 'POSE':
 		objects = [pb for pb in context.selected_pose_bones]
@@ -396,46 +398,16 @@ def get_original_animation_data(context, keyframes: dict[(any, List[float])], ca
 		if len(curves) == 0:
 			continue
 
-		# Get keyframe positions
 		# TODO: Should a raw PB/Object be used as a dict key?
-		keyframes_ori[ob] = [{}, {}, {}]
+		keyframes_ori[ob] = [[], [], []]
 		for chan in range(len(curves)):
-			for frame in keyframes[ob][chan]:
-				keyframes_ori[ob][chan][frame] = [frame, [loc, rot, scale]]
+			for fcurv in range(len(curves[chan])):
+				keyframes_ori[ob][chan].append([])
+				kf: Keyframe
+				for kf in curves[chan][fcurv].keyframe_points:
+					keyframes_ori[ob][chan][fcurv][kf.co[0]] = (kf.co.copy(), kf.handle_left.copy(), kf.handle_right.copy())
 
-		# get handle positions
-		handles_ori[ob] = {}
-		for chan in range(len(curves)):
-			handles_ori[ob][chan] = [{}, {}, {}]
-			for frame in keyframes[ob][chan]:
-				handles_ori[ob][chan][frame]["left"].append([])
-				handles_ori[ob][chan][frame]["right"].append([])
-
-				for j in range(len(curves[i])):
-					fcurve = curves[i][j]
-					left = 0
-					right = 0
-
-					# TODO: Is there a better way to get this?
-					for kf in fcurve.keyframe_points:
-						if kf.co[0] == frame:
-							left = kf.handle_left[:]
-							right = kf.handle_right[:]
-							break
-
-					handles_ori[ob][frame]["left"][i][j] = left
-					handles_ori[ob][frame]["right"][i][j] = right
-
-	return (keyframes_ori, handles_ori)
-
-def get_original_animation_data_dg(context, keyframes):
-	# TODO: Move cache up the call stack?
-	newCache = MatrixCache(get_matrix_any_depsgraph)
-	return get_original_animation_data(context, keyframes, newCache)
-
-def get_original_animation_data_ce(context, keyframes):
-	newCache = MatrixCache(get_matrix_any_custom_eval)
-	return get_original_animation_data(context, keyframes, newCache)
+	return keyframes_ori
 
 def merge_items(enum1, enum2, mergec = 3):
 	"""Merge 2 sorted lists of structure [[frame, stuff, [bool, bool, bool, ... mergec times]], ...]"""
@@ -1183,12 +1155,12 @@ def draw_callback(self, context):
 
 # change data based on mouse movement
 def drag(self, context, event, inverse_getter):
-
+	self: MotionTrailOperator # VSCode complains that this type hint is undefined if done in the parameters?!
 	mt: MotionTrailProps = context.window_manager.motion_trail
 
 	# change 3d-location of keyframe
-	if mt.mode == 'values' and active_keyframe:
-		ob, frame, frame_ori = active_keyframe
+	if mt.mode == 'values' and self.active_keyframe:
+		ob, frame, frame_ori, chans = self.active_keyframe
 		mat = inverse_getter(frame, ob, context)
 		
 		mouse_ori_world = mat @ screen_to_world(context, self.drag_mouse_ori[0],
@@ -1201,14 +1173,18 @@ def drag(self, context, event, inverse_getter):
 		loc_ori_ls = mat @ loc_ori_ws
 		new_loc = loc_ori_ls + d
 		curves = get_curves(ob)
-		
-		for i, curve in enumerate(curves):
-			for kf in curve.keyframe_points:
-				if kf.co[0] == frame:
-					kf.co[1] = new_loc[i]
-					kf.handle_left[1] = handles_ori[ob][frame]["left"][i][1] + d[i]
-					kf.handle_right[1] = handles_ori[ob][frame]["right"][i][1] + d[i]
-					break
+
+		for chan in range(len(curves)):
+			if not chans[chan]:
+				continue
+
+			for fcurv in range(len(curves[chan])):
+				for kf in curve.keyframe_points:
+					if kf.co[0] == frame:
+						kf.co[1] = new_loc[i]
+						kf.handle_left[1] = self.keyframes_ori[ob][chan][fcurv][frame][1][1] + d[i]
+						kf.handle_right[1] = self.keyframes_ori[ob][chan][fcurv][frame][2][1] + d[i]
+						break
 
 	# change 3d-location of handle
 	elif mt.mode == 'values' and self.active_handle:
@@ -1695,8 +1671,9 @@ class MotionTrailOperator(bpy.types.Operator):
 	click: dict(Object, list[any])
 	"""Items that may be clicked on. Structure: {ob: [[frame, type, coord, channels], ...], ob2: ...}"""
 
-	keyframe_backup: list[list[float]]
-	"""A list of backed up keyframes for when dragging is started/cancelled. For value mode only, as other modes affect more values..."""
+	keyframes_ori: dict(Object, list[list[dict(float, list[list[float]])]])
+	"""{ob: [chan: [fcurve: {frame: ([x, y] x3), ...} x 3/4?] x3?], ...},\n
+	where the 3 Vectors are the coordinates of the keyframe, its left handle, and its right handle."""
 
 	active_keyframe: list[any]
 	"""If a keyframe is active, this contains [ob, frame, frame, channels]""" 
@@ -1850,8 +1827,7 @@ class MotionTrailOperator(bpy.types.Operator):
 					self.active_keyframe = self.active_frame
 					self.active_frame = False
 
-				anim_data_getter = get_original_animation_data_dg if mt.use_depsgraph else get_original_animation_data_ce
-				self.keyframes_ori, self.handles_ori = anim_data_getter(context, self.keyframes)
+				self.keyframes_ori = get_original_animation_data(context, self.keyframes)
 				self.drag_mouse_ori = Vector([event.mouse_region_x, event.mouse_region_y])
 				self.drag = True
 				self.lock = False

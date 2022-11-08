@@ -1909,7 +1909,6 @@ class MotionTrailOperator(bpy.types.Operator):
 		elif event.type == 'MOUSEMOVE' and self.drag:
 			# drag
 
-			print("mousex: {} regionx: {} accumulated: {} original: {}".format(event.mouse_x, event.mouse_region_x, self.drag_mouse_accumulate[0], self.drag_mouse_ori[0]))
 			currmouse = Vector((event.mouse_x, event.mouse_y))
 			prevmouse = Vector((event.mouse_prev_x, event.mouse_prev_y))
 

@@ -1211,61 +1211,41 @@ def drag(self, context, event, inverse_getter):
 
 	# change 3d-location of handle
 	elif mt.mode == 'values' and self.active_handle:
-		ob, frame, side = self.active_handle
+		ob, frame, side, chans = self.active_handle
 
 		curves = get_curves(ob)
 
-		for i, curve in enumerate(curves):
-			for kf in curve.keyframe_points:
-				if kf.co[0] == frame:
-					if side == "left":
-						# change handle type, if necessary
-						# TODO: function for this, makes code unreadable
-						if kf.handle_left_type in (
-								'AUTO',
-								'AUTO_CLAMPED',
-								'ANIM_CLAMPED'):
-							kf.handle_left_type = 'ALIGNED'
-						elif kf.handle_left_type == 'VECTOR':
-							kf.handle_left_type = 'FREE'
-						# change handle position(s)
-						kf.handle_left[1] = handles_ori[ob][frame]["left"][i][1] + d[i]
-						if kf.handle_left_type in (
-								'ALIGNED',
-								'ANIM_CLAMPED',
-								'AUTO',
-								'AUTO_CLAMPED'):
-							dif = (
-								abs(handles_ori[ob][frame]["right"][i][0] -
-								kf.co[0]) / abs(kf.handle_left[0] -
-								kf.co[0])
-								) * d[i]
-							kf.handle_right[1] = handles_ori[ob][frame]["right"][i][1] - dif
-					elif side == "right":
-						# change handle type, if necessary
-						if kf.handle_right_type in (
-								'AUTO',
-								'AUTO_CLAMPED',
-								'ANIM_CLAMPED'):
-							kf.handle_left_type = 'ALIGNED'
-							kf.handle_right_type = 'ALIGNED'
-						elif kf.handle_right_type == 'VECTOR':
-							kf.handle_left_type = 'FREE'
-							kf.handle_right_type = 'FREE'
-						# change handle position(s)
-						kf.handle_right[1] = handles_ori[ob][frame]["right"][i][1] + d[i]
-						if kf.handle_right_type in (
-								'ALIGNED',
-								'ANIM_CLAMPED',
-								'AUTO',
-								'AUTO_CLAMPED'):
-							dif = (
-								abs(handles_ori[ob][frame]["left"][i][0] -
-								kf.co[0]) / abs(kf.handle_right[0] -
-								kf.co[0])
-								) * d[i]
-							kf.handle_left[1] = handles_ori[ob][frame]["left"][i][1] - dif
-					break
+		def update_this_handle(kf: Keyframe, side: bool, dif: float, ob: Object, chan: int, fc: int, frame: float):
+			sides_type = [kf.handle_left_type, kf.handle_right_type]
+			sides = [kf.handle_left, kf.handle_right]
+			other_side = 1 - side
+			originals = [self.keyframes_ori[ob][chan][fc][frame][1], self.keyframes_ori[ob][chan][fc][frame][2]]
+
+			if sides_type[side] in ('AUTO', 'AUTO_CLAMPED', 'ANIM_CLAMPED'):
+				sides_type[side].handle_left_type = 'ALIGNED'
+			elif sides_type[side] == 'VECTOR':
+				sides_type[side] = 'FREE'
+
+			sides[side][1] = originals[side][1] + dif
+
+			if sides_type[side] in ('ALIGNED', 'ANIM_CLAMPED', 'AUTO', 'AUTO_CLAMPED'):
+				dif2 = abs(originals[other_side][0] -kf.co[0]) / abs(kf.handle_left[0] - kf.co[0])
+				dif2 *= dif
+				sides[other_side][1] = originals[other_side][1] - dif2
+
+
+		for chan in range(len(curves)):
+			if not chans[chan]:
+				continue
+
+			for fcurv in range(len(curves[chan])):
+				for kf in curves[chan][fcurv].keyframe_points:
+					if kf.co[0] == frame:
+						if side == "left":
+							update_this_handle(kf, 0, d[fcurv], ob, chan, fcurv, frame)
+						elif side == "right": # ? is this if necessary?
+							update_this_handle(kf, 1, d[fcurv], ob, chan, fcurv, frame)
+						break
 
 	# change position of all keyframes on timeline
 	elif mt.mode == 'timing' and active_timebead:

@@ -1172,25 +1172,29 @@ def is_constrained(constraint):
 
 # change data based on mouse movement
 def drag(self, context, event, inverse_getter):
-	self: MotionTrailOperator # VSCode complains that this type hint is undefined if done in the parameters?!
 	mt: MotionTrailProps = context.window_manager.motion_trail
+
+	active_any = self.active_keyframe
+	if not active_any: active_any = self.active_handle
+	if not active_any: active_any = self.active_timebead
+	
+	_ob, _frame, _frame_ori, _chans = active_any
+	inverse_mat = inverse_getter(_frame, _ob, context)
+		
+	mouse_ori_world = inverse_mat @ screen_to_world(context, self.drag_mouse_ori)
+	transformed_diff = inverse_mat @ screen_to_world(context, self.drag_mouse_accumulate + self.drag_mouse_ori)
+
+	d = transformed_diff - mouse_ori_world
+	if is_constrained(self.constraint_axes):
+		if self.constraint_orientation == 1: # Possibly add more?
+			d = swizzle_constraint(self.drag_mouse_accumulate * 0.05, self.constraint_axes)
+		else:
+			d = d * Vector(self.constraint_axes)
+
 	# change 3d-location of keyframe
 	if mt.mode == 'values' and self.active_keyframe:
 		ob, frame, frame_ori, chans = self.active_keyframe
-		mat = inverse_getter(frame, ob, context)
-		
-		mouse_ori_world = mat @ screen_to_world(context, self.drag_mouse_ori)
-		vector = mat @ screen_to_world(context, self.drag_mouse_accumulate + self.drag_mouse_ori)
 
-		d = vector - mouse_ori_world
-		if is_constrained(self.constraint_axes):
-			if self.constraint_orientation == 1: # Possibly add more?
-				d = swizzle_constraint(self.drag_mouse_accumulate * 0.05, self.constraint_axes)
-			else:
-				d = d * Vector(self.constraint_axes)
-
-		#loc_ori_ls = mat @ self.loc_ori_ws
-		#new_loc = loc_ori_ls + d
 		curves = get_curves(ob)
 
 		for chan in range(len(curves)):
@@ -1208,13 +1212,7 @@ def drag(self, context, event, inverse_getter):
 	# change 3d-location of handle
 	elif mt.mode == 'values' and self.active_handle:
 		ob, frame, side = self.active_handle
-		mat = inverse_getter(frame, ob, context)
 
-		mouse_ori_world = mat @ screen_to_world(context, self.drag_mouse_ori[0],
-			self.drag_mouse_ori[1])
-		vector = mat @ screen_to_world(context, event.mouse_region_x,
-			event.mouse_region_y)
-		d = vector - mouse_ori_world
 		curves = get_curves(ob)
 
 		for i, curve in enumerate(curves):
@@ -1324,13 +1322,6 @@ def drag(self, context, event, inverse_getter):
 	# change position of active keyframe on the timeline
 	elif mt.mode == 'timing' and active_keyframe:
 		ob, frame, frame_ori = active_keyframe
-		mat = inverse_getter(frame, ob, context)
-
-		mouse_ori_world = mat @ screen_to_world(context, drag_mouse_ori[0],
-			drag_mouse_ori[1])
-		vector = mat @ screen_to_world(context, event.mouse_region_x,
-			event.mouse_region_y)
-		d = vector - mouse_ori_world
 
 		locs_ori = [[f_ori, coords] for f_mapped, [f_ori, coords] in
 					keyframes_ori[ob].items()]
@@ -1394,13 +1385,6 @@ def drag(self, context, event, inverse_getter):
 	# change position of active timebead on the timeline, thus altering speed
 	elif mt.mode == 'speed' and active_timebead:
 		ob, frame, frame_ori = active_timebead
-		mat = inverse_getter(frame, ob, context)
-
-		mouse_ori_world = mat @ screen_to_world(context, drag_mouse_ori[0],
-			drag_mouse_ori[1])
-		vector = mat @ screen_to_world(context, event.mouse_region_x,
-			event.mouse_region_y)
-		d = vector - mouse_ori_world
 
 		# determine direction (to next or previous keyframe)
 		curves = get_curves(ob)

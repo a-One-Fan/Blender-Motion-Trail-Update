@@ -1221,7 +1221,7 @@ def drag(self, context, event, inverse_getter):
 			d_sens = d.copy() * sensitivities[chan]
 			kfs = get_keyframes(curves[chan], frame)
 			if len(curves[chan]) == 4:
-				vals = [self.keyframes_ori[ob][chan][fcurv][frame][0][1] for fcurv in range(4)]
+				vals = [self.keyframes_ori[ob][chan][fcurv][frame][0][1] for fcurv in range(4)] # TODO: Potential exception when user is being a user and doesn't have 4 quaternion KFs?
 				to_eul = Vector(Quaternion(vals).to_euler())
 				to_eul_added = to_eul + d_sens
 				d_sens = Euler(to_eul_added).to_quaternion()

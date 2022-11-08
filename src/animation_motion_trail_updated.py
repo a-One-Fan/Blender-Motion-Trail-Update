@@ -1978,7 +1978,7 @@ class MotionTrailOperator(bpy.types.Operator):
 						if event.type == 'MOUSEMOVE':
 							self.highlighted_coord = coord
 
-						if event.type == select: # and event.value == 'PRESS'?
+						if event.type == select and event.value == 'PRESS':
 							self.active_keyframe = False
 							self.active_handle = False
 							self.active_timebead = False
@@ -1999,7 +1999,7 @@ class MotionTrailOperator(bpy.types.Operator):
 							break
 			if not found:
 				self.highlighted_coord = None
-				if event.type == deselect_nohit: # and event.value == 'PRESS'?
+				if event.type == deselect_nohit and event.value == 'PRESS':
 					attrs = ["active_keyframe", "active_handle", "active_timebead", "active_frame"]
 					# If a change happens, then no passthrough
 					gotten = [getattr(self, attr) for attr in attrs]

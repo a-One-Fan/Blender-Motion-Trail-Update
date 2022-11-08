@@ -188,7 +188,7 @@ def get_curves(obj: Object | PoseBone):
 	return get_curves_action(obj, animDataContainer.animation_data.action)
 
 # turn screen coordinates (x,y) into world coordinates vector
-def screen_to_world(context, x, y):
+def screen_to_worldxy(context, x, y):
 	depth_vector = view3d_utils.region_2d_to_vector_3d(
 							context.region, context.region_data, [x, y]
 							)
@@ -197,10 +197,10 @@ def screen_to_world(context, x, y):
 							depth_vector
 							)
 
-	return(vector)
+	return (vector)
 
-def screen_to_worldv(context, vec):
-	return screen_to_world(context, vec.x, vec.y)
+def screen_to_world(context, vec):
+	return screen_to_worldxy(context, vec.x, vec.y)
 
 # turn 3d world coordinates vector into screen coordinate integers (x,y)
 def world_to_screen(context, vector):
@@ -1179,8 +1179,8 @@ def drag(self, context, event, inverse_getter):
 		ob, frame, frame_ori, chans = self.active_keyframe
 		mat = inverse_getter(frame, ob, context)
 		
-		mouse_ori_world = mat @ screen_to_worldv(context, self.drag_mouse_ori)
-		vector = mat @ screen_to_worldv(context, self.drag_mouse_accumulate + self.drag_mouse_ori)
+		mouse_ori_world = mat @ screen_to_world(context, self.drag_mouse_ori)
+		vector = mat @ screen_to_world(context, self.drag_mouse_accumulate + self.drag_mouse_ori)
 
 		d = vector - mouse_ori_world
 		if is_constrained(self.constraint_axes):
@@ -2859,6 +2859,7 @@ configurable_props = ["use_depsgraph", "select_key", "select_threshold", "desele
 "simple_color", "speed_color_min", "speed_color_max", "accel_color_neg", "accel_color_static", "accel_color_pos",
 "keyframe_color", "frame_color", "selection_color", "selection_color_dark", "highlight_color", 
 ["handle_color_loc", "handle_color_rot", "handle_color_scl"], "handle_color_fac", "handle_line_color", "timebead_color", 
+["sensitivity_location", "sensitivity_rotation", "sensitivity_scale"], "sensitivity_shift", "sensitivity_alt",
 "text_color", "selected_text_color", "path_width", "path_step", "path_before", "path_after",
 "keyframe_numbers", "frame_display", "handle_display", "handle_length", "handle_direction", "show_spines", "spine_length", "spine_step", "spine_offset",
 ["pXspines", "pYspines", "pZspines"], ["nXspines", "nYspines", "nZspines"], ["spine_x_color", "spine_y_color", "spine_z_color"]]

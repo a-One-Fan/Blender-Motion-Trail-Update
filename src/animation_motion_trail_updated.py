@@ -1842,7 +1842,6 @@ class MotionTrailOperator(bpy.types.Operator):
 				self.active_handle or
 				self.active_timebead or
 				self.active_frame)):
-			# override default translate()
 			if not self.drag:
 				# start drag
 

@@ -1793,11 +1793,6 @@ class MotionTrailOperator(bpy.types.Operator):
 			set_handle_type(self, context)
 			mt.handle_update = False
 
-		# Passthrough ctrl+z
-		# TODO: Look at keymap for undo and redo?
-		if event.type == 'Z' and event.ctrl:
-			return {'PASS_THROUGH'}
-
 		if mt.use_depsgraph:
 			calc_callback_dg(self, context)
 
@@ -1807,7 +1802,7 @@ class MotionTrailOperator(bpy.types.Operator):
 
 		no_passthrough = False
 
-		if event.type in ['X', 'Y', 'Z'] and event.value == 'PRESS':
+		if event.type in ['X', 'Y', 'Z'] and event.value == 'PRESS' and self.drag:
 			no_passthrough = True
 			new_constraint = []
 

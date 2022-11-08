@@ -407,7 +407,8 @@ def get_original_animation_data(context):
 				keyframes_ori[ob][chan].append({})
 				kf: Keyframe
 				for kf in curves[chan][fcurv].keyframe_points:
-					keyframes_ori[ob][chan][fcurv][kf.co[0]] = (kf.co.copy(), kf.handle_left.copy(), kf.handle_right.copy())
+					keyframes_ori[ob][chan][fcurv][kf.co[0]] = \
+						(kf.co.copy(), kf.handle_left.copy(), kf.handle_right.copy(), "" +  kf.handle_left_type, "" + kf.handle_right_type)
 
 	return keyframes_ori
 
@@ -1473,8 +1474,12 @@ def cancel_drag(self, context):
 	mt: MotionTrailProps = context.window_manager.motion_trail
 
 	# revert change in values of active keyframe and its handles
-	if mt.mode == 'values' and active_keyframe:
-		ob, frame, frame_ori, chans = active_keyframe # TODO: Is frame_ori necessary?
+	if mt.mode == 'values':
+		curr_active = self.active_keyframe if self.active_keyframe else self.active_handle
+		ob, frame, frame_ori, chans = curr_active
+		if self.active_keyframe:
+			frame = frame_ori # TODO: Add keyframe time-shfting?
+		
 		curves = get_curves(ob)
 		for chan in range(len(curves)):
 			if not chans[chan]:
@@ -1485,21 +1490,12 @@ def cancel_drag(self, context):
 				kf.co[1] = self.keyframes_ori[ob][chan][fc][frame][0][1]
 				kf.handle_left[1] = self.keyframes_ori[ob][chan][fc][frame][1][1]
 				kf.handle_right[1] = self.keyframes_ori[ob][chan][fc][frame][2][1]
-
-	# revert change in value of active handle
-	elif mt.mode == 'values' and self.active_handle:
-		ob, frame, side, chans = self.active_handle
-		curves = get_curves(ob)
-		for i, curve in enumerate(curves):
-			for kf in curve.keyframe_points:
-				if kf.co[0] == frame:
-					kf.handle_left[1] = handles_ori[objectname][frame]["left"][i][1]
-					kf.handle_right[1] = handles_ori[objectname][frame]["right"][i][1]
-					break
+				kf.handle_left_type = self.keyframes_ori[ob][chan][fc][frame][3]
+				kf.handle_right_type = self.keyframes_ori[ob][chan][fc][frame][4]
 
 	# revert position of all keyframes and handles on timeline
-	elif mt.mode == 'timing' and active_timebead:
-		ob, frame, frame_ori, chans = active_timebead
+	elif mt.mode == 'timing' and self.active_timebead:
+		ob, frame, frame_ori, chans = self.active_timebead
 		curves = get_curves(ob)
 		for i, curve in enumerate(curves):
 			for kf in curve.keyframe_points:
@@ -1512,8 +1508,8 @@ def cancel_drag(self, context):
 						break
 
 	# revert position of active keyframe and its handles on the timeline
-	elif mt.mode == 'timing' and active_keyframe:
-		ob, frame, frame_ori, chans = active_keyframe
+	elif mt.mode == 'timing' and self.active_keyframe:
+		ob, frame, frame_ori, chans = self.active_keyframe
 		curves = get_curves(ob)
 		for i, curve in enumerate(curves):
 			for kf in curve.keyframe_points:
@@ -1522,11 +1518,11 @@ def cancel_drag(self, context):
 					kf.handle_left[0] = handles_ori[objectname][frame_ori]["left"][i][0]
 					kf.handle_right[0] = handles_ori[objectname][frame_ori]["right"][i][0]
 					break
-		active_keyframe = [objectname, frame_ori, frame_ori, active_ob, child]
+		self.active_keyframe = [objectname, frame_ori, frame_ori, active_ob, child]
 
 	# revert position of handles on the timeline
-	elif mt.mode == 'speed' and active_timebead:
-		ob, frame, frame_ori, chans = active_timebead
+	elif mt.mode == 'speed' and self.active_timebead:
+		ob, frame, frame_ori, chans = self.active_timebead
 		curves = get_curves(ob)
 		keyframes = [kf for kf in keyframes_ori[objectname]]
 		keyframes.append(frame_ori)
@@ -1544,7 +1540,7 @@ def cancel_drag(self, context):
 					kf.handle_left[0] = handles_ori[objectname][kf_frame]["left"][i][0]
 					kf.handle_right[0] = handles_ori[objectname][kf_frame]["right"][i][0]
 					break
-		active_timebead = [objectname, frame_ori, frame_ori, active_ob, child]
+		self.active_timebead = [objectname, frame_ori, frame_ori, active_ob, child]
 
 	return
 

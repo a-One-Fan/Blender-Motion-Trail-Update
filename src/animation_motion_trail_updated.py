@@ -70,6 +70,14 @@ def mulscalar(tup, scalar):
 def make_chan(i):
 	return tuple([j == i for j in range(3)])
 
+def findlist(arr, elem):
+	"""Returns index of elem in arr, -1 if not found"""
+	for i in range(len(arr)):
+		if arr[i] == elem:
+			return i
+	
+	return -1
+
 # Flattens recursively.
 def flatten(deeplist):
 	flatlist = []
@@ -1678,6 +1686,8 @@ class MotionTrailOperator(bpy.types.Operator):
 	lock: bool
 	"""Whether or not we're changing the motion trail"""
 
+	op_method: int = -1
+	"""0 = grab (location), 1 = rotate, 2 = scale"""
 	constraint_axes: list[bool] = [False, False, False]
 	"""Bools for which axes are constrained. Please keep 3 long."""
 	constraint_orientation: bool = 0
@@ -1837,14 +1847,14 @@ class MotionTrailOperator(bpy.types.Operator):
 		select = mt.select_key
 		deselect_nohit = mt.deselect_nohit_key
 		deselect_always = mt.deselect_always_key
-		if (event.type == self.transform_key and event.value == 'PRESS' and
+		if (event.type in self.transform_keys and event.value == 'PRESS' and
 			   (self.active_keyframe or
 				self.active_handle or
 				self.active_timebead or
 				self.active_frame)):
 			if not self.drag:
 				# start drag
-
+				self.op_method = findlist(event.type, self.transform_keys)
 				context.window.cursor_set('SCROLL_XY')
 
 				if self.active_frame:
@@ -2041,7 +2051,21 @@ class MotionTrailOperator(bpy.types.Operator):
 				kmi.map_type == 'KEYBOARD' and not \
 				kmi.properties.texture_space:
 					#kmis.append(kmi)
-					self.transform_key = kmi.type
+					translate_key = kmi.type
+
+				if kmi.idname == "transform.rotate" and \
+				kmi.map_type == 'KEYBOARD' and not \
+				kmi.properties.texture_space:
+					#kmis.append(kmi)
+					rotate_key = kmi.type
+				
+				if kmi.idname == "transform.scale" and \
+				kmi.map_type == 'KEYBOARD' and not \
+				kmi.properties.texture_space:
+					#kmis.append(kmi)
+					scale_key = kmi.type
+
+		self.transform_keys = [translate_key, rotate_key, scale_key]
 
 		mt: MotionTrailProps = context.window_manager.motion_trail
 

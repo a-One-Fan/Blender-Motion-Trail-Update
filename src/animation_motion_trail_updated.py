@@ -1801,59 +1801,98 @@ class MotionTrailOperator(bpy.types.Operator):
 		if self.drag:
 			no_passthrough = True
 
-		if event.type in ['X', 'Y', 'Z'] and event.value == 'PRESS' and self.drag:
-			new_constraint = []
-
-			if not event.shift:
-				if event.type == 'X':
-					new_constraint = [True, False, False]
-				elif event.type == 'Y':
-					new_constraint = [False, True, False]
-				else:
-					new_constraint = [False, False, True]
-			else:
-				if event.type == 'X':
-					new_constraint = [False, True, True]
-				elif event.type == 'Y':
-					new_constraint = [True, False, True]
-				else:
-					new_constraint = [True, True, False]
-
-			if self.constraint_axes == new_constraint:
-				if not self.constraint_orientation:
-					self.constraint_orientation = True
-				else:
-					self.constraint_orientation = False
-					new_constraint = [False, False, False]
-			else:
-				self.constraint_orientation = False
-			
-			self.constraint_axes = new_constraint
-
-		# TODO: Copypasted code, any better approach? /\
-
-		if (not context.active_object or
-				context.active_object.mode not in ('OBJECT', 'POSE')):
-			if self.drag:
+			# TODO: Should this cancel_drag as well? could merge both ifs if so
+			if (not context.active_object or
+					context.active_object.mode not in ('OBJECT', 'POSE')):
 				self.drag = False
 				self.lock = True
 				mt.force_update = True
-		# check if event was generated within 3d-window, dragging is exception
-		if not self.drag:
-			if not (0 < event.mouse_region_x < context.region.width) or \
-			not (0 < event.mouse_region_y < context.region.height):
-				return {'PASS_THROUGH'}
 
-		select = mt.select_key
-		deselect_nohit = mt.deselect_nohit_key
-		deselect_always = mt.deselect_always_key
-		if (event.type in self.transform_keys and event.value == 'PRESS' and
-			   (self.active_keyframe or
-				self.active_handle or
-				self.active_timebead or
-				self.active_frame)):
-			if not self.drag:
-				# start drag
+			if (event.type in ['ESC', 'RIGHTMOUSE']):
+				# cancel drag
+				context.window.cursor_set('DEFAULT')
+				self.drag = False
+				self.lock = True
+				mt.force_update = True
+				cancel_drag(self, context)
+
+			if event.type in ['X', 'Y', 'Z'] and event.value == 'PRESS':
+				new_constraint = []
+
+				if not event.shift:
+					if event.type == 'X':
+						new_constraint = [True, False, False]
+					elif event.type == 'Y':
+						new_constraint = [False, True, False]
+					else:
+						new_constraint = [False, False, True]
+				else:
+					if event.type == 'X':
+						new_constraint = [False, True, True]
+					elif event.type == 'Y':
+						new_constraint = [True, False, True]
+					else:
+						new_constraint = [True, True, False]
+
+				if self.constraint_axes == new_constraint:
+					if not self.constraint_orientation:
+						self.constraint_orientation = True
+					else:
+						self.constraint_orientation = False
+						new_constraint = [False, False, False]
+				else:
+					self.constraint_orientation = False
+				
+				self.constraint_axes = new_constraint
+
+				# TODO: Copypasted code, any better approach? /\
+
+			if event.type == 'MOUSEMOVE':
+				# drag
+
+				currmouse = Vector((event.mouse_x, event.mouse_y))
+				prevmouse = Vector((event.mouse_prev_x, event.mouse_prev_y))
+
+				# Move cursor back inside 3d viewport
+				area = context.area
+				maxx = area.x + area.width
+				maxy = area.y + area.height
+				margin = 5
+				if event.mouse_x < (area.x + margin):
+					context.window.cursor_warp(maxx-1-margin, event.mouse_y)
+				if event.mouse_x > (maxx - margin):
+					context.window.cursor_warp(area.x+1+margin, event.mouse_y)
+				if event.mouse_y < (area.y + margin):
+					context.window.cursor_warp(event.mouse_x, maxy-1-margin)
+				if event.mouse_y > (maxy - margin):
+					context.window.cursor_warp(event.mouse_x, area.y+1+margin)
+
+				sens = 1.0
+				if event.alt:
+					sens = mt.sensitivity_alt
+				if event.shift:
+					sens = mt.sensitivity_shift
+
+				self.drag_mouse_accumulate += (currmouse - prevmouse) * sens
+
+				inverse_getter = get_inverse_parents_depsgraph if mt.use_depsgraph else get_inverse_parents
+				drag(self, context, event, inverse_getter)
+
+			if event.type == 'LEFTMOUSE' and event.value == 'PRESS':
+				# finish drag
+				context.window.cursor_set('DEFAULT')
+				self.drag = False
+				self.lock = True
+				mt.force_update = True
+				bpy.ops.ed.undo_push(message="Confirmed Motion Trail drag")
+
+		else:
+
+			if (event.type in self.transform_keys and event.value == 'PRESS' and
+				(self.active_keyframe or
+					self.active_handle or
+					self.active_timebead or
+					self.active_frame)):
 				self.op_method = findlist(event.type, self.transform_keys)
 				context.window.cursor_set('SCROLL_XY')
 
@@ -1880,148 +1919,95 @@ class MotionTrailOperator(bpy.types.Operator):
 				self.constraint_axes = [False, False, False]
 				self.constraint_orientation = False
 				no_passthrough = True
+		
+			elif (event.type == mt.select_key and event.value == 'PRESS') or \
+				event.type == 'MOUSEMOVE':
+				# Select or highlight
+				clicked = Vector([event.mouse_region_x, event.mouse_region_y])
 
-			else:
-				# stop drag
-				context.window.cursor_set('DEFAULT')
-				self.drag = False
-				self.lock = True
-				mt.force_update = True
-		elif (event.type == 'ESC' and self.drag and event.value == 'PRESS') or \
-			 (event.type == 'RIGHTMOUSE' and self.drag and event.value == 'PRESS'):
-			# cancel drag
-			context.window.cursor_set('DEFAULT')
-			self.drag = False
-			self.lock = True
-			mt.force_update = True
-			cancel_drag(self, context)
-		elif event.type == 'MOUSEMOVE' and self.drag:
-			# drag
+				#context.window_manager.motion_trail.force_update = True
+				#TODO: Stare at the above line, should it be commented out?
 
-			currmouse = Vector((event.mouse_x, event.mouse_y))
-			prevmouse = Vector((event.mouse_prev_x, event.mouse_prev_y))
+				found = False
 
-			# Move cursor back inside 3d viewport
-			area = context.area
-			maxx = area.x + area.width
-			maxy = area.y + area.height
-			margin = 5
-			if event.mouse_x < (area.x + margin):
-				context.window.cursor_warp(maxx-1-margin, event.mouse_y)
-			if event.mouse_x > (maxx - margin):
-				context.window.cursor_warp(area.x+1+margin, event.mouse_y)
-			if event.mouse_y < (area.y + margin):
-				context.window.cursor_warp(event.mouse_x, maxy-1-margin)
-			if event.mouse_y > (maxy - margin):
-				context.window.cursor_warp(event.mouse_x, area.y+1+margin)
-
-			sens = 1.0
-			if event.alt:
-				sens = mt.sensitivity_alt
-			if event.shift:
-				sens = mt.sensitivity_shift
-
-			self.drag_mouse_accumulate += (currmouse - prevmouse) * sens
-
-			inverse_getter = get_inverse_parents_depsgraph if mt.use_depsgraph else get_inverse_parents
-			drag(self, context, event, inverse_getter)
-
-		elif not self.drag and not event.shift and not event.alt and not event.ctrl:
-			# Select or highlight
-			threshold = mt.select_threshold
-			clicked = Vector([event.mouse_region_x, event.mouse_region_y])
-
-			#context.window_manager.motion_trail.force_update = True
-			#TODO: Stare at the above line, should it be commented out?
-
-			found = False
-
-			if mt.path_before == 0:
-				frame_min = context.scene.frame_start
-			else:
-				frame_min = max(
-							context.scene.frame_start,
-							context.scene.frame_current -
-							mt.path_before
-							)
-			if mt.path_after == 0:
-				frame_max = context.scene.frame_end
-			else:
-				frame_max = min(
-							context.scene.frame_end,
-							context.scene.frame_current +
-							mt.path_after
-							)
-
-			for ob, values in self.click.items():
-				if found:
-					break
-				for frame, type, coord, channels in values:
-					if frame < frame_min or frame > frame_max:
-						continue
-					if (coord - clicked).length <= threshold:
-						found = True
-
-						if event.type == 'MOUSEMOVE':
-							self.highlighted_coord = coord
-
-						if event.type == select and event.value == 'PRESS':
-							self.active_keyframe = False
-							self.active_handle = False
-							self.active_timebead = False
-							self.active_frame = False
-							mt.handle_type_enabled = True
-							no_passthrough = True
-
-							if type == "keyframe":
-								self.active_keyframe = [ob, frame, frame, channels]
-							elif type == "handle_left":
-								self.active_handle = [ob, frame, "left", channels]
-							elif type == "handle_right":
-								self.active_handle = [ob, frame, "right", channels]
-							elif type == "timebead":
-								self.active_timebead = [ob, frame, frame, channels]
-							elif type == "frame":
-								self.active_frame = [ob, frame, frame, channels]
-							break
-			if not found:
-				self.highlighted_coord = None
-				if event.type == deselect_nohit and event.value == 'PRESS':
-					attrs = ["active_keyframe", "active_handle", "active_timebead", "active_frame"]
-					# If a change happens, then no passthrough
-					gotten = [getattr(self, attr) for attr in attrs]
-					no_passthrough = (not reduce(lambda accum, next: accum and not next, gotten, True)) and not mt.deselect_passthrough
-					
-					for attr in attrs:
-						setattr(self, attr, False)
-					mt.handle_type_enabled = False
-					
-				pass
-			else:
-				handle_type = get_handle_type(self, self.active_keyframe,
-					self.active_handle)
-				if handle_type:
-					mt.handle_type_old = handle_type
-					mt.handle_type = handle_type
+				if mt.path_before == 0:
+					frame_min = context.scene.frame_start
 				else:
-					mt.handle_type_enabled = False
-		elif event.type == 'LEFTMOUSE' and event.value == 'PRESS' and \
-		self.drag:
-			# stop drag
-			context.window.cursor_set('DEFAULT')
-			self.drag = False
-			self.lock = True
-			mt.force_update = True
-			bpy.ops.ed.undo_push(message="Confirmed Motion Trail drag")
+					frame_min = max(
+								context.scene.frame_start,
+								context.scene.frame_current -
+								mt.path_before
+								)
+				if mt.path_after == 0:
+					frame_max = context.scene.frame_end
+				else:
+					frame_max = min(
+								context.scene.frame_end,
+								context.scene.frame_current +
+								mt.path_after
+								)
 
-		elif event.type == deselect_always and event.value == 'PRESS' and \
-		not self.drag and not event.shift and not event.alt and not \
-		event.ctrl:
-			self.active_keyframe = False
-			self.active_handle = False
-			self.active_timebead = False
-			self.active_frame = False
-			mt.handle_type_enabled = False
+				for ob, values in self.click.items():
+					if found:
+						break
+					for frame, type, coord, channels in values:
+						if frame < frame_min or frame > frame_max:
+							continue
+						if (coord - clicked).length <= mt.select_threshold:
+							found = True
+
+							if event.type == 'MOUSEMOVE':
+								self.highlighted_coord = coord
+
+							if event.type == mt.select_key and event.value == 'PRESS':
+								self.active_keyframe = False
+								self.active_handle = False
+								self.active_timebead = False
+								self.active_frame = False
+								mt.handle_type_enabled = True
+								no_passthrough = True
+
+								if type == "keyframe":
+									self.active_keyframe = [ob, frame, frame, channels]
+								elif type == "handle_left":
+									self.active_handle = [ob, frame, "left", channels]
+								elif type == "handle_right":
+									self.active_handle = [ob, frame, "right", channels]
+								elif type == "timebead":
+									self.active_timebead = [ob, frame, frame, channels]
+								elif type == "frame":
+									self.active_frame = [ob, frame, frame, channels]
+								break
+				
+				if not found:
+					self.highlighted_coord = None
+					if event.type == mt.deselect_nohit_key and event.value == 'PRESS':
+						attrs = ["active_keyframe", "active_handle", "active_timebead", "active_frame"]
+						# If a change happens, then no passthrough
+						gotten = [getattr(self, attr) for attr in attrs]
+						no_passthrough = (not reduce(lambda accum, next: accum and not next, gotten, True)) and not mt.deselect_passthrough
+						
+						for attr in attrs:
+							setattr(self, attr, False)
+						mt.handle_type_enabled = False
+						
+					pass
+				else:
+					handle_type = get_handle_type(self, self.active_keyframe,
+						self.active_handle)
+					if handle_type:
+						mt.handle_type_old = handle_type
+						mt.handle_type = handle_type
+					else:
+						mt.handle_type_enabled = False
+		
+
+			elif event.type == mt.deselect_always_key and event.value == 'PRESS':
+				self.active_keyframe = False
+				self.active_handle = False
+				self.active_timebead = False
+				self.active_frame = False
+				mt.handle_type_enabled = False
 
 		if context.area:  # not available if other window-type is fullscreen
 			context.area.tag_redraw()
@@ -2047,23 +2033,17 @@ class MotionTrailOperator(bpy.types.Operator):
 		kmis = []
 		for km in kms:
 			for kmi in km.keymap_items:
-				if kmi.idname == "transform.translate" and \
-				kmi.map_type == 'KEYBOARD' and not \
-				kmi.properties.texture_space:
-					#kmis.append(kmi)
-					translate_key = kmi.type
+				# ??? "and not kmi.properties.texture_space" - why?
+				if kmi.map_type == 'KEYBOARD':
+					if kmi.idname == "transform.translate" :
+						# ? kmis.append(kmi) - ???
+						translate_key = kmi.type
 
-				if kmi.idname == "transform.rotate" and \
-				kmi.map_type == 'KEYBOARD' and not \
-				kmi.properties.texture_space:
-					#kmis.append(kmi)
-					rotate_key = kmi.type
+					if kmi.idname == "transform.rotate":
+						rotate_key = kmi.type
 				
-				if kmi.idname == "transform.scale" and \
-				kmi.map_type == 'KEYBOARD' and not \
-				kmi.properties.texture_space:
-					#kmis.append(kmi)
-					scale_key = kmi.type
+					if kmi.idname == "transform.resize": # ! Why the hell did they call it resize and not scale?!
+						scale_key = kmi.type
 
 		self.transform_keys = [translate_key, rotate_key, scale_key]
 

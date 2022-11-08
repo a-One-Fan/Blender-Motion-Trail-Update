@@ -2249,7 +2249,7 @@ class MotionTrailPanel(bpy.types.Panel):
 
 		box = self.layout.box()
 		col = box.column(align=True)
-		col.row().label(text="Handle colors:")
+		col.row().label(text="Handle/keyframe colors:")
 		handle_color_row = col.row()
 		handle_color_row.prop(mt, "handle_color_loc", text="Loc")
 		handle_color_row.prop(mt, "handle_color_rot", text="Rot")
@@ -2403,9 +2403,9 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			update=internal_update
 			)
 	path_style: EnumProperty(name="Path style", items=(
-			("acceleration", "Acceleration", "Gradient based on relative acceleration"),
-			("simple", "Simple", "Black line"),
-			("speed", "Speed", "Gradient based on relative speed")),
+			("acceleration", "Acceleration", "Gradient based on relative acceleration."),
+			("simple", "Simple", "A line with a single color."),
+			("speed", "Speed", "Gradient based on relative speed.")),
 			description="Information conveyed by path color",
 			default='simple',
 			update=internal_update
@@ -2496,7 +2496,7 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			default='RIGHTMOUSE'
 			)
 	deselect_always_key: EnumProperty(name="Deselect always key",
-			description="Pressing this key will always deselect\n" + DESELECT_WARNING,
+			description="Pressing this key will always deselect.\n" + DESELECT_WARNING,
 			items=(
 			("LEFTMOUSE", "Left Mouse Button", ""),
 			("RIGHTMOUSE", "Right Mouse Button", ""),

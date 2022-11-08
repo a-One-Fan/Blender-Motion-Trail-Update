@@ -1184,13 +1184,11 @@ def drag(self, context, event, inverse_getter):
 
 		d = vector - mouse_ori_world
 		if is_constrained(self.constraint_axes):
-			#mdiff = Vector(self.drag_mouse_ori) - Vector((event.mouse_region_x, event.mouse_region_y))
-			#d = swizzle_constraint(mdiff * 0.05, self.constraint_axes)
-			d = d * Vector(self.constraint_axes)
-
-
-
-		
+			if self.constraint_orientation == 1: # Possibly add more?
+				mdiff = Vector(self.drag_mouse_ori) - Vector((event.mouse_region_x, event.mouse_region_y))
+				d = swizzle_constraint(mdiff * 0.05, self.constraint_axes)
+			else:
+				d = d * Vector(self.constraint_axes)
 
 		#loc_ori_ls = mat @ self.loc_ori_ws
 		#new_loc = loc_ori_ls + d
@@ -2242,6 +2240,16 @@ class MotionTrailPanel(bpy.types.Panel):
 		handle_fac_row = col.row()
 		handle_fac_row.prop(mt, "handle_color_fac")
 		#handle_fac_row.prop(mt, "handle_color_mul", "Mul fac")
+
+		col.row().label(text="Sensitivty:")
+		sens_row_lrs = col.row()
+		sens_row_lrs.prop(mt, "sensitivity_location", text="Loc")
+		sens_row_lrs.prop(mt, "sensitivity_rotation", text="Rot")
+		sens_row_lrs.prop(mt, "sensitivity_scale", text="Scale")
+		sens_row_modkeys = col.row()
+		sens_row_modkeys.prop(mt, "sensitivity_shift")
+		sens_row_modkeys.prop(mt, "sensitivity_alt")
+
 		col.row().prop(mt, "selection_color")
 		col.row().prop(mt, "highlight_color")
 		col.row().prop(mt, "select_key")
@@ -2415,22 +2423,42 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			default='wtime'
 			)
 
-	do_location: BoolProperty(name="Location",
+	do_location: BoolProperty(name="Do Location",
 			description="Show and work with location keyframes",
 			default=True,
 			update=internal_update
 			)
-	do_rotation: BoolProperty(name="Rotation",
+	do_rotation: BoolProperty(name="Do Rotation",
 			description="Show and work with rotation keyframes",
 			default=False,
 			update=internal_update
 			)
-	do_scale: BoolProperty(name="Scale",
+	do_scale: BoolProperty(name="Do Scale",
 			description="Show and work with scale keyframes",
 			default=False,
 			update=internal_update
 			)	
 	
+	sensitivity_location: FloatProperty(name="Location sensitivity",
+			description="Sensitivity for location-related values",
+			default = 1.0
+			)
+	sensitivity_rotation: FloatProperty(name="Rotation sensitivity",
+			description="Sensitivity for rotation-related values",
+			default = 1.0
+			)
+	sensitivity_scale: FloatProperty(name="Scale sensitivity",
+			description="Sensitivity for scale-related values",
+			default = 1.0
+			)
+	sensitivity_shift: FloatProperty(name="Shift sensitivity",
+			description="Sensitivity while holding shift",
+			default = 0.35
+			)
+	sensitivity_alt: FloatProperty(name="Alt sensitivity",
+			description="Sensitivity while holding alt",
+			default = 3.0
+			)
 			
 	#Key stuff
 	select_key: EnumProperty(name="Selection key",

@@ -1892,6 +1892,7 @@ class MotionTrailOperator(bpy.types.Operator):
 			self.drag = False
 			self.lock = True
 			mt.force_update = True
+			no_passthrough = True
 			cancel_drag(self, context)
 		elif event.type == 'MOUSEMOVE' and self.drag:
 			# drag

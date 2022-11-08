@@ -199,6 +199,8 @@ def screen_to_world(context, x, y):
 
 	return(vector)
 
+def screen_to_worldv(context, vec):
+	return screen_to_world(context, vec.x, vec.y)
 
 # turn 3d world coordinates vector into screen coordinate integers (x,y)
 def world_to_screen(context, vector):
@@ -1177,16 +1179,13 @@ def drag(self, context, event, inverse_getter):
 		ob, frame, frame_ori, chans = self.active_keyframe
 		mat = inverse_getter(frame, ob, context)
 		
-		mouse_ori_world = mat @ screen_to_world(context, self.drag_mouse_ori[0],
-			self.drag_mouse_ori[1])
-		vector = mat @ screen_to_world(context, event.mouse_region_x,
-			event.mouse_region_y)
+		mouse_ori_world = mat @ screen_to_worldv(context, self.drag_mouse_ori)
+		vector = mat @ screen_to_worldv(context, self.drag_mouse_accumulate + self.drag_mouse_ori)
 
 		d = vector - mouse_ori_world
 		if is_constrained(self.constraint_axes):
 			if self.constraint_orientation == 1: # Possibly add more?
-				mdiff = Vector(self.drag_mouse_ori) - Vector((event.mouse_region_x, event.mouse_region_y))
-				d = swizzle_constraint(mdiff * 0.05, self.constraint_axes)
+				d = swizzle_constraint(self.drag_mouse_accumulate * 0.05, self.constraint_axes)
 			else:
 				d = d * Vector(self.constraint_axes)
 
@@ -1716,6 +1715,12 @@ class MotionTrailOperator(bpy.types.Operator):
 	highlighted_coord: list[float]
 	"""Coordinates of highlighted point, for highlight on hover."""
 
+	drag_mouse_ori: Vector
+	"""Mouse position at start of drag"""
+
+	drag_mouse_accumulate: Vector
+	"""Accumulated mouse position from dragging, nicely factoring in shift/alt"""
+
 	@staticmethod
 	def handle_add(self, context):
 
@@ -1857,6 +1862,9 @@ class MotionTrailOperator(bpy.types.Operator):
 			# override default translate()
 			if not self.drag:
 				# start drag
+
+				context.window.cursor_set('SCROLL_XY')
+
 				if self.active_frame:
 					insert_keyframe(self, context, self.active_frame)
 					self.active_keyframe = self.active_frame
@@ -1872,6 +1880,7 @@ class MotionTrailOperator(bpy.types.Operator):
 				self.loc_ori_ws = self.cache.get_location(frame, ob, context)
 				self.keyframes_ori = get_original_animation_data(context)
 				self.drag_mouse_ori = Vector([event.mouse_region_x, event.mouse_region_y])
+				self.drag_mouse_accumulate = Vector((0, 0))
 				self.drag = True
 				self.lock = False
 				self.highlighted_coord = False
@@ -1881,6 +1890,7 @@ class MotionTrailOperator(bpy.types.Operator):
 
 			else:
 				# stop drag
+				context.window.cursor_set('DEFAULT')
 				self.drag = False
 				self.lock = True
 				mt.force_update = True
@@ -1891,12 +1901,40 @@ class MotionTrailOperator(bpy.types.Operator):
 		elif (event.type == 'ESC' and self.drag and event.value == 'PRESS') or \
 			 (event.type == 'RIGHTMOUSE' and self.drag and event.value == 'PRESS'):
 			# cancel drag
+			context.window.cursor_set('DEFAULT')
 			self.drag = False
 			self.lock = True
 			mt.force_update = True
 			cancel_drag(self, context)
 		elif event.type == 'MOUSEMOVE' and self.drag:
 			# drag
+
+			print("mousex: {} regionx: {} accumulated: {} original: {}".format(event.mouse_x, event.mouse_region_x, self.drag_mouse_accumulate[0], self.drag_mouse_ori[0]))
+			currmouse = Vector((event.mouse_x, event.mouse_y))
+			prevmouse = Vector((event.mouse_prev_x, event.mouse_prev_y))
+
+			# Move cursor back inside 3d viewport
+			area = context.area
+			maxx = area.x + area.width
+			maxy = area.y + area.height
+			margin = 5
+			if event.mouse_x < (area.x + margin):
+				context.window.cursor_warp(maxx-1-margin, event.mouse_y)
+			if event.mouse_x > (maxx - margin):
+				context.window.cursor_warp(area.x+1+margin, event.mouse_y)
+			if event.mouse_y < (area.y + margin):
+				context.window.cursor_warp(event.mouse_x, maxy-1-margin)
+			if event.mouse_y > (maxy - margin):
+				context.window.cursor_warp(event.mouse_x, area.y+1+margin)
+
+			sens = 1.0
+			if event.alt:
+				sens = mt.sensitivity_alt
+			if event.shift:
+				sens = mt.sensitivity_shift
+
+			self.drag_mouse_accumulate += (currmouse - prevmouse) * sens
+
 			inverse_getter = get_inverse_parents_depsgraph if mt.use_depsgraph else get_inverse_parents
 			drag(self, context, event, inverse_getter)
 			no_passthrough = True
@@ -1983,6 +2021,7 @@ class MotionTrailOperator(bpy.types.Operator):
 		elif event.type == 'LEFTMOUSE' and event.value == 'PRESS' and \
 		self.drag:
 			# stop drag
+			context.window.cursor_set('DEFAULT')
 			self.drag = False
 			self.lock = True
 			mt.force_update = True

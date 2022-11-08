@@ -1193,7 +1193,9 @@ def drag(self, context, event, inverse_getter):
 	if not active_any: active_any = self.active_timebead
 	
 	_ob, _frame, _frame_ori, _chans = active_any
-	inverse_mat = inverse_getter(_frame, _ob, context)
+	inverse_mat: Matrix = inverse_getter(_frame, _ob, context)
+	#decomposed = inverse_mat.decompose()
+	#inverse_mat = Matrix.LocRotScale(decomposed[0], decomposed[1], Vector((1.0, 1.0, 1.0)))
 		
 	mouse_ori_world = inverse_mat @ screen_to_world(context, self.drag_mouse_ori)
 	transformed_diff = inverse_mat @ screen_to_world(context, self.drag_mouse_accumulate + self.drag_mouse_ori)
@@ -1205,6 +1207,8 @@ def drag(self, context, event, inverse_getter):
 		else:
 			d = d * Vector(self.constraint_axes)
 
+	sensitivities = (mt.sensitivity_location, mt.sensitivity_rotation * 0.3, mt.sensitivity_scale * 0.3)
+
 	# change 3d-location of keyframe
 	if mt.mode == 'values' and self.active_keyframe:
 		ob, frame, frame_ori, chans = self.active_keyframe
@@ -1214,12 +1218,23 @@ def drag(self, context, event, inverse_getter):
 		for chan in range(len(curves)):
 			if not chans[chan]:
 				continue
-			
+			d_sens = d.copy() * sensitivities[chan]
 			kfs = get_keyframes(curves[chan], frame)
-			for fcurv, kf in kfs:
-				kf.co[1] = self.keyframes_ori[ob][chan][fcurv][frame][0][1] + d[fcurv]
-				kf.handle_left[1] = self.keyframes_ori[ob][chan][fcurv][frame][1][1] + d[fcurv]
-				kf.handle_right[1] = self.keyframes_ori[ob][chan][fcurv][frame][2][1] + d[fcurv]
+			if len(curves[chan]) == 4:
+				vals = [self.keyframes_ori[ob][chan][fcurv][frame][0][1] for fcurv in range(4)]
+				to_eul = Vector(Quaternion(vals).to_euler())
+				to_eul_added = to_eul + d_sens
+				d_sens = Euler(to_eul_added).to_quaternion()
+				for fcurv, kf in kfs:
+					newd = self.keyframes_ori[ob][chan][fcurv][frame][0][1] - d_sens[fcurv]
+					kf.co[1] = d_sens[fcurv]
+					kf.handle_left[1] = self.keyframes_ori[ob][chan][fcurv][frame][1][1] - newd
+					kf.handle_right[1] = self.keyframes_ori[ob][chan][fcurv][frame][2][1] - newd
+			else:
+				for fcurv, kf in kfs:
+					kf.co[1] = self.keyframes_ori[ob][chan][fcurv][frame][0][1] + d_sens[fcurv]
+					kf.handle_left[1] = self.keyframes_ori[ob][chan][fcurv][frame][1][1] + d_sens[fcurv]
+					kf.handle_right[1] = self.keyframes_ori[ob][chan][fcurv][frame][2][1] + d_sens[fcurv]
 
 	# change 3d-location of handle
 	elif mt.mode == 'values' and self.active_handle:
@@ -1250,7 +1265,7 @@ def drag(self, context, event, inverse_getter):
 			if not chans[chan]:
 				continue
 
-			kfs = get_keyframes(curves[chan], frame)	
+			kfs = get_keyframes(curves[chan], frame)
 			for fcurv, kf in kfs:
 				if side == "left":
 					update_this_handle(kf, 0, d[fcurv], ob, chan, fcurv, frame)

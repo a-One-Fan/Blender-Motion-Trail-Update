@@ -2025,7 +2025,6 @@ class MotionTrailOperator(bpy.types.Operator):
 		# get clashing keymap items
 		wm = context.window_manager
 		keyconfig = wm.keyconfigs.active
-		select = wm.motion_trail.select_key
 		kms = [
 			bpy.context.window_manager.keyconfigs.active.keymaps['3D View'],
 			bpy.context.window_manager.keyconfigs.active.keymaps['Object Mode']

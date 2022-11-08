@@ -1788,9 +1788,10 @@ class MotionTrailOperator(bpy.types.Operator):
 		#	return {'PASS_THROUGH'}
 
 		no_passthrough = False
+		if self.drag:
+			no_passthrough = True
 
 		if event.type in ['X', 'Y', 'Z'] and event.value == 'PRESS' and self.drag:
-			no_passthrough = True
 			new_constraint = []
 
 			if not event.shift:
@@ -1827,11 +1828,6 @@ class MotionTrailOperator(bpy.types.Operator):
 				self.drag = False
 				self.lock = True
 				mt.force_update = True
-			# default hotkeys should still work
-			if event.type == self.transform_key and event.value == 'PRESS':
-				if bpy.ops.transform.translate.poll():
-					bpy.ops.transform.translate('INVOKE_DEFAULT')
-			return {'PASS_THROUGH'}
 		# check if event was generated within 3d-window, dragging is exception
 		if not self.drag:
 			if not (0 < event.mouse_region_x < context.region.width) or \
@@ -1874,6 +1870,7 @@ class MotionTrailOperator(bpy.types.Operator):
 
 				self.constraint_axes = [False, False, False]
 				self.constraint_orientation = False
+				no_passthrough = True
 
 			else:
 				# stop drag
@@ -1881,10 +1878,6 @@ class MotionTrailOperator(bpy.types.Operator):
 				self.drag = False
 				self.lock = True
 				mt.force_update = True
-		elif event.type == self.transform_key and event.value == 'PRESS':
-			# call default translate()
-			if bpy.ops.transform.translate.poll():
-				bpy.ops.transform.translate('INVOKE_DEFAULT') # ? Is this necessary?
 		elif (event.type == 'ESC' and self.drag and event.value == 'PRESS') or \
 			 (event.type == 'RIGHTMOUSE' and self.drag and event.value == 'PRESS'):
 			# cancel drag
@@ -1892,7 +1885,6 @@ class MotionTrailOperator(bpy.types.Operator):
 			self.drag = False
 			self.lock = True
 			mt.force_update = True
-			no_passthrough = True
 			cancel_drag(self, context)
 		elif event.type == 'MOUSEMOVE' and self.drag:
 			# drag
@@ -1924,7 +1916,6 @@ class MotionTrailOperator(bpy.types.Operator):
 
 			inverse_getter = get_inverse_parents_depsgraph if mt.use_depsgraph else get_inverse_parents
 			drag(self, context, event, inverse_getter)
-			no_passthrough = True
 
 		elif not self.drag and not event.shift and not event.alt and not event.ctrl:
 			# Select or highlight
@@ -2013,7 +2004,6 @@ class MotionTrailOperator(bpy.types.Operator):
 			self.lock = True
 			mt.force_update = True
 			bpy.ops.ed.undo_push(message="Confirmed Motion Trail drag")
-			no_passthrough = True
 
 		elif event.type == deselect_always and event.value == 'PRESS' and \
 		not self.drag and not event.shift and not event.alt and not \
@@ -2051,7 +2041,7 @@ class MotionTrailOperator(bpy.types.Operator):
 				if kmi.idname == "transform.translate" and \
 				kmi.map_type == 'KEYBOARD' and not \
 				kmi.properties.texture_space:
-					kmis.append(kmi)
+					#kmis.append(kmi)
 					self.transform_key = kmi.type
 
 		mt: MotionTrailProps = context.window_manager.motion_trail

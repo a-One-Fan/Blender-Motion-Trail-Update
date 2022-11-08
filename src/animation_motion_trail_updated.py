@@ -1170,6 +1170,20 @@ def swizzle_constraint(vec, constraint):
 def is_constrained(constraint):
 	return constraint[0] or constraint[1] or constraint[2] 
 
+def get_keyframes(curves: list[FCurve], frame: float) -> list[tuple[int, Keyframe]]:
+	"""Returns a list of (index, keyframe) for all the keyframes found in the list."""
+	res = []
+	i = 0
+	for fcurve in curves:
+		for kf in fcurve.keyframe_points:
+			if kf.co[0] == frame:
+				res.append((i, kf))
+				break
+
+		i += 1
+	
+	return res
+
 # change data based on mouse movement
 def drag(self, context, event, inverse_getter):
 	mt: MotionTrailProps = context.window_manager.motion_trail
@@ -1200,14 +1214,12 @@ def drag(self, context, event, inverse_getter):
 		for chan in range(len(curves)):
 			if not chans[chan]:
 				continue
-
-			for fcurv in range(len(curves[chan])):
-				for kf in curves[chan][fcurv].keyframe_points:
-					if kf.co[0] == frame:
-						kf.co[1] = self.keyframes_ori[ob][chan][fcurv][frame][0][1] + d[fcurv]
-						kf.handle_left[1] = self.keyframes_ori[ob][chan][fcurv][frame][1][1] + d[fcurv]
-						kf.handle_right[1] = self.keyframes_ori[ob][chan][fcurv][frame][2][1] + d[fcurv]
-						break
+			
+			kfs = get_keyframes(curves[chan], frame)
+			for fcurv, kf in kfs:
+				kf.co[1] = self.keyframes_ori[ob][chan][fcurv][frame][0][1] + d[fcurv]
+				kf.handle_left[1] = self.keyframes_ori[ob][chan][fcurv][frame][1][1] + d[fcurv]
+				kf.handle_right[1] = self.keyframes_ori[ob][chan][fcurv][frame][2][1] + d[fcurv]
 
 	# change 3d-location of handle
 	elif mt.mode == 'values' and self.active_handle:
@@ -1238,14 +1250,12 @@ def drag(self, context, event, inverse_getter):
 			if not chans[chan]:
 				continue
 
-			for fcurv in range(len(curves[chan])):
-				for kf in curves[chan][fcurv].keyframe_points:
-					if kf.co[0] == frame:
-						if side == "left":
-							update_this_handle(kf, 0, d[fcurv], ob, chan, fcurv, frame)
-						elif side == "right": # ? is this if necessary?
-							update_this_handle(kf, 1, d[fcurv], ob, chan, fcurv, frame)
-						break
+			kfs = get_keyframes(curves[chan], frame)	
+			for fcurv, kf in kfs:
+				if side == "left":
+					update_this_handle(kf, 0, d[fcurv], ob, chan, fcurv, frame)
+				elif side == "right": # ? is this if necessary?
+					update_this_handle(kf, 1, d[fcurv], ob, chan, fcurv, frame)
 
 	# change position of all keyframes on timeline
 	elif mt.mode == 'timing' and active_timebead:

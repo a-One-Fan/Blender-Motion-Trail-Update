@@ -1296,7 +1296,7 @@ def drag(self, context, event, inverse_getter):
 
 
 		for chan in range(len(curves)):
-			if not chosen_chan[chan]:
+			if not chosen_chan[chan]: # This doesn't matter very much as handles can have only 1 transform category
 				continue
 
 			kfs = get_keyframes(curves[chan], frame)
@@ -1308,8 +1308,7 @@ def drag(self, context, event, inverse_getter):
 
 	# change position of all keyframes on timeline
 	elif mt.mode == 'timing' and active_timebead:
-		ob, frame, frame_ori, chans = active_timebead
-		curves = get_curves(ob)
+		frame_ori = extra
 		ranges = [val for c in curves for val in c.range()]
 		ranges.sort()
 		range_min = round(ranges[0])
@@ -1360,7 +1359,7 @@ def drag(self, context, event, inverse_getter):
 
 	# change position of active keyframe on the timeline
 	elif mt.mode == 'timing' and active_keyframe:
-		ob, frame, frame_ori, chans = active_keyframe
+		frame_ori = extra
 
 		locs_ori = [[f_ori, coords] for f_mapped, [f_ori, coords] in
 					keyframes_ori[ob].items()]
@@ -1410,7 +1409,6 @@ def drag(self, context, event, inverse_getter):
 			min_frame -= 1
 		new_frame = min(max_frame - 1, max(min_frame + 1, new_frame))
 		d_frame = new_frame - frame_ori
-		curves = get_curves(ob)
 
 		for i, curve in enumerate(curves):
 			for kf in curve.keyframe_points:
@@ -1423,10 +1421,9 @@ def drag(self, context, event, inverse_getter):
 
 	# change position of active timebead on the timeline, thus altering speed
 	elif mt.mode == 'speed' and active_timebead:
-		ob, frame, frame_ori, chans = active_timebead
+		frame_ori = extra
 
 		# determine direction (to next or previous keyframe)
-		curves = get_curves(ob)
 		fcx, fcy, fcz = curves
 		locx = fcx.evaluate(frame_ori)
 		locy = fcy.evaluate(frame_ori)
@@ -1930,11 +1927,7 @@ class MotionTrailOperator(bpy.types.Operator):
 
 		else:
 
-			if (event.type in self.transform_keys and event.value == 'PRESS' and
-				(self.active_keyframe or
-					self.active_handle or
-					self.active_timebead or
-					self.active_frame)):
+			if (event.type in self.transform_keys and event.value == 'PRESS' and self.getactive()):
 				self.op_type = findlist(event.type, self.transform_keys)
 				self.chosen_channel = 0
 				context.window.cursor_set('SCROLL_XY')
@@ -1944,12 +1937,7 @@ class MotionTrailOperator(bpy.types.Operator):
 					self.active_keyframe = self.active_frame
 					self.active_frame = False
 				
-				if self.active_handle:
-					ob, frame, other, chans = self.active_handle
-				elif self.active_keyframe:
-					ob, frame, other, chans = self.active_keyframe
-				else:
-					ob, frame, other, chans = self.active_timebead
+				ob, frame, other, chans = self.getactive()
 
 				self.loc_ori_ws = self.cache.get_location(frame, ob, context)
 				self.keyframes_ori = get_original_animation_data(context)

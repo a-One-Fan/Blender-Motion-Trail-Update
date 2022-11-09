@@ -1252,7 +1252,7 @@ def drag(self, context, event, inverse_getter):
 		else:
 			d = d * Vector(self.constraint_axes)
 
-	sensitivities = (mt.sensitivity_location, mt.sensitivity_rotation * 0.3, mt.sensitivity_scale * 0.3)
+	sensitivities = (mt.sensitivity_location, mt.sensitivity_rotation * 0.3, mt.sensitivity_scale * 0.7)
 	chosen_chan = choose_chan(chans, self.chosen_channel)
 	curves = get_curves(ob)
 

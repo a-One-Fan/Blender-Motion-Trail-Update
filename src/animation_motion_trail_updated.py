@@ -2275,6 +2275,33 @@ class MotionTrailPanel(bpy.types.Panel):
 			if mt.frame_display:
 				col.row().prop(mt, "frame_color")
 
+			# Spines
+			col.row().prop(mt, "show_spines")
+			if mt.show_spines:
+				pSpineStrings = ["pXspines", "pYspines", "pZspines"]
+				nSpineStrings = ["nXspines", "nYspines", "nZspines"]
+				spineColorStrings = ["spine_x_color", "spine_y_color", "spine_z_color"]
+				
+				spine_do_row = col.row()
+				spine_do_row.prop(mt, "spine_do_rotation")
+				spine_do_row.prop(mt, "spine_do_scale")
+
+				col.row().prop(mt, "spine_step")
+				col.row().prop(mt, "spine_length")
+				col.row().prop(mt, "spine_offset")
+
+				row = col.row()
+				for s in pSpineStrings:
+					row.prop(mt, s)
+
+				row = col.row()
+				for s in nSpineStrings:
+					row.prop(mt, s)
+
+				row = col.row()
+				for s in spineColorStrings:
+					row.prop(mt, s)
+
 		box = self.layout.box()
 		col = box.column(align=True)
 		if mt.mode == 'values':
@@ -2322,35 +2349,6 @@ class MotionTrailPanel(bpy.types.Panel):
 		col.row().prop(mt, "deselect_passthrough")
 		col.label(text="For the time being, confirm/cancel")
 		col.label(text="is LMB/RMB or Esc")
-
-		# Spines
-		box = self.layout.box()
-		col = box.column(align=True)
-		col.row().prop(mt, "show_spines")
-		if mt.show_spines:
-			pSpineStrings = ["pXspines", "pYspines", "pZspines"]
-			nSpineStrings = ["nXspines", "nYspines", "nZspines"]
-			spineColorStrings = ["spine_x_color", "spine_y_color", "spine_z_color"]
-			
-			spine_do_row = col.row()
-			spine_do_row.prop(mt, "spine_do_rotation")
-			spine_do_row.prop(mt, "spine_do_scale")
-
-			col.row().prop(mt, "spine_step")
-			col.row().prop(mt, "spine_length")
-			col.row().prop(mt, "spine_offset")
-
-			row = col.row()
-			for s in pSpineStrings:
-				row.prop(mt, s)
-
-			row = col.row()
-			for s in nSpineStrings:
-				row.prop(mt, s)
-
-			row = col.row()
-			for s in spineColorStrings:
-				row.prop(mt, s)
 		
 		self.layout.column().operator("view3d.motion_trail_load_defaults")
 		self.layout.column().operator("view3d.motion_trail_save_defaults")

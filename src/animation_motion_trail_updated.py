@@ -70,13 +70,22 @@ def mulscalar(tup, scalar):
 def make_chan(i):
 	return tuple([j == i for j in range(3)])
 
-def findlist(arr, elem):
+def findlist(elem, arr):
 	"""Returns index of elem in arr, -1 if not found"""
 	for i in range(len(arr)):
 		if arr[i] == elem:
 			return i
 	
 	return -1
+
+def choose_chan(chans, id):
+	if chans[id]:
+		return make_chan(id)
+	else:
+		i = 0
+		while not chans[i]:
+			i += 1
+		return make_chan(i)
 
 # Flattens recursively.
 def flatten(deeplist):
@@ -1133,7 +1142,7 @@ def draw_callback(self, context):
 					blf.color(0, * c)
 					blf.draw(0, text)
 
-	# Draw constraining indicator
+	# Draw drag UI
 	if self.drag:
 		constraint_colors = [\
 			[[0.0, 0.0, 0.0, 1.0], [1.0, 0.1, 0.1, 1.0]],
@@ -1141,7 +1150,10 @@ def draw_callback(self, context):
 			[[0.0, 0.0, 0.0, 1.0], [0.1, 0.1, 1.0, 1.0]]]
 
 		constraint_texts = ["X", "Y", "Z"]
-		orient_texts = ["(Global)", "(Local)"]
+		orient_texts = ["(Orientation 1)", "(Orientation 2)"]
+		chan_texts = ["L", "R", "S"]
+
+		ob, frame, thing, chans = self.getactive()
 
 		#TODO: less hardcoded text positions?
 		blf.size(0, 12, 130)
@@ -1160,6 +1172,20 @@ def draw_callback(self, context):
 			blf.size(0, 12, 100)
 			blf.position(0, 250, 40, 0)
 			blf.draw(0, orient_texts[self.constraint_orientation])
+
+		if sum(chans) > 1:
+			blf.size(0, 12, 130)
+			blf.position(0, 10, 80, 0)
+			blf.color(0, 0.0, 0.0, 0.0, 1.0)
+			blf.draw(0, "Working on: ")
+			chosen_chan = choose_chan(chans, self.chosen_channel)
+			colors_noyes = [(0.0, 0.0, 0.0, 1.0), (0.0, 1.0, 0.0, 1.0)]
+			for i in range(3):
+				if not chans[i]:
+					continue
+				blf.position(0, 150 + i*30, 80, 0)
+				blf.color(0, *colors_noyes[chosen_chan[i]])
+				blf.draw(0, chan_texts[i])
 
 	# restore opengl defaults
 	gpu.state.point_size_set(1.0) # TODO: is this the correct value?
@@ -1217,15 +1243,16 @@ def drag(self, context, event, inverse_getter):
 			d = d * Vector(self.constraint_axes)
 
 	sensitivities = (mt.sensitivity_location, mt.sensitivity_rotation * 0.3, mt.sensitivity_scale * 0.3)
+	ob, frame, extra, chans = self.getactive()
+	chosen_chan = choose_chan(chans, self.chosen_channel)
+	curves = get_curves(ob)
 
 	# change 3d-location of keyframe
 	if mt.mode == 'values' and self.active_keyframe:
-		ob, frame, frame_ori, chans = self.active_keyframe
-
-		curves = get_curves(ob)
+		frame_ori = extra
 
 		for chan in range(len(curves)):
-			if not chans[chan]:
+			if not chosen_chan[chan]: # TODO: don't loop and go to the thing directly?
 				continue
 			d_sens = d.copy() * sensitivities[chan]
 			kfs = get_keyframes(curves[chan], frame)
@@ -1247,9 +1274,7 @@ def drag(self, context, event, inverse_getter):
 
 	# change 3d-location of handle
 	elif mt.mode == 'values' and self.active_handle:
-		ob, frame, side, chans = self.active_handle
-
-		curves = get_curves(ob)
+		side = extra
 
 		def update_this_handle(kf: Keyframe, side: bool, dif: float, ob: Object, chan: int, fc: int, frame: float):
 			sides_type = [kf.handle_left_type, kf.handle_right_type]
@@ -1271,7 +1296,7 @@ def drag(self, context, event, inverse_getter):
 
 
 		for chan in range(len(curves)):
-			if not chans[chan]:
+			if not chosen_chan[chan]:
 				continue
 
 			kfs = get_keyframes(curves[chan], frame)
@@ -1686,7 +1711,7 @@ class MotionTrailOperator(bpy.types.Operator):
 	lock: bool
 	"""Whether or not we're changing the motion trail"""
 
-	op_method: int = -1
+	op_type: int = -1
 	"""0 = grab (location), 1 = rotate, 2 = scale"""
 	constraint_axes: list[bool] = [False, False, False]
 	"""Bools for which axes are constrained. Please keep 3 long."""
@@ -1717,6 +1742,13 @@ class MotionTrailOperator(bpy.types.Operator):
 
 	drag_mouse_accumulate: Vector
 	"""Accumulated mouse position from dragging, nicely factoring in shift/alt"""
+
+	def getactive(self):
+		if self.active_keyframe: return self.active_keyframe
+		if self.active_handle: return self.active_handle
+		if self.active_timebead: return self.active_timebead
+		if self.active_frame: return self.active_frame
+		return None
 
 	@staticmethod
 	def handle_add(self, context):
@@ -1847,6 +1879,16 @@ class MotionTrailOperator(bpy.types.Operator):
 
 				# TODO: Copypasted code, any better approach? /\
 
+			if event.type in self.transform_keys and event.value == 'PRESS':
+				if event.shift:
+					self.op_type = findlist(event.type, self.transform_keys)
+				else:
+					self.chosen_channel = findlist(event.type, self.transform_keys)
+				
+				cancel_drag(self, context)
+				inverse_getter = get_inverse_parents_depsgraph if mt.use_depsgraph else get_inverse_parents
+				drag(self, context, event, inverse_getter)
+
 			if event.type == 'MOUSEMOVE':
 				# drag
 
@@ -1893,7 +1935,8 @@ class MotionTrailOperator(bpy.types.Operator):
 					self.active_handle or
 					self.active_timebead or
 					self.active_frame)):
-				self.op_method = findlist(event.type, self.transform_keys)
+				self.op_type = findlist(event.type, self.transform_keys)
+				self.chosen_channel = 0
 				context.window.cursor_set('SCROLL_XY')
 
 				if self.active_frame:

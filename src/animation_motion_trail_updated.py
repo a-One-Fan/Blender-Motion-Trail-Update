@@ -1282,7 +1282,7 @@ def drag(self, context, event, inverse_getter):
 		return newd
 	
 
-	# change 3d-location of keyframe
+	# Alter keyframe values and handle coordinates
 	if mt.mode == 'values':
 
 		for chan in range(len(curves)):

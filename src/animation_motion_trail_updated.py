@@ -97,6 +97,15 @@ def flatten(deeplist):
 			flatlist.append(elem)
 	return flatlist
 
+def flrange(start, stop, step):
+	res = []
+	i = start
+	while i < stop:
+		res.append[i]
+		i += step
+
+	return res
+
 # fake fcurve class, used if no fcurve is found for a path
 class fake_fcurve():
 	def __init__(self, object: Object | PoseBone, index, rotation=False, scale=False):
@@ -551,7 +560,7 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 			# get location data of motion path
 			path = []
 			speeds = []
-			step = mt.path_step
+			step = mt.path_step if not self.drag else mt.path_step_drag
 
 			prev_loc = self.cache.get_location(range_min - 1, ob, context)
 			for frame in range(range_min, range_max + 1, step):
@@ -794,7 +803,10 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 					click.append( [bead_frame, "timebead", Vector(coords), bead_channels] )
 
 			if mt.show_spines:
-				for frame in range(range_min, range_max + 1, mt.spine_step):
+
+				spine_step = max(mt.spine_step, step)
+
+				for frame in range(range_min, range_max + 1, spine_step):
 					loc = self.cache.get_location(frame, ob, context)
 					if mt.spine_do_rotation:
 						rot = self.cache.get_rotation(frame, ob, context)
@@ -2248,7 +2260,9 @@ class MotionTrailPanel(bpy.types.Panel):
 				
 			grouped = col.column(align=True)
 			grouped.prop(mt, "path_width", text="Width")
-			grouped.prop(mt, "path_step")
+			step_row = grouped.row(align=True)
+			step_row.prop(mt, "path_step")
+			step_row.prop(mt, "path_step_drag")
 			row = grouped.row(align=True)
 			row.prop(mt, "path_before")
 			row.prop(mt, "path_after")
@@ -2427,10 +2441,17 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			default=True
 			)
 	path_step: IntProperty(name="Step",
-			description="Step size for the frames the motion trail consists of\nIncrease to improve performance",
+			description="Step size for the frames the motion trail consists of.\nIncrease to improve uncached playback performance",
 			default=1,
 			min=1,
 			max=10,
+			update=internal_update
+			)
+	path_step_drag: IntProperty(name="Drag Step",
+			description="Step size for the frames the motion trail consists of while dragging.\nIncrease to improve dragging performance",
+			default = 3,
+			min = 1,
+			soft_max = 30,
 			update=internal_update
 			)
 	path_style: EnumProperty(name="Path style", items=(
@@ -2599,7 +2620,7 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			)
 
 	spine_step: IntProperty(name="Step",
-			description="How many frames to step across for each spine, higher = less spines",
+			description="How many frames to step across for each spine, higher = less spines.\nThis value will be ignored if the path's step size is higher.\nWhen effective, if this is a value that's not a factor of the path's step size, performance will worsen",
 			default=1,
 			min=1,
 			soft_max=10,

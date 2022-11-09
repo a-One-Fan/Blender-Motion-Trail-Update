@@ -1247,7 +1247,7 @@ def drag(self, context, event, inverse_getter):
 	mouse_ori_world = inverse_mat @ screen_to_world(context, self.drag_mouse_ori)
 	transformed_diff = inverse_mat @ screen_to_world(context, self.drag_mouse_accumulate + self.drag_mouse_ori)
 
-	d = transformed_diff - mouse_ori_world
+	d: Vector = transformed_diff - mouse_ori_world
 	if is_constrained(self.constraint_axes):
 		if self.constraint_orientation == 1: # Possibly add more?
 			d = swizzle_constraint(self.drag_mouse_accumulate * 0.05, self.constraint_axes)
@@ -1259,6 +1259,32 @@ def drag(self, context, event, inverse_getter):
 	chosen_chan = choose_chan(chans, self.chosen_channel)
 	curves = get_curves(ob)
 
+	def update_this_handle(kf: Keyframe, side: bool, dif: float, ob: Object, chan: int, fc: int, frame: float):
+		sides_type = [kf.handle_left_type, kf.handle_right_type]
+		sides = [kf.handle_left, kf.handle_right]
+		other_side = 1 - side
+		originals = [self.keyframes_ori[ob][chan][fc][frame][1], self.keyframes_ori[ob][chan][fc][frame][2]]
+
+		if sides_type[side] in ('AUTO', 'AUTO_CLAMPED', 'ANIM_CLAMPED'):
+			sides_type[side].handle_left_type = 'ALIGNED'
+		elif sides_type[side] == 'VECTOR':
+			sides_type[side] = 'FREE'
+
+		sides[side][1] = originals[side][1] + dif
+
+		if sides_type[side] in ('ALIGNED', 'ANIM_CLAMPED', 'AUTO', 'AUTO_CLAMPED'):
+			dif2 = abs(originals[other_side][0] -kf.co[0]) / abs(kf.handle_left[0] - kf.co[0])
+			dif2 *= dif
+			sides[other_side][1] = originals[other_side][1] - dif2
+
+	def quat_transform(oldd: list[float], quat_vals: list[float]):
+		to_eul = Vector(Quaternion(quat_vals).to_euler())
+		to_eul_added = to_eul + oldd
+		new_quat = Euler(to_eul_added).to_quaternion()
+		newd = Vector(new_quat) - Vector(quat_vals)
+		return newd
+	
+
 	# change 3d-location of keyframe
 	if mt.mode == 'values' and self.active_keyframe:
 		frame_ori = extra
@@ -1268,44 +1294,30 @@ def drag(self, context, event, inverse_getter):
 				continue
 			d_sens = d.copy() * sensitivities[chan]
 			kfs = get_keyframes(curves[chan], frame)
-			if len(curves[chan]) == 4:
-				vals = [self.keyframes_ori[ob][chan][fcurv][frame][0][1] for fcurv in range(4)] # TODO: Potential exception when user is being a user and doesn't have 4 quaternion KFs?
-				to_eul = Vector(Quaternion(vals).to_euler())
-				to_eul_added = to_eul + d_sens
-				d_sens = Euler(to_eul_added).to_quaternion()
+
+			if self.op_type == 0: # If trying to grab, move keyframes around
+
+				if len(curves[chan]) == 4: # Deal with quaternions
+					d_sens = quat_transform(d_sens, [self.keyframes_ori[ob][chan][fcurv][frame][0][1] for fcurv in range(4)]) # TODO: Potential exception when user is being a user and doesn't have 4 quaternion KFs?
+				
 				for fcurv, kf in kfs:
-					newd = self.keyframes_ori[ob][chan][fcurv][frame][0][1] - d_sens[fcurv]
-					kf.co[1] = d_sens[fcurv]
-					kf.handle_left[1] = self.keyframes_ori[ob][chan][fcurv][frame][1][1] - newd
-					kf.handle_right[1] = self.keyframes_ori[ob][chan][fcurv][frame][2][1] - newd
-			else:
+					this_ori_kf = self.keyframes_ori[ob][chan][fcurv][frame]
+					kf.co[1] = this_ori_kf[0][1] + d_sens[fcurv]
+					kf.handle_left[1] = this_ori_kf[1][1] + d_sens[fcurv]
+					kf.handle_right[1] = this_ori_kf[2][1] + d_sens[fcurv]
+
+			elif self.op_type == 2: #If trying to scale, scale keyframe handles
 				for fcurv, kf in kfs:
-					kf.co[1] = self.keyframes_ori[ob][chan][fcurv][frame][0][1] + d_sens[fcurv]
-					kf.handle_left[1] = self.keyframes_ori[ob][chan][fcurv][frame][1][1] + d_sens[fcurv]
-					kf.handle_right[1] = self.keyframes_ori[ob][chan][fcurv][frame][2][1] + d_sens[fcurv]
+					this_ori_kf = self.keyframes_ori[ob][chan][fcurv][frame]
+					centre = Vector(this_ori_kf[0])
+					dif_left = centre - Vector(this_ori_kf[1])
+					dif_right = centre - Vector(this_ori_kf[2])
+					kf.handle_left[0], kf.handle_left[1] = centre - d[fcurv] * dif_left
+					kf.handle_right[0], kf.handle_right[1] = centre - d[fcurv] * dif_right
 
 	# change 3d-location of handle
 	elif mt.mode == 'values' and self.active_handle:
 		side = extra
-
-		def update_this_handle(kf: Keyframe, side: bool, dif: float, ob: Object, chan: int, fc: int, frame: float):
-			sides_type = [kf.handle_left_type, kf.handle_right_type]
-			sides = [kf.handle_left, kf.handle_right]
-			other_side = 1 - side
-			originals = [self.keyframes_ori[ob][chan][fc][frame][1], self.keyframes_ori[ob][chan][fc][frame][2]]
-
-			if sides_type[side] in ('AUTO', 'AUTO_CLAMPED', 'ANIM_CLAMPED'):
-				sides_type[side].handle_left_type = 'ALIGNED'
-			elif sides_type[side] == 'VECTOR':
-				sides_type[side] = 'FREE'
-
-			sides[side][1] = originals[side][1] + dif
-
-			if sides_type[side] in ('ALIGNED', 'ANIM_CLAMPED', 'AUTO', 'AUTO_CLAMPED'):
-				dif2 = abs(originals[other_side][0] -kf.co[0]) / abs(kf.handle_left[0] - kf.co[0])
-				dif2 *= dif
-				sides[other_side][1] = originals[other_side][1] - dif2
-
 
 		for chan in range(len(curves)):
 			if not chosen_chan[chan]: # This doesn't matter very much as handles can have only 1 transform category

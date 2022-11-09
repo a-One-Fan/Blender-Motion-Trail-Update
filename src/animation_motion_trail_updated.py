@@ -108,6 +108,11 @@ def flrange(start, stop, step):
 
 def vecabs(vec):
 	return Vector([abs(val) for val in vec])
+
+def mouse_in_region(event, context):
+	return event.mouse_region_x > 0 and event.mouse_region_x < context.region.width and \
+				event.mouse_region_y > 0 and event.mouse_region_y < context.region.height
+
 # fake fcurve class, used if no fcurve is found for a path
 class fake_fcurve():
 	def __init__(self, object: Object | PoseBone, index, rotation=False, scale=False):
@@ -1957,6 +1962,8 @@ class MotionTrailOperator(bpy.types.Operator):
 				bpy.ops.ed.undo_push(message="Confirmed Motion Trail drag")
 
 		else:
+
+			if not mouse_in_region(event, context): return {'PASS_THROUGH'}
 
 			if (event.type in self.transform_keys and event.value == 'PRESS' and self.getactive()):
 				self.op_type = findlist(event.type, self.transform_keys)

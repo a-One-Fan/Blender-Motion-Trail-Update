@@ -1908,7 +1908,7 @@ class MotionTrailOperator(bpy.types.Operator):
 				# TODO: Copypasted code, any better approach? /\
 
 			if event.type in self.transform_keys and event.value == 'PRESS':
-				if event.shift:
+				if not event.shift:
 					self.op_type = findlist(event.type, self.transform_keys)
 				else:
 					self.chosen_channel = findlist(event.type, self.transform_keys)

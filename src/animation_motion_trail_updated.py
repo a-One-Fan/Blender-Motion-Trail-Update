@@ -2593,10 +2593,11 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			default="NONE"
 			)
 	select_threshold: FloatProperty(name="Selection distance",
-			description="Distance in pixels for selecting something",
+			description="Distance in pixels for selecting something.\nSetting this too high will make the select button you've chosen unusable in the 3D viewport.\nIf this happens, deselect all objects, and set this back to a sane value",
 			default=10.0,
 			step=2,
-			min=0.0
+			min=0.0,
+			soft_max=50.0
 			)
 	deselect_passthrough: BoolProperty(name="Deselect passthrough",
 			description="When something in the motion trail is deselected, whether to pass that button press to the rest of Blender or not",

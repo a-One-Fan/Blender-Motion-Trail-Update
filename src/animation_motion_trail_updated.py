@@ -106,6 +106,8 @@ def flrange(start, stop, step):
 
 	return res
 
+def vecabs(vec):
+	return Vector([abs(val) for val in vec])
 # fake fcurve class, used if no fcurve is found for a path
 class fake_fcurve():
 	def __init__(self, object: Object | PoseBone, index, rotation=False, scale=False):
@@ -1307,13 +1309,25 @@ def drag(self, context, event, inverse_getter):
 					kf.handle_right[1] = this_ori_kf[2][1] + d_sens[fcurv]
 
 			elif self.op_type == 2: #If trying to scale, scale keyframe handles
+				d_sens = d.copy()
+
+				if len(curves[chan]) == 4:
+					d_sens = quat_transform(d_sens, [self.keyframes_ori[ob][chan][fcurv][frame][0][1] for fcurv in range(4)]) # ? How effective is this for scaling KFs?
+					one = Vector((1, 1, 1, 1))
+				else:
+					one = Vector((1, 1, 1))
+
+				d_sens = Vector(d_sens) + one
+				if not mt.allow_negative_handle_scale:
+					d_sens = vecabs(d_sens)
+				
 				for fcurv, kf in kfs:
 					this_ori_kf = self.keyframes_ori[ob][chan][fcurv][frame]
 					centre = Vector(this_ori_kf[0])
 					dif_left = centre - Vector(this_ori_kf[1])
 					dif_right = centre - Vector(this_ori_kf[2])
-					kf.handle_left[0], kf.handle_left[1] = centre - d[fcurv] * dif_left
-					kf.handle_right[0], kf.handle_right[1] = centre - d[fcurv] * dif_right
+					kf.handle_left[0], kf.handle_left[1] = centre - d_sens[fcurv] * dif_left
+					kf.handle_right[0], kf.handle_right[1] = centre - d_sens[fcurv] * dif_right
 
 	# change 3d-location of handle
 	elif mt.mode == 'values' and self.active_handle:
@@ -1542,8 +1556,8 @@ def cancel_drag(self, context):
 			kfs = get_keyframes(curves[chan], frame)
 			for fc, kf in kfs:
 				kf.co[1] = self.keyframes_ori[ob][chan][fc][frame][0][1]
-				kf.handle_left[1] = self.keyframes_ori[ob][chan][fc][frame][1][1]
-				kf.handle_right[1] = self.keyframes_ori[ob][chan][fc][frame][2][1]
+				kf.handle_left[0], kf.handle_left[1] = self.keyframes_ori[ob][chan][fc][frame][1]
+				kf.handle_right[0], kf.handle_right[1] = self.keyframes_ori[ob][chan][fc][frame][2]
 				kf.handle_left_type = self.keyframes_ori[ob][chan][fc][frame][3]
 				kf.handle_right_type = self.keyframes_ori[ob][chan][fc][frame][4]
 
@@ -2244,6 +2258,10 @@ class MotionTrailPanel(bpy.types.Panel):
 		# box.prop(mt, "calculate")
 		if mt.mode == 'timing':
 			box.prop(mt, "timebeads")
+		if mt.mode == 'values':
+			col = box.column()
+			col.prop(mt, "allow_negative_scale")
+			col.prop(mt, "allow_negative_handle_scale")
 
 		box = self.layout.box()
 		col = box.column()
@@ -2517,7 +2535,16 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			description="Show and work with scale keyframes",
 			default=False,
 			update=internal_update
-			)	
+			)
+
+	allow_negative_scale: BoolProperty(name="Negative scaling",
+			description="Whether to allow scale keyframes to get negative values or not",
+			default=False
+			)
+	allow_negative_handle_scale: BoolProperty(name="Negative handle scaling",
+			description="Whether to allow scaling handles negatively or not",
+			default=False,
+			)
 	
 	sensitivity_location: FloatProperty(name="Location sensitivity",
 			description="Sensitivity for location-related values",
@@ -2896,7 +2923,8 @@ def compare_ver(tup1, tup2):
 
 # == END of deleteable code ==
 			
-configurable_props = ["use_depsgraph", "select_key", "select_threshold", "deselect_nohit_key", "deselect_always_key", "deselect_passthrough", "mode", "path_style", 
+configurable_props = ["use_depsgraph", "allow_negative_scale", "allow_negative_handle_scale",
+"select_key", "select_threshold", "deselect_nohit_key", "deselect_always_key", "deselect_passthrough", "mode", "path_style", 
 "simple_color", "speed_color_min", "speed_color_max", "accel_color_neg", "accel_color_static", "accel_color_pos",
 "keyframe_color", "frame_color", "selection_color", "selection_color_dark", "highlight_color", 
 ["handle_color_loc", "handle_color_rot", "handle_color_scl"], "handle_color_fac", "handle_line_color", "timebead_color", 

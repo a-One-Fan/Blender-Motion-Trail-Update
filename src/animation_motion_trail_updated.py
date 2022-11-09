@@ -1236,13 +1236,9 @@ def get_keyframes(curves: list[FCurve], frame: float) -> list[tuple[int, Keyfram
 # change data based on mouse movement
 def drag(self, context, event, inverse_getter):
 	mt: MotionTrailProps = context.window_manager.motion_trail
-
-	active_any = self.active_keyframe
-	if not active_any: active_any = self.active_handle
-	if not active_any: active_any = self.active_timebead
 	
-	_ob, _frame, _frame_ori, _chans = active_any
-	inverse_mat: Matrix = inverse_getter(_frame, _ob, context)
+	ob, frame, extra, chans = self.getactive()
+	inverse_mat: Matrix = inverse_getter(frame, ob, context)
 	#decomposed = inverse_mat.decompose()
 	#inverse_mat = Matrix.LocRotScale(decomposed[0], decomposed[1], Vector((1.0, 1.0, 1.0)))
 		
@@ -1257,7 +1253,6 @@ def drag(self, context, event, inverse_getter):
 			d = d * Vector(self.constraint_axes)
 
 	sensitivities = (mt.sensitivity_location, mt.sensitivity_rotation * 0.3, mt.sensitivity_scale * 0.3)
-	ob, frame, extra, chans = self.getactive()
 	chosen_chan = choose_chan(chans, self.chosen_channel)
 	curves = get_curves(ob)
 

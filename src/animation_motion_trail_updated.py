@@ -1992,7 +1992,7 @@ class MotionTrailOperator(bpy.types.Operator):
 				self.constraint_orientation = False
 				no_passthrough = True
 		
-			elif (event.type == mt.select_key and event.value == 'PRESS') or \
+			elif (event.type in [mt.select_key, mt.deselect_nohit_key] and event.value == 'PRESS') or \
 				event.type == 'MOUSEMOVE':
 				# Select or highlight
 				clicked = Vector([event.mouse_region_x, event.mouse_region_y])
@@ -2054,16 +2054,13 @@ class MotionTrailOperator(bpy.types.Operator):
 				if not found:
 					self.highlighted_coord = None
 					if event.type == mt.deselect_nohit_key and event.value == 'PRESS':
-						attrs = ["active_keyframe", "active_handle", "active_timebead", "active_frame"]
-						# If a change happens, then no passthrough
-						gotten = [getattr(self, attr) for attr in attrs]
-						no_passthrough = (not reduce(lambda accum, next: accum and not next, gotten, True)) and not mt.deselect_passthrough
-						
-						for attr in attrs:
+						# If a change happens (aka there was active, now there isn't), then no passthrough
+						no_passthrough = self.getactive() and not mt.deselect_passthrough
+
+						for attr in ["active_keyframe", "active_handle", "active_timebead", "active_frame"]:
 							setattr(self, attr, False)
 						mt.handle_type_enabled = False
 						
-					pass
 				else:
 					handle_type = get_handle_type(self, self.active_keyframe,
 						self.active_handle)

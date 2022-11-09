@@ -451,7 +451,7 @@ def merge_items(enum1, enum2, mergec = 3):
 	while i<len(enum1) and j<len(enum2):
 		if enum1[i][0] == enum2[j][0]:
 			indices1 = enum1[i][1][1]
-			indices2 = enum2[i][1][1]
+			indices2 = enum2[j][1][1]
 			indices_merged = mergetruth(indices1, indices2)
 			res.append([enum1[i][0], [enum1[i][1][0], indices_merged]])
 			i += 1

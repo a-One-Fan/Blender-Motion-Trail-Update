@@ -1304,6 +1304,9 @@ def drag(self, context, event, inverse_getter):
 				
 				for fcurv, kf in kfs:
 					this_ori_kf = self.keyframes_ori[ob][chan][fcurv][frame]
+					if not mt.allow_negative_scale and (chan == 2) and (this_ori_kf[0][1] + d_sens[fcurv] < 0):
+						d_sens[fcurv] = abs(this_ori_kf[0][1] + d_sens[fcurv]) - this_ori_kf[0][1]
+
 					kf.co[1] = this_ori_kf[0][1] + d_sens[fcurv]
 					kf.handle_left[1] = this_ori_kf[1][1] + d_sens[fcurv]
 					kf.handle_right[1] = this_ori_kf[2][1] + d_sens[fcurv]

@@ -1274,10 +1274,11 @@ def drag(self, context, event, inverse_getter):
 
 		sides[side][1] = originals[side][1] + dif
 
-		if sides_type[side] in ('ALIGNED', 'ANIM_CLAMPED', 'AUTO', 'AUTO_CLAMPED'):
-			dif2 = abs(originals[other_side][0] -kf.co[0]) / abs(kf.handle_left[0] - kf.co[0])
-			dif2 *= dif
-			sides[other_side][1] = originals[other_side][1] - dif2
+		if sides_type[side] in ('ALIGNED', 'ANIM_CLAMPED', 'AUTO', 'AUTO_CLAMPED') and not kf.co[0] == sides[side][0]:
+			a = (sides[side][1]-kf.co[1]) / (sides[side][0]-kf.co[0]) # a = (y1-y2)/(x1-x2)
+			b = sides[side][1] - a * sides[side][0] # b = y1-ax1
+			
+			sides[other_side][1] = a * sides[other_side][0] + b # y = ax + b
 
 	def quat_transform(oldd: list[float], quat_vals: list[float]):
 		to_eul = Vector(Quaternion(quat_vals).to_euler())

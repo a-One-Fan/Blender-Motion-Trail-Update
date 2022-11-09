@@ -1322,7 +1322,7 @@ def drag(self, context, event, inverse_getter):
 						update_this_handle(kf, 1, d[fcurv], ob, chan, fcurv, frame)
 
 			elif self.op_type == 2: #If trying to scale, scale keyframe handle/s    Is this if necessary?
-				d_sens = d.copy()
+				d_sens = d.copy() * 0.2
 				
 				do_left = not extra == "right"
 				do_right = not extra == "left"

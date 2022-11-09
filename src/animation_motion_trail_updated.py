@@ -1288,16 +1288,16 @@ def drag(self, context, event, inverse_getter):
 	
 
 	# change 3d-location of keyframe
-	if mt.mode == 'values' and self.active_keyframe:
-		frame_ori = extra
+	if mt.mode == 'values':
 
 		for chan in range(len(curves)):
 			if not chosen_chan[chan]: # TODO: don't loop and go to the thing directly?
 				continue
+
 			d_sens = d.copy() * sensitivities[chan]
 			kfs = get_keyframes(curves[chan], frame)
 
-			if self.op_type == 0: # If trying to grab, move keyframes around
+			if self.op_type == 0 and self.active_keyframe: # If trying to grab a keyframe, move keyframe around
 
 				if len(curves[chan]) == 4: # Deal with quaternions
 					d_sens = quat_transform(d_sens, [self.keyframes_ori[ob][chan][fcurv][frame][0][1] for fcurv in range(4)]) # TODO: Potential exception when user is being a user and doesn't have 4 quaternion KFs?
@@ -1308,8 +1308,21 @@ def drag(self, context, event, inverse_getter):
 					kf.handle_left[1] = this_ori_kf[1][1] + d_sens[fcurv]
 					kf.handle_right[1] = this_ori_kf[2][1] + d_sens[fcurv]
 
-			elif self.op_type == 2: #If trying to scale, scale keyframe handles
+			elif (self.op_type == 0 and self.active_handle) or self.op_type == 1: #if trying to grab a handle, or if trying to rotate either, move keyframe handle/s
+				if len(curves[chan]) == 4:
+					d_sens = quat_transform(d_sens, [self.keyframes_ori[ob][chan][fcurv][frame][0][1] for fcurv in range(4)]) # ? Does this even work?
+
+				for fcurv, kf in kfs:
+					if not extra == "right":
+						update_this_handle(kf, 0, d[fcurv], ob, chan, fcurv, frame)
+					elif not extra == "left":
+						update_this_handle(kf, 1, d[fcurv], ob, chan, fcurv, frame)
+
+			elif self.op_type == 2: #If trying to scale, scale keyframe handle/s    Is this if necessary?
 				d_sens = d.copy()
+				
+				do_left = not extra == "right"
+				do_right = not extra == "left"
 
 				if len(curves[chan]) == 4:
 					d_sens = quat_transform(d_sens, [self.keyframes_ori[ob][chan][fcurv][frame][0][1] for fcurv in range(4)]) # ? How effective is this for scaling KFs?
@@ -1326,23 +1339,8 @@ def drag(self, context, event, inverse_getter):
 					centre = Vector(this_ori_kf[0])
 					dif_left = centre - Vector(this_ori_kf[1])
 					dif_right = centre - Vector(this_ori_kf[2])
-					kf.handle_left[0], kf.handle_left[1] = centre - d_sens[fcurv] * dif_left
-					kf.handle_right[0], kf.handle_right[1] = centre - d_sens[fcurv] * dif_right
-
-	# change 3d-location of handle
-	elif mt.mode == 'values' and self.active_handle:
-		side = extra
-
-		for chan in range(len(curves)):
-			if not chosen_chan[chan]: # This doesn't matter very much as handles can have only 1 transform category
-				continue
-
-			kfs = get_keyframes(curves[chan], frame)
-			for fcurv, kf in kfs:
-				if side == "left":
-					update_this_handle(kf, 0, d[fcurv], ob, chan, fcurv, frame)
-				elif side == "right": # ? is this if necessary?
-					update_this_handle(kf, 1, d[fcurv], ob, chan, fcurv, frame)
+					if do_left: kf.handle_left[0], kf.handle_left[1] = centre - d_sens[fcurv] * dif_left
+					if do_right: kf.handle_right[0], kf.handle_right[1] = centre - d_sens[fcurv] * dif_right
 
 	# change position of all keyframes on timeline
 	elif mt.mode == 'timing' and active_timebead:

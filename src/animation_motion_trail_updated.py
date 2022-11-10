@@ -1268,7 +1268,7 @@ def drag(self, context, event, inverse_getter):
 		originals = [self.keyframes_ori[ob][chan][fc][frame][1], self.keyframes_ori[ob][chan][fc][frame][2]]
 
 		if sides_type[side] in ('AUTO', 'AUTO_CLAMPED', 'ANIM_CLAMPED'):
-			sides_type[side].handle_left_type = 'ALIGNED'
+			sides_type[side] = 'ALIGNED'
 		elif sides_type[side] == 'VECTOR':
 			sides_type[side] = 'FREE'
 
@@ -1318,9 +1318,9 @@ def drag(self, context, event, inverse_getter):
 
 				for fcurv, kf in kfs:
 					if not extra == "right":
-						update_this_handle(kf, 0, d[fcurv], ob, chan, fcurv, frame)
+						update_this_handle(kf, 0, d_sens[fcurv], ob, chan, fcurv, frame)
 					elif not extra == "left":
-						update_this_handle(kf, 1, d[fcurv], ob, chan, fcurv, frame)
+						update_this_handle(kf, 1, d_sens[fcurv], ob, chan, fcurv, frame)
 
 			elif self.op_type == 2: #If trying to scale, scale keyframe handle/s    Is this if necessary?
 				d_sens = d.copy() * 0.2

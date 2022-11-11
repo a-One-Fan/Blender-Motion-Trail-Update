@@ -1274,7 +1274,7 @@ def drag(self, context, event, inverse_getter):
 
 		sides[side][1] = originals[side][1] + dif
 
-		if sides_type[side] in ('ALIGNED', 'ANIM_CLAMPED', 'AUTO', 'AUTO_CLAMPED') and not kf.co[0] == sides[side][0]:
+		if sides_type[side] == 'ALIGNED' and not kf.co[0] == sides[side][0]:
 			a = (sides[side][1]-kf.co[1]) / (sides[side][0]-kf.co[0]) # a = (y1-y2)/(x1-x2)
 			b = sides[side][1] - a * sides[side][0] # b = y1-ax1
 			

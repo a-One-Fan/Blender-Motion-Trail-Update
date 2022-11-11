@@ -185,6 +185,62 @@ class MatrixCache():
 		self.__guarantee_entry(frame, obj, context)
 		return [self.__mats[(frame, obj)][i] for i in range(1, 3)]
 
+# Returns the index of the first True 
+def logsearch_basic(arr: list[bool]):
+	if len(arr) == 0:
+		return 0
+
+	hi = len(arr)
+	lo = 0
+
+	while hi > lo:
+		mid = lo + int( (hi - lo)/2.0 )
+		if arr[mid]:
+			hi = mid
+		else:
+			lo = mid + 1
+	
+	return lo
+
+def logsearch_func(arr, compare):
+	return logsearch_basic(list(map(compare, arr)))
+
+class FloatMap():
+	__eps: float = 0.0001
+	__kvps: list[tuple[float, any]] = []
+
+	def __init__(self, eps = 0.0001):
+		__eps = eps
+		__kvps = []
+
+	def __findi(self, key):
+		return logsearch_func(self.__kvps, (lambda tup: tup[0] > key))
+
+	def __getitem__(self, key):
+		i = self.__findi(key)
+
+		if i >= len(self.__kvps):
+			raise KeyError(key)
+		
+		realkey = self.__kvps[i][0]
+		if not (abs(key - realkey) < self.__eps):
+			raise KeyError(key, self.__kvps[i][0])
+		return self.__kvps[i][1]
+
+	def __setitem__(self, key, newval):
+		i = self.__findi(key)
+
+		if ((i < len(self.__kvps)) and (abs(key - self.__kvps[i][0]) < self.__eps)):
+			self.__kvps[i][1] = newval
+		else:
+			self.__kvps.insert(i, (key, newval))
+
+	def __bool__(self):
+		return len(self.__kvps) > 0
+
+	def __str__(self):
+		return str(self.__kvps)
+		
 
 def get_curves_action(obj: Object | PoseBone, action: Action) -> List[List[FCurve]]:
 	""" Get f-curves for [[loc], [rot], [scale]] from an Object or PoseBone and an associated action. Rotation fcurves may be 4 if quaternion is used."""
@@ -1367,9 +1423,7 @@ def drag(self, context, event, inverse_getter):
 		shift_low = max(1e-4, (new_frame - range_min) / (frame - range_min))
 		shift_high = max(1e-4, (range_max - new_frame) / (range_max - frame))
 
-		print(self.frame_map)
-
-		new_mapping: dict[float, float] = {}
+		new_mapping = FloatMap()
 		for fcurvi, curve in enumerate(curves):
 			for j, kf in enumerate(curve.keyframe_points):
 				if not self.frame_map:
@@ -1606,7 +1660,7 @@ def cancel_drag(self, context):
 		self.active_timebead = [objectname, frame_ori, frame_ori, active_ob, child]
 
 	del self.frame_map
-	self.frame_map = {}
+	self.frame_map = FloatMap()
 
 	return
 
@@ -2137,7 +2191,7 @@ class MotionTrailOperator(bpy.types.Operator):
 
 			self.highlighted_coord = None
 			self.last_frame = -1
-			self.frame_map = {}
+			self.frame_map = FloatMap()
 
 			mt.force_update = True
 			mt.handle_type_enabled = False

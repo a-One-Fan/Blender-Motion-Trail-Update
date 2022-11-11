@@ -206,19 +206,18 @@ def logsearch_func(arr, compare):
 	return logsearch_basic(list(map(compare, arr)))
 
 class FloatMap():
-	__eps: float = 0.0001
-	__kvps: list[tuple[float, any]] = []
+	__eps: float
+	__kvps: list[tuple[float, any]]
 
 	def __init__(self, eps = 0.0001):
-		__eps = eps
-		__kvps = []
+		self.__eps = eps
+		self.__kvps = []
 
 	def __findi(self, key):
-		return logsearch_func(self.__kvps, (lambda tup: tup[0] > key))
+		return logsearch_func(self.__kvps, (lambda tup: (tup[0] + self.__eps) > key))
 
 	def __getitem__(self, key):
 		i = self.__findi(key)
-
 		if i >= len(self.__kvps):
 			raise KeyError(key)
 		
@@ -229,9 +228,8 @@ class FloatMap():
 
 	def __setitem__(self, key, newval):
 		i = self.__findi(key)
-
 		if ((i < len(self.__kvps)) and (abs(key - self.__kvps[i][0]) < self.__eps)):
-			self.__kvps[i][1] = newval
+			self.__kvps[i] = (key, newval)
 		else:
 			self.__kvps.insert(i, (key, newval))
 
@@ -1607,23 +1605,23 @@ def cancel_drag(self, context):
 			frame = extra # TODO: Add keyframe time-shfting?
 		
 		kfs = get_keyframes(curves, frame)
-		for fc, kf in kfs:
-			kf.co[1] = kfs_ori[fc][frame][0][1]
-			kf.handle_left[0], kf.handle_left[1] = kfs_ori[fc][frame][1] # TODO: Is writing it like this necessary? I feel assigning a list directly may not work. Test.
-			kf.handle_right[0], kf.handle_right[1] = kfs_ori[fc][frame][2]
-			kf.handle_left_type = kfs_ori[fc][frame][3]
-			kf.handle_right_type = kfs_ori[fc][frame][4]
+		for fcurvi, kf in kfs:
+			kf.co[1] = kfs_ori[fcurvi][frame][0][1]
+			kf.handle_left[0], kf.handle_left[1] = kfs_ori[fcurvi][frame][1] # TODO: Is writing it like this necessary? I feel assigning a list directly may not work. Test.
+			kf.handle_right[0], kf.handle_right[1] = kfs_ori[fcurvi][frame][2]
+			kf.handle_left_type = kfs_ori[fcurvi][frame][3]
+			kf.handle_right_type = kfs_ori[fcurvi][frame][4]
 
 	# revert position of all keyframes and handles on timeline
 	elif mt.mode == 'timing' and self.active_timebead:
 		for fcurvi, curve in enumerate(curves):
 			for kf in curve.keyframe_points:
 				frame = self.frame_map[kf.co[0]]
-				kf.co[0], kf.co[1] = kfs_ori[fcurvi][frame_ori][0] # See above TODO
-				kf.handle_left[0], kf.handle_left[1] = kfs_ori[fc][frame][1]
-				kf.handle_right[0], kf.handle_right[1] = kfs_ori[fc][frame][2]
-				kf.handle_left_type = kfs_ori[fc][frame][3]
-				kf.handle_right_type = kfs_ori[fc][frame][4]
+				kf.co[0], kf.co[1] = kfs_ori[fcurvi][frame][0] # See above TODO
+				kf.handle_left[0], kf.handle_left[1] = kfs_ori[fcurvi][frame][1]
+				kf.handle_right[0], kf.handle_right[1] = kfs_ori[fcurvi][frame][2]
+				kf.handle_left_type = kfs_ori[fcurvi][frame][3]
+				kf.handle_right_type = kfs_ori[fcurvi][frame][4]
 				
 
 	# revert position of active keyframe and its handles on the timeline

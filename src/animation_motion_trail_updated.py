@@ -78,23 +78,20 @@ def findlist(elem, arr):
 	
 	return -1
 
-def choose_chan(chans, id):
-	if chans[id]:
+def flip_chan(filter, curr, id):
+	if not filter[id]:
+		return curr
+	else:
+		return tuple([not curr[i] if i == id else curr[i] for i in range(len(curr))])
+
+def single_chan(filter, id):
+	if filter[id]:
 		return make_chan(id)
 	else:
 		i = 0
-		while not chans[i]:
+		while not filter[i]:
 			i += 1
 		return make_chan(i)
-
-def choose_chani(chans, id) -> int:
-	if chans[id]:
-		return id
-	else:
-		i = 0
-		while not chans[i]:
-			i += 1
-		return i
 
 # Flattens recursively.
 def flatten(deeplist):
@@ -1260,13 +1257,13 @@ def draw_callback(self, context):
 			blf.position(0, 10, 80, 0)
 			blf.color(0, 0.0, 0.0, 0.0, 1.0)
 			blf.draw(0, "Working on: ")
-			chosen_chan = choose_chan(chans, self.chosen_channel)
+			chosen_chans = self.chosen_chans
 			colors_noyes = [(0.0, 0.0, 0.0, 1.0), (0.0, 1.0, 0.0, 1.0)]
 			for i in range(3):
 				if not chans[i]:
 					continue
 				blf.position(0, 150 + i*30, 80, 0)
-				blf.color(0, *colors_noyes[chosen_chan[i]])
+				blf.color(0, *colors_noyes[chosen_chans[i]])
 				blf.draw(0, chan_texts[i])
 
 	# restore opengl defaults
@@ -1305,8 +1302,7 @@ def get_keyframes(curves: list[FCurve], frame: float) -> list[tuple[int, Keyfram
 def drag(self, context, event, inverse_getter):
 	mt: MotionTrailProps = context.window_manager.motion_trail
 	
-	ob, frame, extra, chans = self.getactive()
-	chan = choose_chani(chans, self.chosen_channel)
+	ob, frame, extra, ori_chans = self.getactive()
 	inverse_mat: Matrix = inverse_getter(frame, ob, context)
 	#decomposed = inverse_mat.decompose()
 	#inverse_mat = Matrix.LocRotScale(decomposed[0], decomposed[1], Vector((1.0, 1.0, 1.0)))
@@ -1321,18 +1317,16 @@ def drag(self, context, event, inverse_getter):
 		else:
 			d = d * Vector(self.constraint_axes)
 	sensitivities = (mt.sensitivity_location, mt.sensitivity_rotation * 0.3, mt.sensitivity_scale * 0.7)
-	d_sens = d.copy() * sensitivities[chan]
 	d_2d = self.drag_mouse_accumulate
 
 	all_curves = get_curves(ob)
-	curves = all_curves[chan]
-	kf_ori = self.keyframes_ori[ob][chan]
+	chosen_chans = self.chosen_chans
 
-	def update_this_handle(kf: Keyframe, side: bool, dif: float, fc: int, frame: float):
+	def update_this_handle(kf: Keyframe, side: bool, dif: float, this_ori_kf):
 		sides_type = [kf.handle_left_type, kf.handle_right_type]
 		sides = [kf.handle_left, kf.handle_right]
 		other_side = 1 - side
-		originals = [kf_ori[fc][frame][1], kf_ori[fc][frame][2]]
+		originals = [this_ori_kf[1], this_ori_kf[2]]
 
 		if sides_type[side] in ('AUTO', 'AUTO_CLAMPED', 'ANIM_CLAMPED'):
 			sides_type[side] = 'ALIGNED'
@@ -1358,11 +1352,15 @@ def drag(self, context, event, inverse_getter):
 	# Alter keyframe values and handle coordinates
 	if mt.mode == 'values':
 
-		kfs = get_keyframes(curves, frame)
+		chan = findlist(True, chosen_chans) # Only 1 channel is chooseable in values mode
+
+		kfs = get_keyframes(all_curves[chan], frame)
+		kf_ori = self.keyframes_ori[ob][chan]
+		d_sens = d * sensitivities[chan]
 
 		if self.op_type == 0 and self.active_keyframe: # If trying to grab a keyframe, move keyframe around
 
-			if len(curves) == 4: # Deal with quaternions
+			if len(all_curves[chan]) == 4: # Deal with quaternions
 				d_sens = quat_transform(d_sens, [kf_ori[fcurv][frame][0][1] for fcurv in range(4)]) # TODO: Potential exception when user is being a user and doesn't have 4 quaternion KFs?
 			
 			for fcurvi, kf in kfs:
@@ -1375,14 +1373,16 @@ def drag(self, context, event, inverse_getter):
 				kf.handle_right[1] = this_ori_kf[2][1] + d_sens[fcurvi]
 
 		elif (self.op_type == 0 and self.active_handle) or self.op_type == 1: #if trying to grab a handle, or if trying to rotate either, move keyframe handle/s
-			if len(curves) == 4:
+			if len(all_curves[chan]) == 4:
 				d_sens = quat_transform(d_sens, [kf_ori[fcurvi][frame][0][1] for fcurvi in range(4)]) # ? Does this even work?
 
 			for fcurvi, kf in kfs:
+				this_ori_kf = kf_ori[fcurvi][frame]
+
 				if not extra == "right":
-					update_this_handle(kf, 0, d_sens[fcurvi], fcurvi, frame)
+					update_this_handle(kf, 0, d_sens[fcurvi], this_ori_kf)
 				elif not extra == "left":
-					update_this_handle(kf, 1, d_sens[fcurvi], fcurvi, frame)
+					update_this_handle(kf, 1, d_sens[fcurvi], this_ori_kf)
 
 		elif self.op_type == 2: #If trying to scale, scale keyframe handle/s    Is this if necessary?
 			d_sens = d.copy() * 0.2
@@ -1390,7 +1390,7 @@ def drag(self, context, event, inverse_getter):
 			do_left = not extra == "right"
 			do_right = not extra == "left"
 
-			if len(curves) == 4:
+			if len(all_curves[chan]) == 4:
 				d_sens = quat_transform(d_sens, [kf_ori[fcurvi][frame][0][1] for fcurvi in range(4)]) # ? How effective is this for scaling KFs?
 				one = Vector((1, 1, 1, 1))
 			else:
@@ -1410,8 +1410,14 @@ def drag(self, context, event, inverse_getter):
 
 	# change position of all keyframes on timeline
 	elif mt.mode == 'timing' and self.active_timebead: # TODO: potential code merge with below timing if?
+
 		frame_ori = extra
-		ranges = [val for c in curves for val in c.range()]
+		ranges = []
+		for chan in range(len(ori_chans)):
+			if not ori_chans[chan]:
+				continue
+			ranges.extend([val for c in all_curves[chan] for val in c.range()])
+
 		ranges.sort()
 		range_min = round(ranges[0])
 		range_max = round(ranges[-1])
@@ -1422,33 +1428,38 @@ def drag(self, context, event, inverse_getter):
 		shift_high = max(1e-4, (range_max - new_frame) / (range_max - frame))
 
 		new_mapping = FloatMap()
-		for fcurvi, curve in enumerate(curves):
-			for j, kf in enumerate(curve.keyframe_points):
-				if not self.frame_map:
-					frame_ori = kf.co[0]
-				else:
-					frame_ori = self.frame_map[kf.co[0]]
-				
-				if frame_ori <= frame:
-					frame_new = (frame_ori - range_min) * shift_low + range_min
-				else:
-					frame_new = range_max - (range_max - frame_ori) * shift_high
-				
-				frame_new = max(
-							range_min + j, min(frame_new, range_max -
-							(len(curve.keyframe_points) - j) + 1)
-							)
-				d_frame = frame_new - frame_ori
-				new_mapping[frame_new] = frame_ori
-				kf.co[0] = frame_new
-				kf.handle_left[0] = kf_ori[fcurvi][frame_ori][1][0] + d_frame
-				kf.handle_right[0] = kf_ori[fcurvi][frame_ori][2][0] + d_frame
+
+		for chan in range(len(chosen_chans)):
+			if not chosen_chans[chan]:
+				continue
+
+			for fcurvi, curve in enumerate(all_curves[chan]):
+				for j, kf in enumerate(curve.keyframe_points):
+					if not self.frame_map:
+						frame_ori = kf.co[0]
+					else:
+						frame_ori = self.frame_map[kf.co[0]]
+					
+					if frame_ori <= frame:
+						frame_new = (frame_ori - range_min) * shift_low + range_min
+					else:
+						frame_new = range_max - (range_max - frame_ori) * shift_high
+					
+					frame_new = max(
+								range_min + j, min(frame_new, range_max -
+								(len(curve.keyframe_points) - j) + 1)
+								)
+					d_frame = frame_new - frame_ori
+					new_mapping[frame_new] = frame_ori
+					kf.co[0] = frame_new
+					kf.handle_left[0] = kf_ori[fcurvi][frame_ori][1][0] + d_frame
+					kf.handle_right[0] = kf_ori[fcurvi][frame_ori][2][0] + d_frame
 
 		del self.frame_map
 		self.frame_map = new_mapping
 
 	# change position of active keyframe on the timeline
-	elif mt.mode == 'timing' and active_keyframe:
+	elif mt.mode == 'timing' and self.active_keyframe:
 		frame_ori = extra
 
 		locs_ori = [[f_ori, coords] for f_mapped, [f_ori, coords] in
@@ -1507,7 +1518,7 @@ def drag(self, context, event, inverse_getter):
 					kf.handle_left[0] = handles_ori[ob][frame_ori]["left"][i][0] + d_frame
 					kf.handle_right[0] = handles_ori[ob][frame_ori]["right"][i][0] + d_frame
 					break
-		active_keyframe = [ob, new_frame, frame_ori]
+		self.active_keyframe = (ob, new_frame, frame_ori, chans)
 
 	# change position of active timebead on the timeline, thus altering speed
 	elif mt.mode == 'speed' and active_timebead:
@@ -1592,36 +1603,40 @@ def drag(self, context, event, inverse_getter):
 # revert changes made by dragging
 def cancel_drag(self, context):
 	mt: MotionTrailProps = context.window_manager.motion_trail
-	ob, frame, extra, chans = self.getactive()
-	all_curves = get_curves(ob)
-	chan = choose_chani(chans, self.chosen_channel)
-	curves = all_curves[chan]
-	kfs_ori = self.keyframes_ori[ob][chan]
-
+	ob, frame, extra, ori_chans = self.getactive()
+	chosen_chans = self.chosen_chans
+	curves = get_curves(ob)
 
 	# revert change in values of active keyframe and its handles
 	if mt.mode == 'values':
 		if self.active_keyframe:
 			frame = extra # TODO: Add keyframe time-shfting?
-		
-		kfs = get_keyframes(curves, frame)
+
+		chan = findlist(True, chosen_chans) # Only 1 channel is chooseable in values mode
+		kfs = get_keyframes(curves[chan], frame)
 		for fcurvi, kf in kfs:
-			kf.co[1] = kfs_ori[fcurvi][frame][0][1]
-			kf.handle_left[0], kf.handle_left[1] = kfs_ori[fcurvi][frame][1] # TODO: Is writing it like this necessary? I feel assigning a list directly may not work. Test.
-			kf.handle_right[0], kf.handle_right[1] = kfs_ori[fcurvi][frame][2]
-			kf.handle_left_type = kfs_ori[fcurvi][frame][3]
-			kf.handle_right_type = kfs_ori[fcurvi][frame][4]
+			this_ori_kf = self.keyframes_ori[ob][chan][fcurvi][frame]
+			kf.co[1] = this_ori_kf[0][1]
+			kf.handle_left[0], kf.handle_left[1] = this_ori_kf[1] # TODO: Is writing it like this necessary? I feel assigning a list directly may not work. Test.
+			kf.handle_right[0], kf.handle_right[1] = this_ori_kf[2]
+			kf.handle_left_type = this_ori_kf[3]
+			kf.handle_right_type = this_ori_kf[4]
 
 	# revert position of all keyframes and handles on timeline
 	elif mt.mode == 'timing' and self.active_timebead:
-		for fcurvi, curve in enumerate(curves):
-			for kf in curve.keyframe_points:
-				frame = self.frame_map[kf.co[0]]
-				kf.co[0], kf.co[1] = kfs_ori[fcurvi][frame][0] # See above TODO
-				kf.handle_left[0], kf.handle_left[1] = kfs_ori[fcurvi][frame][1]
-				kf.handle_right[0], kf.handle_right[1] = kfs_ori[fcurvi][frame][2]
-				kf.handle_left_type = kfs_ori[fcurvi][frame][3]
-				kf.handle_right_type = kfs_ori[fcurvi][frame][4]
+		for chan in range(len(chans)):
+			if not chosen_chans[chan]:
+				continue
+
+			for fcurvi, curve in enumerate(curves[chan]):
+				for kf in curve.keyframe_points:
+					frame = self.frame_map[kf.co[0]]
+					this_ori_kf = self.keyframes_ori[ob][chan][fcurvi][frame]
+					kf.co[0], kf.co[1] = this_ori_kf[0] # See above TODO
+					kf.handle_left[0], kf.handle_left[1] = this_ori_kf[1]
+					kf.handle_right[0], kf.handle_right[1] = this_ori_kf[2]
+					kf.handle_left_type = this_ori_kf[3]
+					kf.handle_right_type = this_ori_kf[4]
 				
 
 	# revert position of active keyframe and its handles on the timeline
@@ -1828,6 +1843,8 @@ class MotionTrailOperator(bpy.types.Operator):
 	drag_mouse_accumulate: Vector
 	"""Accumulated mouse position from dragging, nicely factoring in shift/alt"""
 
+	chosen_chans: tuple[bool, bool, bool]
+
 	def getactive(self):
 		if self.active_keyframe: return self.active_keyframe
 		if self.active_handle: return self.active_handle
@@ -1965,12 +1982,20 @@ class MotionTrailOperator(bpy.types.Operator):
 				# TODO: Copypasted code, any better approach? /\
 
 			if event.type in self.transform_keys and event.value == 'PRESS':
-				if not event.shift:
-					self.op_type = findlist(event.type, self.transform_keys)
-				else:
-					self.chosen_channel = findlist(event.type, self.transform_keys)
-				
 				cancel_drag(self, context)
+
+				id = findlist(event.type, self.transform_keys)
+
+				if not event.shift:
+					self.op_type = id
+				else:
+					ob, frame, extra, chans = self.getactive()
+					if self.active_timebead:
+						self.chosen_chans = flip_chan(chans, self.chosen_chans, id)
+					else:
+						self.chosen_chans = single_chan(chans, id)
+					
+
 				inverse_getter = get_inverse_parents_depsgraph if mt.use_depsgraph else get_inverse_parents
 				drag(self, context, event, inverse_getter)
 
@@ -2028,6 +2053,11 @@ class MotionTrailOperator(bpy.types.Operator):
 					self.active_frame = False
 				
 				ob, frame, other, chans = self.getactive()
+
+				if self.active_timebead:
+					self.chosen_chans = chans
+				else:
+					self.chosen_chans = single_chan(chans, 0)
 
 				self.loc_ori_ws = self.cache.get_location(frame, ob, context)
 				self.keyframes_ori = get_original_animation_data(context)
@@ -2190,6 +2220,7 @@ class MotionTrailOperator(bpy.types.Operator):
 			self.highlighted_coord = None
 			self.last_frame = -1
 			self.frame_map = FloatMap()
+			self.chosen_chans = (False, False, False)
 
 			mt.force_update = True
 			mt.handle_type_enabled = False

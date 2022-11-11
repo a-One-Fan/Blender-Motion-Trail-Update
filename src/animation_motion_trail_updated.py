@@ -752,7 +752,7 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 					loc = self.cache.get_location(frame, ob, context)
 					x, y = world_to_screen(context, loc)
 					timebeads[frame] = [[x, y], channels]
-					click.append( [frame, "timebead", Vector([x, y]), make_chan(chan)] )
+					click.append( [frame, "timebead", Vector([x, y]), (True, True, True)] )
 				self.timebeads[ob] = timebeads
 
 			# calculate timebeads for speed mode
@@ -805,7 +805,7 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 							loc = self.cache.get_location(bead_frame, ob, context)
 
 							x, y = world_to_screen(context, loc)
-							timebeads[bead_frame] = [[x, y], make_chan(chan)]
+							timebeads[bead_frame] = [[x, y], (True, True, True)]
 
 					timebead_container[chan] = timebeads
 					lasti = chan
@@ -1355,7 +1355,7 @@ def drag(self, context, event, inverse_getter):
 				if do_right: kf.handle_right[0], kf.handle_right[1] = centre - d_sens[fcurvi] * dif_right
 
 	# change position of all keyframes on timeline
-	elif mt.mode == 'timing' and active_timebead:
+	elif mt.mode == 'timing' and self.active_timebead: # TODO: potential code merge with below timing if?
 		frame_ori = extra
 		ranges = [val for c in curves for val in c.range()]
 		ranges.sort()
@@ -1366,6 +1366,8 @@ def drag(self, context, event, inverse_getter):
 		new_frame = frame + dx_screen
 		shift_low = max(1e-4, (new_frame - range_min) / (frame - range_min))
 		shift_high = max(1e-4, (range_max - new_frame) / (range_max - frame))
+
+		print(self.frame_map)
 
 		new_mapping: dict[float, float] = {}
 		for fcurvi, curve in enumerate(curves):
@@ -1385,8 +1387,7 @@ def drag(self, context, event, inverse_getter):
 							(len(curve.keyframe_points) - j) + 1)
 							)
 				d_frame = frame_new - frame_ori
-				if frame_new not in new_mapping:
-					new_mapping[frame_new] = frame_ori
+				new_mapping[frame_new] = frame_ori
 				kf.co[0] = frame_new
 				kf.handle_left[0] = kf_ori[fcurvi][frame_ori][1][0] + d_frame
 				kf.handle_right[0] = kf_ori[fcurvi][frame_ori][2][0] + d_frame
@@ -1603,6 +1604,9 @@ def cancel_drag(self, context):
 					kf.handle_right[0] = handles_ori[objectname][kf_frame]["right"][i][0]
 					break
 		self.active_timebead = [objectname, frame_ori, frame_ori, active_ob, child]
+
+	del self.frame_map
+	self.frame_map = {}
 
 	return
 
@@ -2133,6 +2137,7 @@ class MotionTrailOperator(bpy.types.Operator):
 
 			self.highlighted_coord = None
 			self.last_frame = -1
+			self.frame_map = {}
 
 			mt.force_update = True
 			mt.handle_type_enabled = False

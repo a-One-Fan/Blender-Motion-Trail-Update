@@ -916,6 +916,8 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 		# restore global undo in case of failure (see T52524)
 		#context.preferences.edit.use_global_undo = global_undo
 
+#TODO: chans for timebeads based on do_loc, do_rot, do_scale
+
 # calc_callback using depsgraph functions
 def calc_callback_dg(self, context):
 	return calc_callback(self, context, get_inverse_parents_depsgraph, get_matrix_any_depsgraph)
@@ -1452,8 +1454,9 @@ def drag(self, context, event, inverse_getter):
 					d_frame = frame_new - frame_ori
 					new_mapping[frame_new] = frame_ori
 					kf.co[0] = frame_new
-					kf.handle_left[0] = kf_ori[fcurvi][frame_ori][1][0] + d_frame
-					kf.handle_right[0] = kf_ori[fcurvi][frame_ori][2][0] + d_frame
+					kf_ori = self.keyframes_ori[ob][chan][fcurvi][frame_ori]
+					kf.handle_left[0] = kf_ori[1][0] + d_frame
+					kf.handle_right[0] = kf_ori[2][0] + d_frame
 
 		del self.frame_map
 		self.frame_map = new_mapping
@@ -1624,7 +1627,7 @@ def cancel_drag(self, context):
 
 	# revert position of all keyframes and handles on timeline
 	elif mt.mode == 'timing' and self.active_timebead:
-		for chan in range(len(chans)):
+		for chan in range(len(chosen_chans)):
 			if not chosen_chans[chan]:
 				continue
 

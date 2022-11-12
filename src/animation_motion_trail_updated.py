@@ -803,7 +803,7 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 					loc = self.cache.get_location(frame, ob, context)
 					x, y = world_to_screen(context, loc)
 					timebeads[frame] = [[x, y], channels]
-					click.append( [frame, "timebead", Vector([x, y]), (True, True, True)] )
+					click.append( [frame, "timebead", Vector([x, y]), tuple(channels)] )
 				self.timebeads[ob] = timebeads
 
 			# calculate timebeads for speed mode
@@ -856,7 +856,7 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 							loc = self.cache.get_location(bead_frame, ob, context)
 
 							x, y = world_to_screen(context, loc)
-							timebeads[bead_frame] = [[x, y], (True, True, True)]
+							timebeads[bead_frame] = [[x, y], tuple(channels)]
 
 					timebead_container[chan] = timebeads
 					lasti = chan
@@ -903,7 +903,7 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 			if mt.frame_display:
 				path = self.paths[ob]
 				for x, y, color, frame in path:
-					click.append( [frame, "frame", Vector([x, y]), channels] )
+					click.append( [frame, "frame", Vector([x, y]), tuple(channels)] )
 
 			self.click[ob] = click
 

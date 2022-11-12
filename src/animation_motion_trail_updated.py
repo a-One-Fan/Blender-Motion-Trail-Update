@@ -223,8 +223,15 @@ class FloatMap():
 			raise KeyError(key, self.__kvps[i][0])
 		return self.__kvps[i][1]
 
+	def exists(self, key):
+		i = self.__findi(key)
+		realkey = self.__kvps[i][0]
+
+		return (i < len(self.__kvps)) and (abs(key - realkey) < self.__eps)
+
 	def __setitem__(self, key, newval):
 		i = self.__findi(key)
+		
 		if ((i < len(self.__kvps)) and (abs(key - self.__kvps[i][0]) < self.__eps)):
 			self.__kvps[i] = (key, newval)
 		else:
@@ -1292,7 +1299,7 @@ def get_keyframes(curves: list[FCurve], frame: float) -> list[tuple[int, Keyfram
 	i = 0
 	for fcurve in curves:
 		for kf in fcurve.keyframe_points:
-			if kf.co[0] == frame:
+			if abs(kf.co[0] - frame) < 0.0001:
 				res.append((i, kf))
 				break
 
@@ -1420,7 +1427,7 @@ def drag(self, context, event, inverse_getter):
 				continue
 			ranges.extend([val for c in all_curves[chan] for val in c.range()])
 
-		ranges.sort()
+		ranges.sort() # TODO: Don't sort just for 2 values
 		range_min = round(ranges[0])
 		range_max = round(ranges[-1])
 		range_len = range_max - range_min
@@ -1463,44 +1470,46 @@ def drag(self, context, event, inverse_getter):
 
 	# change position of active keyframe on the timeline
 	elif mt.mode == 'timing' and self.active_keyframe:
-		frame_ori = extra
+		if not self.frame_map:
+			frame_ori = frame
+		else:
+			frame_ori = self.frame_map[frame]
 
-		locs_ori = [[f_ori, coords] for f_mapped, [f_ori, coords] in
-					keyframes_ori[ob].items()]
-		locs_ori.sort()
+		bignum = 1e64 # TODO: is this big numbers good?
+
+		range_both = [-bignum, bignum]
+		kf_ob_ori = self.keyframes_ori[ob]
+		for chan in range(len(chosen_chans)):
+			if not chosen_chans[chan]:
+				continue
+
+			for fcurvi in range(len(kf_ob_ori[chan])):
+				kfs_ori = self.keyframes_ori[ob][chan][fcurvi]
+				for frame, kf in kfs_ori.items():
+					if frame < frame_ori and frame > range_both[0]:
+						range_both[0] = frame
+					if frame > frame_ori and frame < range_both[1]:
+						range_both[1] = frame
+
+		if range_both[0] == -bignum:
+			range_both[0] = frame_ori
+		if range_both[1] == bignum:
+			range_both[1] = frame_ori
+
 		direction = 1
-		range_both = False
-		for i, [f_ori, coords] in enumerate(locs_ori):
-			if abs(frame_ori - f_ori) < 1e-4:
-				if i == 0:
-					# first keyframe, nothing before it
-					direction = -1
-					range_both = [f_ori, locs_ori[i + 1][0]]
-				elif i == len(locs_ori) - 1:
-					# last keyframe, nothing after it
-					range_both = [locs_ori[i - 1][0], f_ori]
-				else:
-					current = Vector(coords)
-					next = Vector(locs_ori[i + 1][1])
-					previous = Vector(locs_ori[i - 1][1])
-					angle_to_next = d.angle(next - current, 0)
-					angle_to_previous = d.angle(previous - current, 0)
-					if angle_to_previous < angle_to_next:
-						# mouse movement is in direction of previous keyframe
-						direction = -1
-					range_both = [locs_ori[i - 1][0], locs_ori[i + 1][0]]
-				break
-		direction *= -1  # feels more natural in 3d-view
-		if not range_both:
-			# keyframe not found, is impossible, but better safe than sorry
-			return(active_keyframe, active_timebead, keyframes_ori)
+
+		# angle_to_next = d.angle(next - current, 0)
+		# angle_to_previous = d.angle(previous - current, 0)
+		# if angle_to_previous < angle_to_next:
+			# mouse movement is in direction of previous keyframe
+			# direction = -1
+
 		# calculate strength of movement
-		d_screen = Vector([event.mouse_region_x,
-			event.mouse_region_y]) - self.drag_mouse_ori
+		d_screen = d_2d.copy()
 		if d_screen.length != 0:
 			d_screen = d_screen.length / (abs(d_screen[0]) / d_screen.length *
-					  context.region.width + abs(d_screen[1]) / d_screen.length *
-					  context.region.height)
+					context.region.width + abs(d_screen[1]) / d_screen.length *
+					context.region.height)
 			d_screen *= direction  # d_screen value ranges from -1.0 to 1.0
 		else:
 			d_screen = 0.0
@@ -1514,14 +1523,22 @@ def drag(self, context, event, inverse_getter):
 		new_frame = min(max_frame - 1, max(min_frame + 1, new_frame))
 		d_frame = new_frame - frame_ori
 
-		for i, curve in enumerate(curves):
-			for kf in curve.keyframe_points:
-				if abs(kf.co[0] - frame) < 1e-4:
-					kf.co[0] = new_frame
-					kf.handle_left[0] = handles_ori[ob][frame_ori]["left"][i][0] + d_frame
-					kf.handle_right[0] = handles_ori[ob][frame_ori]["right"][i][0] + d_frame
-					break
-		self.active_keyframe = (ob, new_frame, frame_ori, chans)
+		for chan in range(len(chosen_chans)):
+			if not chosen_chans[chan]:
+				continue
+
+			kfs = get_keyframes(all_curves[chan], frame)
+			for (fcurvi, kf) in kfs:
+				this_ori_kf = self.keyframes_ori[ob][chan][fcurvi][frame_ori]
+				kf.co[0] = new_frame
+				kf.handle_left[0] = this_ori_kf[1][0] + d_frame
+				kf.handle_right[0] = this_ori_kf[2][0] + d_frame
+		
+		del self.frame_map
+		self.frame_map = FloatMap()
+		self.frame_map[new_frame] = frame_ori
+
+		self.active_keyframe = (ob, new_frame, frame_ori, ori_chans)
 
 	# change position of active timebead on the timeline, thus altering speed
 	elif mt.mode == 'speed' and active_timebead:
@@ -1612,9 +1629,6 @@ def cancel_drag(self, context):
 
 	# revert change in values of active keyframe and its handles
 	if mt.mode == 'values':
-		if self.active_keyframe:
-			frame = extra # TODO: Add keyframe time-shfting?
-
 		chan = findlist(True, chosen_chans) # Only 1 channel is chooseable in values mode
 		kfs = get_keyframes(curves[chan], frame)
 		for fcurvi, kf in kfs:
@@ -1626,14 +1640,19 @@ def cancel_drag(self, context):
 			kf.handle_right_type = this_ori_kf[4]
 
 	# revert position of all keyframes and handles on timeline
-	elif mt.mode == 'timing' and self.active_timebead:
+	elif mt.mode == 'timing':
+		
 		for chan in range(len(chosen_chans)):
 			if not chosen_chans[chan]:
 				continue
 
 			for fcurvi, curve in enumerate(curves[chan]):
 				for kf in curve.keyframe_points:
+					if not self.frame_map.exists(kf.co[0]):
+						continue
+
 					frame = self.frame_map[kf.co[0]]
+					
 					this_ori_kf = self.keyframes_ori[ob][chan][fcurvi][frame]
 					kf.co[0], kf.co[1] = this_ori_kf[0] # See above TODO
 					kf.handle_left[0], kf.handle_left[1] = this_ori_kf[1]
@@ -1641,17 +1660,8 @@ def cancel_drag(self, context):
 					kf.handle_left_type = this_ori_kf[3]
 					kf.handle_right_type = this_ori_kf[4]
 				
-
-	# revert position of active keyframe and its handles on the timeline
-	elif mt.mode == 'timing' and self.active_keyframe:
-		for i, curve in enumerate(curves):
-			for kf in curve.keyframe_points:
-				if abs(kf.co[0] - frame) < 1e-4:
-					kf.co[0] = keyframes_ori[objectname][frame_ori][0]
-					kf.handle_left[0] = handles_ori[objectname][frame_ori]["left"][i][0]
-					kf.handle_right[0] = handles_ori[objectname][frame_ori]["right"][i][0]
-					break
-		self.active_keyframe = [objectname, frame_ori, frame_ori, active_ob, child]
+		if self.active_keyframe:
+			self.active_keyframe = (ob, extra, extra, ori_chans)
 
 	# revert position of handles on the timeline
 	elif mt.mode == 'speed' and self.active_timebead:

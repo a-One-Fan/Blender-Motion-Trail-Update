@@ -1988,6 +1988,7 @@ class MotionTrailOperator(bpy.types.Operator):
 				cancel_drag(self, context)
 
 				id = findlist(event.type, self.transform_keys)
+				ob, frame, extra, chans = self.getactive()
 
 				if self.active_timebead:
 					self.chosen_chans = flip_chan(chans, self.chosen_chans, id)
@@ -1995,7 +1996,6 @@ class MotionTrailOperator(bpy.types.Operator):
 					if not event.shift:
 						self.op_type = id
 					else:
-						ob, frame, extra, chans = self.getactive()
 						self.chosen_chans = single_chan(chans, id)
 						
 

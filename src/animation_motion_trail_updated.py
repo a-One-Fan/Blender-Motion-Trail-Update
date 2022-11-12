@@ -119,6 +119,17 @@ def mouse_in_region(event, context):
 	return event.mouse_region_x > 0 and event.mouse_region_x < context.region.width and \
 				event.mouse_region_y > 0 and event.mouse_region_y < context.region.height
 
+def maprange(oldmin, oldmax, newmin, newmax, val):
+	fac = (val - oldmin) / (oldmax - oldmin)
+	return newmin * (1.0 - fac) + newmax * fac
+
+def clamp(_min, _max, val):
+	if val < _min:
+		return _min
+	if val > _max:
+		return _max
+	return val
+
 # fake fcurve class, used if no fcurve is found for a path
 class fake_fcurve():
 	def __init__(self, object: Object | PoseBone, index, rotation=False, scale=False):
@@ -225,9 +236,8 @@ class FloatMap():
 
 	def exists(self, key):
 		i = self.__findi(key)
-		realkey = self.__kvps[i][0]
 
-		return (i < len(self.__kvps)) and (abs(key - realkey) < self.__eps)
+		return (i < len(self.__kvps)) and (abs(key - self.__kvps[i][0]) < self.__eps)
 
 	def __setitem__(self, key, newval):
 		i = self.__findi(key)
@@ -1308,7 +1318,7 @@ def get_keyframes(curves: list[FCurve], frame: float) -> list[tuple[int, Keyfram
 	return res
 
 # change data based on mouse movement
-def drag(self, context, event, inverse_getter):
+def drag(self, context: Context, event, inverse_getter):
 	mt: MotionTrailProps = context.window_manager.motion_trail
 	
 	ob, frame, extra, ori_chans = self.getactive()
@@ -1475,7 +1485,7 @@ def drag(self, context, event, inverse_getter):
 		else:
 			frame_ori = self.frame_map[frame]
 
-		bignum = 1e64 # TODO: is this big numbers good?
+		bignum = 1e64 # TODO: is this big number good?
 
 		range_both = [-bignum, bignum]
 		kf_ob_ori = self.keyframes_ori[ob]
@@ -1485,42 +1495,42 @@ def drag(self, context, event, inverse_getter):
 
 			for fcurvi in range(len(kf_ob_ori[chan])):
 				kfs_ori = self.keyframes_ori[ob][chan][fcurvi]
-				for frame, kf in kfs_ori.items():
-					if frame < frame_ori and frame > range_both[0]:
-						range_both[0] = frame
-					if frame > frame_ori and frame < range_both[1]:
-						range_both[1] = frame
+				for kf_frame, kf in kfs_ori.items():
+					if kf_frame < frame_ori and kf_frame > range_both[0]:
+						range_both[0] = kf_frame
+					if kf_frame > frame_ori and kf_frame < range_both[1]:
+						range_both[1] = kf_frame
 
-		if range_both[0] == -bignum:
-			range_both[0] = frame_ori
-		if range_both[1] == bignum:
-			range_both[1] = frame_ori
+		drag_min = -context.region.width
+		drag_max = context.region.width
+		drag_amt = d_2d[0]
 
-		direction = 1
+		if range_both[0] != range_both[1]: # Drag when there's KFs around
+		
+			margin = 0.1 # To prevent accidentally losing our chosen keyframe when the user drags too close
+			if range_both[0] == -bignum: # Free drag beyond min
+				range_both[0] = frame_ori + (frame_ori - range_both[1]) + margin # + margin so it's centered
+				range_both[1] -= margin
+				if drag_amt > drag_max:
+					drag_amt = drag_max
+			elif range_both[1] == bignum: # Free drag beyond max
+				range_both[0] += margin
+				range_both[1] = frame_ori + (frame_ori - range_both[0]) + margin # + margin so it's centered
+				if drag_amt < drag_min:
+					drag_amt = drag_min
+			else:
+				range_both[0] += margin
+				range_both[1] -= margin
+				# Adjust drag range such that 0.0 drag amount gives the original frame
+				fac = (frame_ori - range_both[0]) / (range_both[1] - range_both[0])
+				drag_min = (drag_max * fac) / (fac - 1.0)
+				drag_amt = clamp(drag_min, drag_max, d_2d[0])
 
-		# angle_to_next = d.angle(next - current, 0)
-		# angle_to_previous = d.angle(previous - current, 0)
-		# if angle_to_previous < angle_to_next:
-			# mouse movement is in direction of previous keyframe
-			# direction = -1
+		else: # Drag with no other KFs
+			fps = context.scene.render.fps / context.scene.render.fps_base # When no KF a given side, drag will be based on scene fps
+			range_both = [-2 * fps, 2 * fps]
 
-		# calculate strength of movement
-		d_screen = d_2d.copy()
-		if d_screen.length != 0:
-			d_screen = d_screen.length / (abs(d_screen[0]) / d_screen.length *
-					context.region.width + abs(d_screen[1]) / d_screen.length *
-					context.region.height)
-			d_screen *= direction  # d_screen value ranges from -1.0 to 1.0
-		else:
-			d_screen = 0.0
-		new_frame = d_screen * (range_both[1] - range_both[0]) + frame_ori
-		max_frame = range_both[1]
-		if max_frame == frame_ori:
-			max_frame += 1
-		min_frame = range_both[0]
-		if min_frame == frame_ori:
-			min_frame -= 1
-		new_frame = min(max_frame - 1, max(min_frame + 1, new_frame))
+		new_frame = maprange(drag_min, drag_max, range_both[0], range_both[1], drag_amt)
 		d_frame = new_frame - frame_ori
 
 		for chan in range(len(chosen_chans)):
@@ -1534,7 +1544,7 @@ def drag(self, context, event, inverse_getter):
 				kf.handle_left[0] = this_ori_kf[1][0] + d_frame
 				kf.handle_right[0] = this_ori_kf[2][0] + d_frame
 		
-		del self.frame_map
+		del self.frame_map # TODO: is this necessary?
 		self.frame_map = FloatMap()
 		self.frame_map[new_frame] = frame_ori
 

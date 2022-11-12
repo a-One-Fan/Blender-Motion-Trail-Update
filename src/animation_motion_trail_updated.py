@@ -1991,7 +1991,8 @@ class MotionTrailOperator(bpy.types.Operator):
 				ob, frame, extra, chans = self.getactive()
 
 				if self.active_timebead:
-					self.chosen_chans = flip_chan(chans, self.chosen_chans, id)
+					if sum(chans) > 1: # No flip if single-chan
+						self.chosen_chans = flip_chan(chans, self.chosen_chans, id)
 				else:
 					if not event.shift:
 						self.op_type = id

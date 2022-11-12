@@ -1989,15 +1989,15 @@ class MotionTrailOperator(bpy.types.Operator):
 
 				id = findlist(event.type, self.transform_keys)
 
-				if not event.shift:
-					self.op_type = id
+				if self.active_timebead:
+					self.chosen_chans = flip_chan(chans, self.chosen_chans, id)
 				else:
-					ob, frame, extra, chans = self.getactive()
-					if self.active_timebead:
-						self.chosen_chans = flip_chan(chans, self.chosen_chans, id)
+					if not event.shift:
+						self.op_type = id
 					else:
+						ob, frame, extra, chans = self.getactive()
 						self.chosen_chans = single_chan(chans, id)
-					
+						
 
 				inverse_getter = get_inverse_parents_depsgraph if mt.use_depsgraph else get_inverse_parents
 				drag(self, context, event, inverse_getter)

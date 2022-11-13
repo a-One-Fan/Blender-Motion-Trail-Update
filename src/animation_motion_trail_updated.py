@@ -1289,7 +1289,7 @@ def drag(self, context: Context, event, inverse_getter):
 
 		sides[side][1] = originals[side][1] + dif
 
-		if sides_type[side] == 'ALIGNED' and not kf.co[0] == sides[side][0]:
+		if sides_type[side] == 'ALIGNED' and not kf.co[0] == sides[side][0]: # TODO: Should fcurve.update() be used here?
 			a = (sides[side][1]-kf.co[1]) / (sides[side][0]-kf.co[0]) # a = (y1-y2)/(x1-x2)
 			b = sides[side][1] - a * sides[side][0] # b = y1-ax1
 			
@@ -1548,24 +1548,19 @@ def get_handle_type(self, active_keyframe, active_handle):
 		# no active handle(s)
 		return (False)
 
-	# properties used when changing handle type
-	self.handle_type_frame = frame
-	self.handle_type_side = side
-	self.handle_type_action_ob = ob
-
-	curves = get_curves(ob)
-	for chan in range(len(curves)):
+	all_curves = get_curves(ob)
+	for chan in range(len(all_curves)):
 		if not chans[chan]:
 			continue
-		for fcurv in range(len(curves[chan])):
-			for kf in curves[chan][fcurv].keyframe_points:
+		for fcurv in range(len(all_curves[chan])):
+			for kf in all_curves[chan][fcurv].keyframe_points:
 				if kf.co[0] == frame:
 					if side in ("left", "both"):
-						return(kf.handle_left_type)
+						return (kf.handle_left_type)
 					else:
-						return(kf.handle_right_type)
+						return (kf.handle_right_type)
 
-	return("AUTO")
+	return ("AUTO")
 
 
 # Turn the given frame into a keyframe
@@ -1597,40 +1592,31 @@ def set_handle_type(self, context):
 		# function called because of selection change, not change in type
 		return
 
-	self.handle_type_old = mt.handle_type
-
-	return
-
-	frame = self.handle_type_frame
-	side = self.handle_type_side
-	action_ob = self.handle_type_action_ob
-	action_ob = bpy.data.objects[action_ob]
+	if self.active_keyframe:
+		ob, frame, side, chans = self.active_keyframe
+		side = "both"
+	elif self.active_handle:
+		ob, frame, side, chans = self.active_handle
+	else:
+		# no active handle(s)
+		return (False)
 	new_type = mt.handle_type
 
-	curves = get_curves(action_ob)
-	for c in curves:
-		for kf in c.keyframe_points:
-			if kf.co[0] == frame:
-				# align if necessary
-				if side in ("right", "both") and new_type in (
-							"AUTO", "AUTO_CLAMPED", "ALIGNED"):
-					# change right handle
-					normal = (kf.co - kf.handle_left).normalized()
-					size = (kf.handle_right[0] - kf.co[0]) / normal[0]
-					normal = normal * size + kf.co
-					kf.handle_right[1] = normal[1]
-				elif side == "left" and new_type in (
-							"AUTO", "AUTO_CLAMPED", "ALIGNED"):
-					# change left handle
-					normal = (kf.co - kf.handle_right).normalized()
-					size = (kf.handle_left[0] - kf.co[0]) / normal[0]
-					normal = normal * size + kf.co
-					kf.handle_left[1] = normal[1]
-				# change type
-				if side in ("left", "both"):
-					kf.handle_left_type = new_type
-				if side in ("right", "both"):
-					kf.handle_right_type = new_type
+	all_curves = get_curves(ob)
+	for chan in range(len(chans)):
+		if not chans[chan]:
+			continue
+
+		for fcurvi in range(len(all_curves[chan])):
+			for kf in all_curves[chan][fcurvi].keyframe_points:
+				if kf.co[0] == frame:
+					if side in ("left", "both"):
+						kf.handle_left_type = new_type
+					if side in ("right", "both"):
+						kf.handle_right_type = new_type
+					break
+			all_curves[chan][fcurvi].update()
+			
 
 	mt.force_update = True
 

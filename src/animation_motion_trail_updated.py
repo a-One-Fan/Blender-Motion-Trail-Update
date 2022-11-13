@@ -421,7 +421,7 @@ def evaluate_childof(constraint, frame):
 		bool_names = ["use_location_x", "use_location_y", "use_location_z", "use_rotation_x", "use_rotation_y",
 		"use_rotation_z", "use_scale_x", "use_scale_y", "use_scale_z"]
 		bools = [getattr(constraint, bool_names[i]) for i in range(len(bool_names))]
-		if not reduce((lambda a, b: a and b), bools, True):
+		if not reduce((lambda a, b: a and b), bools, True): # TODO: functional programming unnecessary
 			zeros = [0, 0, 0, 0, 0, 0, 1, 1, 1]
 			(disassembledLoc, disassembledRot, disassembledScl) = mat.decompose()
 			for i in range(3):
@@ -868,8 +868,6 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 		# restore global undo in case of failure (see T52524)
 		#context.preferences.edit.use_global_undo = global_undo
 
-#TODO: chans for timebeads based on do_loc, do_rot, do_scale
-
 # calc_callback using depsgraph functions
 def calc_callback_dg(self, context):
 	return calc_callback(self, context, get_inverse_parents_depsgraph, get_matrix_any_depsgraph)
@@ -878,7 +876,8 @@ def calc_callback_dg(self, context):
 def calc_callback_ce(self, context):
 	return calc_callback(self, context, get_inverse_parents, get_matrix_any_custom_eval)
 
-
+# TODO: Thickness multiplier that affects everything
+# TODO: Circle point shader
 # draw in 3d-view
 def draw_callback(self, context):
 	# Remove handler if file was changed and we lose access to self
@@ -1495,6 +1494,7 @@ def cancel_drag(self, context):
 	chosen_chans = self.chosen_chans
 	curves = get_curves(ob)
 
+	# TODO: Merge these 2 ifs to simplify code
 	# revert change in values of active keyframe and its handles
 	if mt.mode == 'values':
 		chan = findlist(True, chosen_chans) # Only 1 channel is chooseable in values mode

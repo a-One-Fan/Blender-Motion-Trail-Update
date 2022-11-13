@@ -1564,17 +1564,17 @@ def get_handle_type(self, active_keyframe, active_handle):
 
 
 # Turn the given frame into a keyframe
-# TODO: Specifier for channels
-def insert_keyframe(self, context, frame):
-	ob, frame, frame = frame
-	curves = get_curves(ob)
-	for c in curves:
-		y = c.evaluate(frame)
-		if c.keyframe_points:
-			c.keyframe_points.insert(frame, y)
+def insert_keyframe(frame, ob, chans):
+	all_curves = get_curves(ob)
+	for chan in range(len(chans)):
+		if not chans[chan]:
+			continue
 
-	bpy.context.window_manager.motion_trail.force_update = True
-	calc_callback(self, context)
+		for fcurvi in range(len(all_curves[chan])):
+			c = all_curves[chan][fcurvi]
+			y = c.evaluate(frame)
+			if c.keyframe_points:
+				c.keyframe_points.insert(frame, y)
 
 def handle_update(self, context):
 	mt: MotionTrailProps = context.window_manager.motion_trail
@@ -1894,9 +1894,17 @@ class MotionTrailOperator(bpy.types.Operator):
 				context.window.cursor_set('SCROLL_XY')
 
 				if self.active_frame:
-					insert_keyframe(self, context, self.active_frame)
+					ob, frame, other, chans = self.active_frame
+					insert_keyframe(frame, ob, chans) # TODO: transforms selector for inserting keyframes
+					mt.force_update = True
+					if mt.use_depsgraph: 
+						calc_callback_dg(self, context) 
+					else: 
+						calc_callback_ce(self, context)
+						
 					self.active_keyframe = self.active_frame
 					self.active_frame = False
+					bpy.ops.ed.undo_push(message="Motion Trail added keyframes")
 				
 				ob, frame, other, chans = self.getactive()
 

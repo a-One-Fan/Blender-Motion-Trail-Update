@@ -1564,8 +1564,9 @@ def get_handle_type(self, active_keyframe, active_handle):
 
 
 # Turn the given frame into a keyframe
-def insert_keyframe(frame, ob, chans):
+def insert_keyframe(frame: float, ob: Object, chans: list[bool]):
 	all_curves = get_curves(ob)
+	new_fcurve_paths = ["location", "rotation_euler", "scale"]
 	for chan in range(len(chans)):
 		if not chans[chan]:
 			continue
@@ -1573,8 +1574,14 @@ def insert_keyframe(frame, ob, chans):
 		for fcurvi in range(len(all_curves[chan])):
 			c = all_curves[chan][fcurvi]
 			y = c.evaluate(frame)
-			if c.keyframe_points:
-				c.keyframe_points.insert(frame, y)
+			if not c.keyframe_points:
+				if len(all_curves[chan]) == 4:
+					data_path = "rotation_quaternion"
+				else:
+					data_path = new_fcurve_paths[chan]
+				c = ob.animation_data.action.fcurves.new(data_path, index=fcurvi)
+			
+			c.keyframe_points.insert(frame, y)
 
 def handle_update(self, context):
 	mt: MotionTrailProps = context.window_manager.motion_trail

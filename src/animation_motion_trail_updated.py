@@ -773,10 +773,8 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 			else:
 				self.keyframes[ob] = merge_dicts(keyframes)
 
-			if mt.mode != 'speed':
-				# can't select keyframes in speed mode
-				for kf_frame, [coords, kf_channels] in self.keyframes[ob].items():
-					click.append( [kf_frame, "keyframe", Vector(coords), kf_channels] )
+			for kf_frame, [coords, kf_channels] in self.keyframes[ob].items():
+				click.append( [kf_frame, "keyframe", Vector(coords), kf_channels] )
 
 			# handles are only shown in value-altering mode
 			if mt.mode == 'values' and mt.handle_display:
@@ -822,69 +820,6 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 					timebeads[frame] = [[x, y], channels]
 					click.append( [frame, "timebead", Vector([x, y]), tuple(channels)] )
 				self.timebeads[ob] = timebeads
-
-			# calculate timebeads for speed mode
-			if mt.mode == 'speed':
-				timebead_container = [{}, {}, {}]
-				lasti = 0
-
-				for chan in range(3):
-					if not channels[chan]: 
-						continue
-
-					angles = dict([[kf_frame, {"left": [], "right": []}] for kf_frame, [kf, kf_channels] in keyframes[chan].items()])
-					for fc in curves[chan]:
-						for i, kf in enumerate(fc.keyframe_points):
-							if i != 0:
-								angle = Vector([-1, 0]).angle(
-													Vector(kf.handle_left) -
-													Vector(kf.co), 0
-													)
-								if angle != 0:
-									angles[kf.co[0]]["left"].append(angle)
-							if i != len(fc.keyframe_points) - 1:
-								angle = Vector([1, 0]).angle(
-													Vector(kf.handle_right) -
-													Vector(kf.co), 0
-													)
-								if angle != 0:
-									angles[kf.co[0]]["right"].append(angle)
-					timebeads = {}
-					kf_time[chan].sort()
-					for frame, sides in angles.items():
-						if sides["left"]:
-							perc = (sum(sides["left"]) / len(sides["left"])) / \
-								(math.pi / 2)
-							perc = max(0.4, min(1, perc * 5))
-							previous = kf_time[chan][kf_time[chan].index(frame) - 1]
-							bead_frame = frame - perc * ((frame - previous - 2) / 2)
-
-							loc = self.cache.get_location(bead_frame, ob, context)
-
-							x, y = world_to_screen(context, loc)
-							timebeads[bead_frame] = [[x, y], channels]
-						if sides["right"]:
-							perc = (sum(sides["right"]) / len(sides["right"])) / \
-								(math.pi / 2)
-							perc = max(0.4, min(1, perc * 5))
-							next = kf_time[chan][kf_time[chan].index(frame) + 1]
-							bead_frame = frame + perc * ((next - frame - 2) / 2)
-
-							loc = self.cache.get_location(bead_frame, ob, context)
-
-							x, y = world_to_screen(context, loc)
-							timebeads[bead_frame] = [[x, y], tuple(channels)]
-
-					timebead_container[chan] = timebeads
-					lasti = chan
-
-				if sum(channels) <= 1:
-					self.timebeads[ob] = timebead_container[lasti]
-				else:
-					self.timebeads[ob] = merge_dicts(timebead_container)
-
-				for bead_frame, [coords, bead_channels] in self.timebeads[ob].items():
-					click.append( [bead_frame, "timebead", Vector(coords), bead_channels] )
 
 			if mt.show_spines:
 
@@ -1105,8 +1040,8 @@ def draw_callback(self, context):
 				point_poss.clear()
 				point_cols.clear()
 
-	# time beads are shown in speed and timing modes
-	if mt.mode in ('speed', 'timing'):
+	# time beads are shown in timing mode
+	if mt.mode == 'timing':
 		gpu.state.point_size_set(4.0)
 		point_poss = []
 		point_cols = []
@@ -1550,83 +1485,6 @@ def drag(self, context: Context, event, inverse_getter):
 
 		self.active_keyframe = (ob, new_frame, frame_ori, ori_chans)
 
-	# change position of active timebead on the timeline, thus altering speed
-	elif mt.mode == 'speed' and active_timebead:
-		frame_ori = extra
-
-		# determine direction (to next or previous keyframe)
-		fcx, fcy, fcz = curves
-		locx = fcx.evaluate(frame_ori)
-		locy = fcy.evaluate(frame_ori)
-		locz = fcz.evaluate(frame_ori)
-		loc_ori = Vector([locx, locy, locz])  # bonespace
-		keyframes = [kf for kf in keyframes_ori[ob]]
-		keyframes.append(frame_ori)
-		keyframes.sort()
-		frame_index = keyframes.index(frame_ori)
-		kf_prev = keyframes[frame_index - 1]
-		kf_next = keyframes[frame_index + 1]
-		vec_prev = (
-				(Matrix.Translation(-loc_ori) @ mat) @ \
-				Vector(keyframes_ori[ob][kf_prev][1])).normalized()
-		vec_next = (
-				(Matrix.Translation(-loc_ori) @ mat) @ \
-				Vector(keyframes_ori[ob][kf_next][1])).normalized()
-		d_normal = d.copy().normalized()
-		dist_to_next = (d_normal - vec_next).length
-		dist_to_prev = (d_normal - vec_prev).length
-		if dist_to_prev < dist_to_next:
-			direction = 1
-		else:
-			direction = -1
-
-		if (kf_next - frame_ori) < (frame_ori - kf_prev):
-			kf_bead = kf_next
-			side = "left"
-		else:
-			kf_bead = kf_prev
-			side = "right"
-		d_frame = d.length * direction * 2  # * 2 to make it more sensitive
-
-		angles = []
-		for i, curve in enumerate(curves):
-			for kf in curve.keyframe_points:
-				if abs(kf.co[0] - kf_bead) < 1e-4:
-					if side == "left":
-						# left side
-						kf.handle_left[0] = min(
-											handles_ori[ob][kf_bead]["left"][i][0] +
-											d_frame, kf_bead - 1
-											)
-						angle = Vector([-1, 0]).angle(
-											Vector(kf.handle_left) -
-											Vector(kf.co), 0
-											)
-						if angle != 0:
-							angles.append(angle)
-					else:
-						# right side
-						kf.handle_right[0] = max(
-											handles_ori[ob][kf_bead]["right"][i][0] +
-											d_frame, kf_bead + 1
-											)
-						angle = Vector([1, 0]).angle(
-											Vector(kf.handle_right) -
-											Vector(kf.co), 0
-											)
-						if angle != 0:
-							angles.append(angle)
-					break
-
-		# update frame of active_timebead
-		perc = (sum(angles) / len(angles)) / (math.pi / 2)
-		perc = max(0.4, min(1, perc * 5))
-		if side == "left":
-			bead_frame = kf_bead - perc * ((kf_bead - kf_prev - 2) / 2)
-		else:
-			bead_frame = kf_bead + perc * ((kf_next - kf_bead - 2) / 2)
-		active_timebead = [ob, bead_frame, frame_ori]
-
 	return
 
 
@@ -1672,28 +1530,6 @@ def cancel_drag(self, context):
 				
 		if self.active_keyframe:
 			self.active_keyframe = (ob, extra, extra, ori_chans)
-
-	# revert position of handles on the timeline
-	elif mt.mode == 'speed' and self.active_timebead:
-		ob, frame, frame_ori, chans = self.active_timebead
-		curves = get_curves(ob)
-		keyframes = [kf for kf in keyframes_ori[objectname]]
-		keyframes.append(frame_ori)
-		keyframes.sort()
-		frame_index = keyframes.index(frame_ori)
-		kf_prev = keyframes[frame_index - 1]
-		kf_next = keyframes[frame_index + 1]
-		if (kf_next - frame_ori) < (frame_ori - kf_prev):
-			kf_frame = kf_next
-		else:
-			kf_frame = kf_prev
-		for i, curve in enumerate(curves):
-			for kf in curve.keyframe_points:
-				if kf.co[0] == kf_frame:
-					kf.handle_left[0] = handles_ori[objectname][kf_frame]["left"][i][0]
-					kf.handle_right[0] = handles_ori[objectname][kf_frame]["right"][i][0]
-					break
-		self.active_timebead = [objectname, frame_ori, frame_ori, active_ob, child]
 
 	del self.frame_map
 	self.frame_map = FloatMap()
@@ -2548,8 +2384,7 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			update=internal_update
 			)
 	mode: EnumProperty(name="Mode", items=(
-			("values", "Values", "Alter values of the keyframes"),
-			("speed", "Speed", "Change speed between keyframes"),
+			("values", "Values", "Alter values of the keyframes and coordinates of their handles"),
 			("timing", "Timing", "Change position of keyframes on timeline")),
 			description="Enable editing of certain properties in the 3d-view",
 			default='values',
@@ -2888,7 +2723,7 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			subtype='COLOR'
 			)
 	timebead_color: FloatVectorProperty(name="Timebead color",
-			description="Color that timebeads (in speed/timing mode) will be colored in",
+			description="Color that timebeads (dots in timing mode) will be colored in",
 			default=(0.0, 1.0, 0.0, 1.0),
 			min=0.0, soft_max=1.0,
 			size=4,

@@ -2069,7 +2069,7 @@ class MotionTrailOperator(bpy.types.Operator):
 			self.displayed = []
 			self.paths = {}
 			self.keyframes = {}
-			self.handles = [{}, {}, {}]
+			self.handles = {}
 			self.timebeads = {}
 			self.spines = {} 
 			self.constraint_axes = [False, False, False]

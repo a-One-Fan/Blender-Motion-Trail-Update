@@ -901,6 +901,7 @@ void main()
 }
 """
 
+# TODO: Should this code be further optimized?
 point_frag_shader = """
 in vec2 pos_frag;
 in vec4 color_frag;

@@ -986,8 +986,6 @@ def draw_callback(self, context):
 		colors_cooked[c] = final
 
 
-	# draw motion path
-	width = mt.path_width
 	#uniform_line_shader = gpu.shader.from_builtin('3D_POLYLINE_UNIFORM_COLOR')
 	colored_line_shader: gpu.types.GPUShader = gpu.shader.from_builtin('3D_POLYLINE_SMOOTH_COLOR')
 	#colored_points_shader = gpu.shader.from_builtin('2D_FLAT_COLOR')
@@ -1002,57 +1000,46 @@ def draw_callback(self, context):
 
 	poss = []
 	cols = []
+	cols_outline = []
 	
 	if mt.path_style == 'simple':
-		#uniform_line_shader.bind()
-		#uniform_line_shader.uniform_float("color", mt.simple_color)
-		#uniform_line_shader.uniform_float("lineWidth", width)
 		
-		colored_line_shader.bind()
-		colored_line_shader.uniform_float("lineWidth", width)
 		simple_color = mt.simple_color
-		for ob, path in self.paths.items():
-			for x, y, color, frame in path:
-				if frame < limit_min or frame > limit_max:
-					continue
-				poss.append((x, y, 0))
-				cols.append(simple_color)
-			#batch = batch_for_shader(uniform_line_shader, 'LINE_STRIP', {"pos": poss})
-			if(not (poss == []) and not (cols == [])):
-				batch = batch_for_shader(colored_line_shader, 'LINE_STRIP', {"pos": poss, "color": cols})
-				batch.draw(colored_line_shader)
-				poss.clear()
-				cols.clear()
-	else:
-		colored_line_shader.bind()
-		colored_line_shader.uniform_float("lineWidth", width)
 		for ob, path in self.paths.items():
 			for i, [x, y, color, frame] in enumerate(path):
 				if frame < limit_min or frame > limit_max:
 					continue
-				if i != 0:
-					prev_path = path[i - 1]
-					halfway = [(x + prev_path[0]) / 2, (y + prev_path[1]) / 2]
+				if i != len(path) - 1 and i != 0:
+					poss.append((x, y, 0))
+					cols.append(simple_color)
+				poss.append((x, y, 0))
+				cols.append(simple_color)
 
-					# This will "turn off" color interpolation, so to speak.
-					#cols.append(color)
-					#poss.append((halfway[0], halfway[1], 0.0))
-					cols.append(color)
+	else:
+		for ob, path in self.paths.items():
+			for i, [x, y, color, frame] in enumerate(path):
+				if frame < limit_min or frame > limit_max:
+					continue
+				if i != len(path) - 1 and i != 0:
 					poss.append((x, y, 0.0))
-					
-				if i != len(path) - 1:
-					next_path = path[i + 1]
-					halfway = [(x + next_path[0]) / 2, (y + next_path[1]) / 2]
+					cols.append(color)
+				poss.append((x, y, 0.0))
+				cols.append(color)
 
-					cols.append(color)
-					poss.append((x, y, 0.0))
-					#cols.append(color)
-					#poss.append((halfway[0], halfway[1], 0.0))
-			if(not (poss == []) and not (cols == [])):
-				batch = batch_for_shader(colored_line_shader, 'LINE_STRIP', {"pos": poss, "color": cols})
-				batch.draw(colored_line_shader)
-				poss.clear()
-				cols.clear()
+
+	if(not (poss == []) and not (cols == [])):
+		colored_line_shader.bind()
+		if mt.path_outline_width > 0.0:
+			cols_black = [(0.0, 0.0, 0.0, 1.0) for i in range(len(cols))]
+			batch_outline = batch_for_shader(colored_line_shader, 'LINES', {"pos": poss, "color": cols_black})
+			colored_line_shader.uniform_float("lineWidth", mt.path_width + mt.path_outline_width)
+			batch_outline.draw(colored_line_shader)
+		
+		batch = batch_for_shader(colored_line_shader, 'LINES', {"pos": poss, "color": cols})
+		colored_line_shader.uniform_float("lineWidth", mt.path_width)
+		batch.draw(colored_line_shader)
+		poss.clear()
+		cols.clear()
 
 	# Draw rotation spines
 	if mt.show_spines:
@@ -2539,16 +2526,15 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			)
 	path_width: FloatProperty(name="Path width",
 			description="Width in pixels",
-			default=1.0,
+			default=2.0,
 			min=0.0,
-			soft_min=3.0,
-			soft_max=6.0
+			soft_max=8.0
 			)
 	path_outline_width: FloatProperty(name="Path outline width",
 			description="Width of the outline around the path, 0 for none",
-			default=2.0,
+			default=0.0,
 			min=0.0,
-			soft_max=4.0
+			soft_max=8.0
 			)
 	timebeads: IntProperty(name="Time beads",
 			description="Number of time beads to display per segment",

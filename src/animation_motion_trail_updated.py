@@ -928,7 +928,7 @@ void main()
 	float radius_corrected = radius_frag * (maxr / 500.0);
 	float dist = length(gl_FragCoord.xy - pos_frag);
 	float dist2 = maprange(0.0, radius_corrected, 1.0, 0.0, dist);
-	const float border_thickness = -2.0;
+	const float border_thickness = -1.3 * (maxr / 500.0);
 	float dist3 = maprange(border_thickness, radius_corrected + border_thickness, 1.0, 0.0, dist);
 	float dist_border = maprangeclamp(0.0, 0.1, 0.0, 1.0, dist3);
 	vec4 border = vec4(0.0, 0.0, 0.0, color_frag.a);

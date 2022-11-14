@@ -889,11 +889,8 @@ out vec2 pos_frag;
 in vec4 color;
 out vec4 color_frag;
 
-
 void main()
 {
-	resolution_frag = resolution;
-	radius_frag = radius;
 	color_frag = color;
 	pos_frag = pos;
 	gl_Position = ModelViewProjectionMatrix * vec4(pos, 0.0, 1.0);
@@ -905,8 +902,11 @@ void main()
 point_frag_shader = """
 in vec2 pos_frag;
 in vec4 color_frag;
-in vec2 resolution_frag;
-in float radius_frag;
+uniform vec2 resolution;
+uniform float radius;
+uniform float outline_radius;
+uniform float outline_blur;
+//uniform vec3 outline_color;
 out vec4 FragColor;
 
 float maprange(float oldmin, float oldmax, float newmin, float newmax, float val)
@@ -923,19 +923,16 @@ float maprangeclamp(float oldmin, float oldmax, float newmin, float newmax, floa
 
 void main()
 {
-	//float minr = min(resolution_frag.x, resolution_frag.y);
-	float maxr = max(resolution_frag.x, resolution_frag.y);
-	float radius_corrected = radius_frag * (maxr / 500.0);
+	float maxr = max(resolution.x, resolution.y); // Resizing like this is consistent with how the view behaves when areas are resized
+	float radius_corrected = radius * (maxr / 500.0);
 	float dist = length(gl_FragCoord.xy - pos_frag);
-	float dist2 = maprange(0.0, radius_corrected, 1.0, 0.0, dist);
-	const float border_thickness = -1.3 * (maxr / 500.0);
-	float dist3 = maprange(border_thickness, radius_corrected + border_thickness, 1.0, 0.0, dist);
-	float dist_border = maprangeclamp(0.0, 0.1, 0.0, 1.0, dist3);
-	vec4 border = vec4(0.0, 0.0, 0.0, color_frag.a);
-	float dist_outer = maprangeclamp(0.0, 0.1, 0.0, 1.0, dist2);
-
-    FragColor = mix(border, color_frag, dist_border);
-	FragColor = vec4(FragColor.rgb, mix(0.0, FragColor.a, dist_outer));
+	
+	float color_fac = maprangeclamp(radius, radius+outline_blur, 0.0, 1.0, dist);
+	float outline_fac = maprangeclamp(radius+outline_radius, radius+outline_radius+outline_blur, 0.0, 1.0, dist);
+	
+	vec4 outline_color = vec4(0.0, 0.0, 0.0, 1.0);
+    FragColor = mix(color_frag, outline_color, color_fac);
+	FragColor = vec4(FragColor.rgb, mix(FragColor.a, 0.0, outline_fac));
 }
 """
 
@@ -994,6 +991,9 @@ def draw_callback(self, context):
 	#colored_points_shader = gpu.shader.from_builtin('2D_FLAT_COLOR')
 	colored_points_shader.uniform_float("ModelViewProjectionMatrix", bpy.context.region_data.perspective_matrix)
 	colored_points_shader.uniform_float("resolution", Vector((bpy.context.area.width, bpy.context.area.height)))
+	colored_points_shader.uniform_float("outline_radius", mt.point_outline_size)
+	colored_points_shader.uniform_float("outline_blur", mt.point_outline_blur)
+	#colored_points_shader.uniform_vector_float("outline_color", mt.point_outline_color)
 	gpu.state.point_size_set(64.0)
 	#gpu.state.depth_mask_set(False)
 	gpu.state.blend_set("ALPHA")
@@ -1079,13 +1079,16 @@ def draw_callback(self, context):
 	if self.highlighted_coord:
 		colored_points_shader.uniform_float("radius", mt.highlight_size)
 		colored_points_shader.bind()
-
+		if not mt.highlight_do_outline:
+			colored_points_shader.uniform_float("outline_radius", 0.0)
 		point_poss = [self.highlighted_coord]
 		point_cols = [mt.highlight_color]
 		batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
 		batch.draw(colored_points_shader)
 		point_poss.clear()
 		point_cols.clear()
+		if not mt.highlight_do_outline:
+			colored_points_shader.uniform_float("outline_radius", mt.point_outline_size)
 
 	# draw frames
 	if mt.frame_display:
@@ -2389,6 +2392,7 @@ class MotionTrailPanel(bpy.types.Panel):
 		if mt.generic_colors_display:
 			col.prop(mt, "keyframe_size")
 			col.prop(mt, "point_outline_size")
+			col.prop(mt, "point_outline_blur")
 			handle_color_row = col.row()
 			handle_color_row.prop(mt, "point_color_loc", text="Loc")
 			handle_color_row.prop(mt, "point_color_rot", text="Rot")
@@ -2557,7 +2561,7 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			update=internal_update
 			)
 	handle_size: FloatProperty(name="Handle size",
-			description="Size of the point of a handle",
+			description="Radius of the point of a handle in pixels",
 			default=4.0,
 			step=0.5
 			)
@@ -2570,6 +2574,24 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			("wloc", "Weighted Location", "0.25*time + 0.75*location"),
 			("len", "Directional length", "Use the length of the handle, positive for right and negative for left")),
 			default='wtime'
+			)
+	keyframe_size: FloatProperty(name="Keyframe size",
+			description="Radius in pixels for keyframe points",
+			default=9.0,
+			min=0.0,
+			step=0.5
+			)
+	point_outline_size: FloatProperty(name="Point outline size",
+			description="Radius in pixels for point outlines, extending past the filled color",
+			default=2.5,
+			min=0.0,
+			step=0.5
+			)
+	point_outline_blur: FloatProperty(name="Point blur",
+			description="Amount of pixels that the outlines and point colors will gradually fade for",
+			default=1.0,
+			min=0.01, # 0.0 breaks range mapping in the shader (min=max) and causes it to flip its output, making the points invisible
+			step=0.1
 			)
 
 	do_location: BoolProperty(name="Do Location",
@@ -2597,6 +2619,7 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			default=False,
 			)
 
+	#Key stuff
 	controls_display: BoolProperty(name="Control options",
 			description="Display options related to controls",
 			default=True
@@ -2623,7 +2646,6 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			default = 3.0
 			)
 			
-	#Key stuff
 	select_key: EnumProperty(name="Selection key",
 			description="Pressing this key will only either select something if nothing is selected, or override an existing selection",
 			items=(
@@ -2802,18 +2824,6 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			subtype='COLOR'
 			)
 
-	keyframe_size: FloatProperty(name="Keyframe size",
-			description="Size for keyframe points",
-			default=6.0,
-			min=0.0,
-			step=0.5
-			)
-	point_outline_size: FloatProperty(name="Point outline size",
-			description="Size for point outlines",
-			default=1.3,
-			min=0.0,
-			step=0.5
-			)
 	point_color_loc: FloatVectorProperty(name="Location point color",
 			description="Color that unselected location handles and keyframes will be colored in",
 			default=(1.0, 0.1, 0.1, 1.0),
@@ -3030,7 +3040,7 @@ configurable_props = ["use_depsgraph", "allow_negative_scale", "allow_negative_h
 "simple_color", "speed_color_min", "speed_color_max", "accel_color_neg", "accel_color_static", "accel_color_pos",
 "keyframe_color", "frame_color", "selection_color", "selection_color_dark", 
 "highlight_color", "highlight_size", "highlight_do_outline",
-["point_color_loc", "point_color_rot", "point_color_scl"], "keyframe_size", "point_outline_size",
+["point_color_loc", "point_color_rot", "point_color_scl"], "keyframe_size", "point_outline_size", "point_outline_blur",
 "handle_color_fac", "handle_line_color", "handle_size",
 "timebead_color", 
 ["sensitivity_location", "sensitivity_rotation", "sensitivity_scale"], "sensitivity_shift", "sensitivity_alt",

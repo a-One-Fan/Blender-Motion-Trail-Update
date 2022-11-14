@@ -1077,11 +1077,13 @@ def draw_callback(self, context):
 				cols.clear()
 
 	if self.highlighted_coord:
-		colored_points_shader.uniform_float("radius", mt.highlight_size)
+		radii = {"keyframe": mt.keyframe_size, "timebead": mt.timebead_size, "frame": mt.frame_size, "handle_left": mt.handle_size, "handle_right": mt.handle_size}
+		colored_points_shader.uniform_float("radius", radii[self.highlighted_coord[1]] + mt.point_outline_size + mt.highlight_size)
 		colored_points_shader.bind()
 		if not mt.highlight_do_outline:
 			colored_points_shader.uniform_float("outline_radius", 0.0)
-		point_poss = [self.highlighted_coord]
+
+		point_poss = [self.highlighted_coord[0]]
 		point_cols = [mt.highlight_color]
 		batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
 		batch.draw(colored_points_shader)
@@ -2045,7 +2047,7 @@ class MotionTrailOperator(bpy.types.Operator):
 							found = True
 
 							if event.type == 'MOUSEMOVE':
-								self.highlighted_coord = coord
+								self.highlighted_coord = (coord, type)
 
 							if event.type == mt.select_key and event.value == 'PRESS':
 								self.active_keyframe = False
@@ -2947,8 +2949,8 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			subtype='COLOR'
 			)
 	highlight_size: FloatProperty(name="Highlight size",
-			description="Size of the highlight circle",
-			default=10.0,
+			description="Size in pixels that the highlight circle extends beyond the highlighted item",
+			default=5.0,
 			min=0.0,
 			step=1.0
 			)

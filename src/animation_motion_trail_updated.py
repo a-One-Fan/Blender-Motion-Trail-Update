@@ -2375,18 +2375,27 @@ class MotionTrailPanel(bpy.types.Panel):
 		else:
 			col.row().prop(mt, "timebead_color")
 
-		box = self.layout.box()
-		col = box.column(align=True)
-		col.row().label(text="Handle/keyframe colors:")
-		handle_color_row = col.row()
-		handle_color_row.prop(mt, "handle_color_loc", text="Loc")
-		handle_color_row.prop(mt, "handle_color_rot", text="Rot")
-		handle_color_row.prop(mt, "handle_color_scl", text="Scale")
 
-		handle_fac_row = col.row()
-		handle_fac_row.prop(mt, "handle_color_fac")
-		col.row().prop(mt, "selection_color")
-		col.row().prop(mt, "highlight_color")
+		box = self.layout.box()
+		col = box.column()
+		row = col.row()
+		if mt.generic_colors_display: # TODO: make a function for this?
+			row.prop(mt, "generic_colors_display", icon="DOWNARROW_HLT", text="", emboss=False)
+		else:
+			row.prop(mt, "generic_colors_display", icon="RIGHTARROW", text="", emboss=False)
+
+		row.label(text="Generic color options")
+
+		if mt.generic_colors_display:
+			handle_color_row = col.row()
+			handle_color_row.prop(mt, "handle_color_loc", text="Loc")
+			handle_color_row.prop(mt, "handle_color_rot", text="Rot")
+			handle_color_row.prop(mt, "handle_color_scl", text="Scale")
+
+			handle_fac_row = col.row()
+			handle_fac_row.prop(mt, "handle_color_fac")
+			col.row().prop(mt, "selection_color")
+			col.row().prop(mt, "highlight_color")
 
 		box = self.layout.box()
 		col = box.column()
@@ -2717,6 +2726,11 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			description="Whether the spines will scale their length with the object's scale",
 			default=False,
 			update=internal_update
+			)
+
+	generic_colors_display: BoolProperty(name="Generic Colors Display",
+			description="Whether to display the generic colors dropdown menu or not",
+			default=True
 			)
 
 	#Colors

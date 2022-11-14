@@ -2364,11 +2364,12 @@ class MotionTrailPanel(bpy.types.Panel):
 				row.prop(mt, "handle_type")
 				col.prop(mt, "handle_direction")
 				sizes_row = col.row(align=True)
-				sizes_row.prop(mt, "handle_length")
-				sizes_row.prop(mt, "handle_size")
+				sizes_row.prop(mt, "handle_length", text="Length")
+				sizes_row.prop(mt, "handle_size", text="Size")
 				
-				col.row().prop(mt, "handle_line_color")
-				col.row().prop(mt, "selection_color_dark")
+				handle_cols_row = col.row(align=True)
+				handle_cols_row.prop(mt, "handle_line_color", text="Line")
+				handle_cols_row.prop(mt, "selection_color_dark", text="Selected")
 		else:
 			col.row().prop(mt, "timebead_color")
 

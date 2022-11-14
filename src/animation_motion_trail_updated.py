@@ -312,15 +312,15 @@ def screen_to_worldxy(context, x, y):
 def screen_to_world(context, vec):
 	return screen_to_worldxy(context, vec.x, vec.y)
 
-# turn 3d world coordinates vector into screen coordinate integers (x,y)
+# turn 3d world coordinates vector into screen coordinate floats (x,y)
 def world_to_screen(context, vector):
 	prj = context.region_data.perspective_matrix @ \
 		Vector((vector[0], vector[1], vector[2], 1.0))
 	width_half = context.region.width / 2.0
 	height_half = context.region.height / 2.0
 
-	x = int(width_half + width_half * (prj.x / prj.w))
-	y = int(height_half + height_half * (prj.y / prj.w))
+	x = width_half + width_half * (prj.x / prj.w)
+	y = height_half + height_half * (prj.y / prj.w)
 
 	# correction for corner cases in perspective mode
 	if prj.w < 0:
@@ -876,6 +876,70 @@ def calc_callback_dg(self, context):
 def calc_callback_ce(self, context):
 	return calc_callback(self, context, get_inverse_parents, get_matrix_any_custom_eval)
 
+# TODO: Skip world_to_screen for non-clickable coords?
+point_vertex_shader = """
+uniform mat4 ModelViewProjectionMatrix;
+uniform vec2 resolution;
+uniform float radius;
+out vec2 resolution_frag;
+out float radius_frag;
+
+in vec2 pos;
+out vec2 pos_frag;
+in vec4 color;
+out vec4 color_frag;
+
+
+void main()
+{
+	resolution_frag = resolution;
+	radius_frag = radius;
+	color_frag = color;
+	pos_frag = pos;
+	gl_Position = ModelViewProjectionMatrix * vec4(pos, 0.0, 1.0);
+	//gl_Position = vec4(pos, 0.0, 0.0);
+}
+"""
+
+point_frag_shader = """
+in vec2 pos_frag;
+in vec4 color_frag;
+in vec2 resolution_frag;
+in float radius_frag;
+out vec4 FragColor;
+
+float maprange(float oldmin, float oldmax, float newmin, float newmax, float val)
+{
+	float fac = (val - oldmin) / (oldmax - oldmin);
+	return (newmin * (1.0 - fac) + newmax * fac);
+}
+
+float maprangeclamp(float oldmin, float oldmax, float newmin, float newmax, float val)
+{
+	val = clamp(val, oldmin, oldmax);
+	return maprange(oldmin, oldmax, newmin, newmax, val);
+}
+
+void main()
+{
+	//float minr = min(resolution_frag.x, resolution_frag.y);
+	float maxr = max(resolution_frag.x, resolution_frag.y);
+	float radius_corrected = radius_frag * (maxr / 500.0);
+	float dist = length(gl_FragCoord.xy - pos_frag);
+	float dist2 = maprange(0.0, radius_corrected, 1.0, 0.0, dist);
+	const float border_thickness = -2.0;
+	float dist3 = maprange(border_thickness, radius_corrected + border_thickness, 1.0, 0.0, dist);
+	float dist_border = maprangeclamp(0.0, 0.1, 0.0, 1.0, dist3);
+	vec4 border = vec4(0.0, 0.0, 0.0, color_frag.a);
+	float dist_outer = maprangeclamp(0.0, 0.1, 0.0, 1.0, dist2);
+
+    FragColor = mix(border, color_frag, dist_border);
+	FragColor = vec4(FragColor.rgb, mix(0.0, FragColor.a, dist_outer));
+}
+"""
+
+colored_points_shader = gpu.types.GPUShader(point_vertex_shader, point_frag_shader)
+
 # TODO: Thickness multiplier that affects everything
 # TODO: Circle point shader
 # draw in 3d-view
@@ -926,8 +990,13 @@ def draw_callback(self, context):
 	width = mt.path_width
 	#uniform_line_shader = gpu.shader.from_builtin('3D_POLYLINE_UNIFORM_COLOR')
 	colored_line_shader = gpu.shader.from_builtin('3D_POLYLINE_SMOOTH_COLOR')
-	colored_points_shader = gpu.shader.from_builtin('2D_FLAT_COLOR')
-	
+	#colored_points_shader = gpu.shader.from_builtin('2D_FLAT_COLOR')
+	colored_points_shader.uniform_float("ModelViewProjectionMatrix", bpy.context.region_data.perspective_matrix)
+	colored_points_shader.uniform_float("resolution", Vector((bpy.context.area.width, bpy.context.area.height)))
+	gpu.state.point_size_set(64.0)
+	#gpu.state.depth_mask_set(False)
+	gpu.state.blend_set("ALPHA")
+
 	poss = []
 	cols = []
 	
@@ -1006,9 +1075,9 @@ def draw_callback(self, context):
 				cols.clear()
 
 	if self.highlighted_coord:
+		colored_points_shader.uniform_float("radius", 10.0)
 		colored_points_shader.bind()
 
-		gpu.state.point_size_set(10.0)
 		point_poss = [self.highlighted_coord]
 		point_cols = [mt.highlight_color]
 		batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
@@ -1034,14 +1103,14 @@ def draw_callback(self, context):
 					point_cols.append(mt.frame_color)
 			if(not (point_poss == []) and not (point_cols == [])):
 				batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
-				gpu.state.point_size_set(3.0)
+				colored_points_shader.uniform_float("radius", 3.0)
 				batch.draw(colored_points_shader)
 				point_poss.clear()
 				point_cols.clear()
 
 	# time beads are shown in timing mode
 	if mt.mode == 'timing':
-		gpu.state.point_size_set(4.0)
+		colored_points_shader.uniform_float("radius", 4.0)
 		point_poss = []
 		point_cols = []
 		for ob, values in self.timebeads.items():
@@ -1058,7 +1127,7 @@ def draw_callback(self, context):
 					point_poss.append((coords[0], coords[1]))
 			if(not (point_poss == []) and not (point_cols == [])):
 				batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
-				gpu.state.point_size_set(3.0)
+				colored_points_shader.uniform_float("radius", 3.0)
 				batch.draw(colored_points_shader)
 				point_poss.clear()
 				point_cols.clear()
@@ -1100,7 +1169,7 @@ def draw_callback(self, context):
 
 		# draw handles
 		colored_points_shader.bind()
-		gpu.state.point_size_set(4.0)
+		colored_points_shader.uniform_float("radius", 4.0)
 		point_poss = []
 		point_cols = []
 		for chan in range(3):
@@ -1126,7 +1195,7 @@ def draw_callback(self, context):
 
 	# draw keyframes
 	colored_points_shader.bind()
-	gpu.state.point_size_set(6.0)
+	colored_points_shader.uniform_float("radius", 6.0)
 	point_poss = []
 	point_cols = []
 	for ob, values in self.keyframes.items():

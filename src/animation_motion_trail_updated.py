@@ -2046,7 +2046,7 @@ class MotionTrailOperator(bpy.types.Operator):
 							continue
 						if (coord - clicked).length <= mt.select_threshold:
 							found = True
-							self.highlighted_coord = (coord, type) # TODO: For some reason, clicking selects a different thing???
+							self.highlighted_coord = (coord, type)
 
 							if event.type == mt.select_key and event.value == 'PRESS':
 								self.active_keyframe = False
@@ -2066,7 +2066,7 @@ class MotionTrailOperator(bpy.types.Operator):
 									self.active_timebead = [ob, frame, frame, channels]
 								elif type == "frame":
 									self.active_frame = [ob, frame, frame, channels]
-								break
+							break
 				
 				if not found:
 					self.highlighted_coord = False

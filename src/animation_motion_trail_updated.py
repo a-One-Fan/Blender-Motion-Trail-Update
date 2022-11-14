@@ -2445,15 +2445,6 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 	handle_type_enabled: BoolProperty(default=False)
 
 	# visible in user interface
-	calculate: EnumProperty(name="Calculate", items=(
-			("fast", "Fast", "Recommended setting, change if the "
-							 "motion path is positioned incorrectly"),
-			("full", "Full", "Takes parenting and modifiers into account, "
-							 "but can be very slow on complicated scenes")),
-			description="Calculation method for determining locations",
-			default='full',
-			update=internal_update
-			)
 	frame_display: BoolProperty(name="Frames",
 			description="Display individual frames as manipulateable dots.\nClick and drag on one to make a new keyframe",
 			default=False,

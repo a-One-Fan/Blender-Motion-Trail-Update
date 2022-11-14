@@ -1171,7 +1171,7 @@ def draw_callback(self, context):
 
 		# draw handles
 		colored_points_shader.bind()
-		colored_points_shader.uniform_float("radius", 4.0)
+		colored_points_shader.uniform_float("radius", mt.handle_size)
 		point_poss = []
 		point_cols = []
 		for chan in range(3):
@@ -2363,7 +2363,9 @@ class MotionTrailPanel(bpy.types.Panel):
 				row.enabled = mt.handle_type_enabled
 				row.prop(mt, "handle_type")
 				col.prop(mt, "handle_direction")
-				col.prop(mt, "handle_length")
+				sizes_row = col.row(align=True)
+				sizes_row.prop(mt, "handle_length")
+				sizes_row.prop(mt, "handle_size")
 				
 				col.row().prop(mt, "handle_line_color")
 				col.row().prop(mt, "selection_color_dark")
@@ -2540,6 +2542,11 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			default = 1.0,
 			step = 0.15,
 			update=internal_update
+			)
+	handle_size: FloatProperty(name="Handle size",
+			description="Size of the point of a handle",
+			default=4.0,
+			step=0.5
 			)
 	handle_direction: EnumProperty(name="Handle direction",
 			description="Affect location, euler rotation and scale only, do NOT affect quaternion rotation",
@@ -2984,7 +2991,9 @@ configurable_props = ["use_depsgraph", "allow_negative_scale", "allow_negative_h
 ["sensitivity_location", "sensitivity_rotation", "sensitivity_scale"], "sensitivity_shift", "sensitivity_alt",
 "text_color", "selected_text_color", "keyframe_text_size", "keyframe_text_offset_x", "keyframe_text_offset_y",
 "path_width", "path_step", "path_before", "path_after",
-"keyframe_numbers", "frame_display", "handle_display", "handle_length", "handle_direction", "show_spines", "spine_length", "spine_step", "spine_offset",
+"keyframe_numbers", "frame_display", 
+"handle_display", "handle_length", "handle_size", "handle_direction", 
+"show_spines", "spine_length", "spine_step", "spine_offset",
 ["pXspines", "pYspines", "pZspines"], ["nXspines", "nYspines", "nZspines"], ["spine_x_color", "spine_y_color", "spine_z_color"]]
 			
 class MotionTrailPreferences(bpy.types.AddonPreferences):

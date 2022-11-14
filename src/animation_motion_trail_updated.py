@@ -614,7 +614,9 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 		self.active_handle = False
 		self.active_timebead = False
 		self.active_frame = False
-		self.highlighted_coord = False
+
+	if self.perspective != context.region_data.perspective_matrix:
+		self.highlighted_coord = False # TODO: Highlighted coord persists after its highlighted selectable vanish while playing animation... think of fix?
 	
 	if selection_change or not self.lock or mt.force_update:
 		self.cache = MatrixCache(matrix_getter)

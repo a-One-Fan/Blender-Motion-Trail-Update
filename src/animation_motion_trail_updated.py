@@ -972,7 +972,7 @@ def draw_callback(self, context):
 
 	colors_cooked = {}
 	chans = [(True, False, False), (False, True, False), (False, False, True), (True, True, False), (False, True, True), (True, False, True), (True, True, True)]
-	colors_base = [tuple(mt.handle_color_loc), tuple(mt.handle_color_rot), tuple(mt.handle_color_scl)]
+	colors_base = [tuple(mt.point_color_loc), tuple(mt.point_color_rot), tuple(mt.point_color_scl)]
 	zeroadd = [0.0, 0.0, 0.0, 0.0]
 	zeromul = [1.0, 1.0, 1.0, 1.0]
 	for c in chans:
@@ -1077,7 +1077,7 @@ def draw_callback(self, context):
 				cols.clear()
 
 	if self.highlighted_coord:
-		colored_points_shader.uniform_float("radius", 10.0)
+		colored_points_shader.uniform_float("radius", mt.highlight_size)
 		colored_points_shader.bind()
 
 		point_poss = [self.highlighted_coord]
@@ -1197,7 +1197,7 @@ def draw_callback(self, context):
 
 	# draw keyframes
 	colored_points_shader.bind()
-	colored_points_shader.uniform_float("radius", 6.0)
+	colored_points_shader.uniform_float("radius", mt.keyframe_size)
 	point_poss = []
 	point_cols = []
 	for ob, values in self.keyframes.items():
@@ -2387,15 +2387,19 @@ class MotionTrailPanel(bpy.types.Panel):
 		row.label(text="Generic color options")
 
 		if mt.generic_colors_display:
+			col.prop(mt, "keyframe_size")
+			col.prop(mt, "point_outline_size")
 			handle_color_row = col.row()
-			handle_color_row.prop(mt, "handle_color_loc", text="Loc")
-			handle_color_row.prop(mt, "handle_color_rot", text="Rot")
-			handle_color_row.prop(mt, "handle_color_scl", text="Scale")
+			handle_color_row.prop(mt, "point_color_loc", text="Loc")
+			handle_color_row.prop(mt, "point_color_rot", text="Rot")
+			handle_color_row.prop(mt, "point_color_scl", text="Scale")
 
 			handle_fac_row = col.row()
 			handle_fac_row.prop(mt, "handle_color_fac")
 			col.row().prop(mt, "selection_color")
 			col.row().prop(mt, "highlight_color")
+			col.row().prop(mt, "highlight_size")
+			col.row().prop(mt, "highlight_do_outline")
 
 		box = self.layout.box()
 		col = box.column()
@@ -2798,21 +2802,33 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			subtype='COLOR'
 			)
 
-	handle_color_loc: FloatVectorProperty(name="Location handle color",
+	keyframe_size: FloatProperty(name="Keyframe size",
+			description="Size for keyframe points",
+			default=6.0,
+			min=0.0,
+			step=0.5
+			)
+	point_outline_size: FloatProperty(name="Point outline size",
+			description="Size for point outlines",
+			default=1.3,
+			min=0.0,
+			step=0.5
+			)
+	point_color_loc: FloatVectorProperty(name="Location point color",
 			description="Color that unselected location handles and keyframes will be colored in",
 			default=(1.0, 0.1, 0.1, 1.0),
 			min=0.0, soft_max=1.0,
 			size=4,
 			subtype='COLOR'
 			)
-	handle_color_rot: FloatVectorProperty(name="Rotation handle color",
+	point_color_rot: FloatVectorProperty(name="Rotation point color",
 			description="Color that unselected rotation handles and keyframes will be colored in",
 			default=(0.1, 1.0, 0.1, 1.0),
 			min=0.0, soft_max=1.0,
 			size=4,
 			subtype='COLOR'
 			)
-	handle_color_scl: FloatVectorProperty(name="Scale handle color",
+	point_color_scl: FloatVectorProperty(name="Scale point color",
 			description="Color that unselected scale handles and keyframes will be colored in",
 			default=(0.1, 0.1, 1.0, 1.0),
 			min=0.0, soft_max=1.0,
@@ -2905,6 +2921,18 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			min=0.0, soft_max=1.0,
 			size=4,
 			subtype='COLOR'
+			)
+	highlight_size: FloatProperty(name="Highlight size",
+			description="Size of the highlight circle",
+			default=12.0,
+			min=0.0,
+			step=1.0
+			)
+
+
+	highlight_do_outline: BoolProperty(name="Highlight outline",
+			description="Whether to draw outlines for the highlight circle",
+			default=False
 			)
 
 	use_depsgraph: BoolProperty(name="Use depsgraph",
@@ -3001,7 +3029,7 @@ configurable_props = ["use_depsgraph", "allow_negative_scale", "allow_negative_h
 "select_key", "select_threshold", "deselect_nohit_key", "deselect_always_key", "deselect_passthrough", "mode", "path_style", 
 "simple_color", "speed_color_min", "speed_color_max", "accel_color_neg", "accel_color_static", "accel_color_pos",
 "keyframe_color", "frame_color", "selection_color", "selection_color_dark", "highlight_color", 
-["handle_color_loc", "handle_color_rot", "handle_color_scl"], "handle_color_fac", "handle_line_color", "timebead_color", 
+["point_color_loc", "point_color_rot", "point_color_scl"], "handle_color_fac", "handle_line_color", "timebead_color", 
 ["sensitivity_location", "sensitivity_rotation", "sensitivity_scale"], "sensitivity_shift", "sensitivity_alt",
 "text_color", "selected_text_color", "keyframe_text_size", "keyframe_text_offset_x", "keyframe_text_offset_y",
 "path_width", "path_step", "path_before", "path_after",

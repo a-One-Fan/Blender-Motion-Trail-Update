@@ -2304,7 +2304,9 @@ class MotionTrailPanel(bpy.types.Panel):
 				col.row().prop(mt, "accel_color_pos")
 				
 			grouped = col.column(align=True)
-			grouped.prop(mt, "path_width", text="Width")
+			width_row = grouped.row(align=True)
+			width_row.prop(mt, "path_width", text="Width")
+			width_row.prop(mt, "path_outline_width", text="Outline")
 			step_row = grouped.row(align=True)
 			step_row.prop(mt, "path_step")
 			step_row.prop(mt, "path_step_drag")
@@ -2334,8 +2336,8 @@ class MotionTrailPanel(bpy.types.Panel):
 				spineColorStrings = ["spine_x_color", "spine_y_color", "spine_z_color"]
 				
 				spine_do_row = col.row()
-				spine_do_row.prop(mt, "spine_do_rotation")
-				spine_do_row.prop(mt, "spine_do_scale")
+				spine_do_row.prop(mt, "spine_do_rotation", text="Use rotation")
+				spine_do_row.prop(mt, "spine_do_scale", text="Use scale")
 
 				col.row().prop(mt, "spine_step")
 				col.row().prop(mt, "spine_length")
@@ -2362,7 +2364,7 @@ class MotionTrailPanel(bpy.types.Panel):
 				row = col.row()
 				row.enabled = mt.handle_type_enabled
 				row.prop(mt, "handle_type")
-				col.prop(mt, "handle_direction")
+				col.prop(mt, "handle_direction", text="Direction")
 				sizes_row = col.row(align=True)
 				sizes_row.prop(mt, "handle_length", text="Length")
 				sizes_row.prop(mt, "handle_size", text="Size")
@@ -2524,12 +2526,18 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			default='simple',
 			update=internal_update
 			)
-	path_width: IntProperty(name="Path width",
+	path_width: FloatProperty(name="Path width",
 			description="Width in pixels",
-			default=1,
-			min=1,
-			soft_max=5,
-			update=internal_update
+			default=1.0,
+			min=0.0,
+			soft_min=3.0,
+			soft_max=6.0
+			)
+	path_outline_width: FloatProperty(name="Path outline width",
+			description="Width of the outline around the path, 0 for none",
+			default=2.0,
+			min=0.0,
+			soft_max=4.0
 			)
 	timebeads: IntProperty(name="Time beads",
 			description="Number of time beads to display per segment",
@@ -2709,12 +2717,12 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			update=internal_update,
 			)
 
-	spine_do_rotation: BoolProperty(name="Do Rotation",
+	spine_do_rotation: BoolProperty(name="Spines Use Rotation",
 			description="Whether the spines will rotate themselves with the object's rotation",
 			default=True,
 			update=internal_update
 			)
-	spine_do_scale: BoolProperty(name="Do Scale",
+	spine_do_scale: BoolProperty(name="Spines Use Scale",
 			description="Whether the spines will scale their length with the object's scale",
 			default=False,
 			update=internal_update

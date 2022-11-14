@@ -2924,7 +2924,7 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			)
 	highlight_size: FloatProperty(name="Highlight size",
 			description="Size of the highlight circle",
-			default=12.0,
+			default=10.0,
 			min=0.0,
 			step=1.0
 			)
@@ -3028,8 +3028,11 @@ def compare_ver(tup1, tup2):
 configurable_props = ["use_depsgraph", "allow_negative_scale", "allow_negative_handle_scale",
 "select_key", "select_threshold", "deselect_nohit_key", "deselect_always_key", "deselect_passthrough", "mode", "path_style", 
 "simple_color", "speed_color_min", "speed_color_max", "accel_color_neg", "accel_color_static", "accel_color_pos",
-"keyframe_color", "frame_color", "selection_color", "selection_color_dark", "highlight_color", 
-["point_color_loc", "point_color_rot", "point_color_scl"], "handle_color_fac", "handle_line_color", "timebead_color", 
+"keyframe_color", "frame_color", "selection_color", "selection_color_dark", 
+"highlight_color", "highlight_size", "highlight_do_outline",
+["point_color_loc", "point_color_rot", "point_color_scl"], "keyframe_size", "point_outline_size",
+"handle_color_fac", "handle_line_color", "handle_size",
+"timebead_color", 
 ["sensitivity_location", "sensitivity_rotation", "sensitivity_scale"], "sensitivity_shift", "sensitivity_alt",
 "text_color", "selected_text_color", "keyframe_text_size", "keyframe_text_offset_x", "keyframe_text_offset_y",
 "path_width", "path_step", "path_before", "path_after",

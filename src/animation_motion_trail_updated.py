@@ -1033,7 +1033,7 @@ def draw_callback(self, context):
 					halfway = [(x + prev_path[0]) / 2, (y + prev_path[1]) / 2]
 
 					cols.append(color)
-					poss.append((int(halfway[0]), int(halfway[1]), 0.0))
+					poss.append((halfway[0], halfway[1], 0.0))
 					cols.append(color)
 					poss.append((x, y, 0.0))
 					
@@ -1044,7 +1044,7 @@ def draw_callback(self, context):
 					cols.append(color)
 					poss.append((x, y, 0.0))
 					cols.append(color)
-					poss.append((int(halfway[0]), int(halfway[1]), 0.0))
+					poss.append((halfway[0], halfway[1], 0.0))
 			if(not (poss == []) and not (cols == [])):
 				batch = batch_for_shader(colored_line_shader, 'LINE_STRIP', {"pos": poss, "color": cols})
 				batch.draw(colored_line_shader)

@@ -130,6 +130,18 @@ def clamp(_min, _max, val):
 		return _max
 	return val
 
+def lerp(v1, v2, fac):
+	return v1*(1.0-fac) + v2*fac
+
+def chop_line(p1: Vector, p2: Vector, amt1, amt2):
+	totlen = (p2-p1).length
+	if totlen==0:
+		return (p1, p2)
+	fac1 = amt1/totlen
+	fac2 = (totlen-amt2)/totlen
+	return (lerp(p1, p2, fac1), lerp(p1, p2, fac2))
+	
+
 # fake fcurve class, used if no fcurve is found for a path
 class fake_fcurve():
 	def __init__(self, object: Object | PoseBone, index, rotation=False, scale=False):
@@ -931,9 +943,9 @@ void main()
 	
 	float color_fac = maprangeclamp(radius, radius+outline_blur, 0.0, 1.0, dist);
 	float outline_fac = maprangeclamp(radius+outline_radius, radius+outline_radius+outline_blur, 0.0, 1.0, dist);
-	
+	vec4 alpha_corrected = mix(vec4(0.0, 0.0, 0.0, 0.0), color_frag, float(color_frag.a > 0.0));
 	vec4 outline_color = vec4(0.0, 0.0, 0.0, 1.0);
-    FragColor = mix(color_frag, outline_color, color_fac);
+    FragColor = mix(alpha_corrected, outline_color, color_fac);
 	FragColor = vec4(FragColor.rgb, mix(FragColor.a, 0.0, outline_fac));
 }
 """
@@ -1141,22 +1153,26 @@ def draw_callback(self, context):
 					if frame < limit_min or frame > limit_max:
 						continue
 					for side, coords in sides.items():
+						p1 = Vector((self.keyframes[ob][frame][0][0],
+								self.keyframes[ob][frame][0][1], 0.0))
+						p2 = Vector((coords[0], coords[1], 0.0))
+
+						newp1, newp2 = chop_line(p1, p2, 
+							mt.keyframe_size+mt.point_outline_size/2.0, 
+							mt.handle_size+mt.point_outline_size/2.0) #? Performant?
+
+						poss.append(newp1)
+						poss.append(newp2)
+
 						if self.active_handle and \
 						ob == self.active_handle[0] and \
 						side == self.active_handle[2] and \
 						abs(frame - self.active_handle[1]) < 1e-4:
 							cols.append(mt.selection_color_dark)
-							poss.append((self.keyframes[ob][frame][0][0],
-								self.keyframes[ob][frame][0][1], 0.0))
 							cols.append(mt.selection_color_dark)
-							poss.append((coords[0], coords[1], 0.0))
-							
 						else:
 							cols.append(mt.handle_line_color)
-							poss.append((self.keyframes[ob][frame][0][0],
-								self.keyframes[ob][frame][0][1], 0.0))
 							cols.append(mt.handle_line_color)
-							poss.append((coords[0], coords[1], 0.0))
 			if(not (cols == []) and not (poss == [])):
 				batch = batch_for_shader(colored_line_shader, 'LINES', {"pos": poss, "color": cols})
 				batch.draw(colored_line_shader)

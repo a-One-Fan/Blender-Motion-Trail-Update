@@ -2020,8 +2020,6 @@ class MotionTrailOperator(bpy.types.Operator):
 				#context.window_manager.motion_trail.force_update = True
 				#TODO: Stare at the above line, should it be commented out?
 
-				found = False
-
 				if mt.path_before == 0:
 					frame_min = context.scene.frame_start
 				else:
@@ -2039,6 +2037,7 @@ class MotionTrailOperator(bpy.types.Operator):
 								mt.path_after
 								)
 
+				found = False
 				for ob, values in self.click.items():
 					if found:
 						break
@@ -2047,9 +2046,7 @@ class MotionTrailOperator(bpy.types.Operator):
 							continue
 						if (coord - clicked).length <= mt.select_threshold:
 							found = True
-
-							if event.type == 'MOUSEMOVE':
-								self.highlighted_coord = (coord, type)
+							self.highlighted_coord = (coord, type) # TODO: For some reason, clicking selects a different thing???
 
 							if event.type == mt.select_key and event.value == 'PRESS':
 								self.active_keyframe = False
@@ -2072,7 +2069,7 @@ class MotionTrailOperator(bpy.types.Operator):
 								break
 				
 				if not found:
-					self.highlighted_coord = None
+					self.highlighted_coord = False
 					if event.type == mt.deselect_nohit_key and event.value == 'PRESS':
 						# If a change happens (aka there was active, now there isn't), then no passthrough
 						no_passthrough = self.getactive() and not mt.deselect_passthrough

@@ -1108,7 +1108,7 @@ def draw_callback(self, context):
 					point_cols.append(mt.frame_color)
 			if(not (point_poss == []) and not (point_cols == [])):
 				batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
-				colored_points_shader.uniform_float("radius", 3.0)
+				colored_points_shader.uniform_float("radius", mt.frame_size)
 				batch.draw(colored_points_shader)
 				point_poss.clear()
 				point_cols.clear()
@@ -1132,7 +1132,7 @@ def draw_callback(self, context):
 					point_poss.append((coords[0], coords[1]))
 			if(not (point_poss == []) and not (point_cols == [])):
 				batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
-				colored_points_shader.uniform_float("radius", 3.0)
+				colored_points_shader.uniform_float("radius", mt.timebead_size)
 				batch.draw(colored_points_shader)
 				point_poss.clear()
 				point_cols.clear()
@@ -2330,6 +2330,7 @@ class MotionTrailPanel(bpy.types.Panel):
 			col.prop(mt, "frame_display")
 			if mt.frame_display:
 				col.row().prop(mt, "frame_color")
+				col.row().prop(mt, "frame_size")
 
 			# Spines
 			col.row().prop(mt, "show_spines")
@@ -2377,6 +2378,7 @@ class MotionTrailPanel(bpy.types.Panel):
 				handle_cols_row.prop(mt, "selection_color_dark", text="Selected")
 		else:
 			col.row().prop(mt, "timebead_color")
+			col.row().prop(mt, "timebead_size")
 
 
 		box = self.layout.box()
@@ -2578,6 +2580,18 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 	keyframe_size: FloatProperty(name="Keyframe size",
 			description="Radius in pixels for keyframe points",
 			default=9.0,
+			min=0.0,
+			step=0.5
+			)
+	frame_size: FloatProperty(name="Frame size",
+			description="Radius in pixels for individual frame points",
+			default=2.75,
+			min=0.0,
+			step=0.5
+			)
+	timebead_size: FloatProperty(name="Bead size",
+			description="Radius in pixels for timebeads",
+			default=4.0,
 			min=0.0,
 			step=0.5
 			)
@@ -3038,11 +3052,12 @@ def compare_ver(tup1, tup2):
 configurable_props = ["use_depsgraph", "allow_negative_scale", "allow_negative_handle_scale",
 "select_key", "select_threshold", "deselect_nohit_key", "deselect_always_key", "deselect_passthrough", "mode", "path_style", 
 "simple_color", "speed_color_min", "speed_color_max", "accel_color_neg", "accel_color_static", "accel_color_pos",
-"keyframe_color", "frame_color", "selection_color", "selection_color_dark", 
+"keyframe_color", "selection_color", "selection_color_dark", 
 "highlight_color", "highlight_size", "highlight_do_outline",
-["point_color_loc", "point_color_rot", "point_color_scl"], "keyframe_size", "point_outline_size", "point_outline_blur",
+["point_color_loc", "point_color_rot", "point_color_scl"], "point_outline_size", "point_outline_blur",
+"keyframe_size", "frame_size", "frame_color",
 "handle_color_fac", "handle_line_color", "handle_size",
-"timebead_color", 
+"timebead_size", "timebead_color", 
 ["sensitivity_location", "sensitivity_rotation", "sensitivity_scale"], "sensitivity_shift", "sensitivity_alt",
 "text_color", "selected_text_color", "keyframe_text_size", "keyframe_text_offset_x", "keyframe_text_offset_y",
 "path_width", "path_step", "path_before", "path_after",

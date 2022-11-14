@@ -2906,21 +2906,21 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 
 	spine_x_color: FloatVectorProperty(name="X color",
 			description="Color that spines corresponding to X rotation will be colored in",
-			default=(0.2, 0.0, 0.0, 1.0),
+			default=(0.7, 0.0, 0.0, 1.0),
 			min=0.0, soft_max=1.0,
 			size=4,
 			subtype='COLOR'
 			)
 	spine_y_color: FloatVectorProperty(name="Y color",
 			description="Color that spines corresponding to Y rotation will be colored in",
-			default=(0.0, 0.2, 0.0, 1.0),
+			default=(0.0, 0.7, 0.0, 1.0),
 			min=0.0, soft_max=1.0,
 			size=4,
 			subtype='COLOR'
 			)
 	spine_z_color: FloatVectorProperty(name="Z color",
 			description="Color that spines corresponding to Z rotation will be colored in",
-			default=(0.0, 0.0, 0.2, 1.0),
+			default=(0.0, 0.0, 0.7, 1.0),
 			min=0.0, soft_max=1.0,
 			size=4,
 			subtype='COLOR'

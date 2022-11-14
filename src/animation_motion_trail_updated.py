@@ -2377,22 +2377,34 @@ class MotionTrailPanel(bpy.types.Panel):
 		col.row().prop(mt, "selection_color")
 		col.row().prop(mt, "highlight_color")
 
-		col.row().label(text="Sensitivty:")
-		sens_row_lrs = col.row(align=True)
-		sens_row_lrs.prop(mt, "sensitivity_location", text="Loc")
-		sens_row_lrs.prop(mt, "sensitivity_rotation", text="Rot")
-		sens_row_lrs.prop(mt, "sensitivity_scale", text="Scale")
-		sens_row_modkeys = col.row(align=True)
-		sens_row_modkeys.prop(mt, "sensitivity_shift")
-		sens_row_modkeys.prop(mt, "sensitivity_alt")
+		box = self.layout.box()
+		col = box.column()
+		row = col.row()
 
-		col.row().prop(mt, "select_key", text="Select key")
-		col.row().prop(mt, "select_threshold")
-		col.row().prop(mt, "deselect_nohit_key")
-		col.row().prop(mt, "deselect_always_key")
-		col.row().prop(mt, "deselect_passthrough")
-		col.label(text="For the time being, confirm/cancel")
-		col.label(text="is LMB/RMB or Esc")
+		if mt.controls_display:
+			row.prop(mt, "controls_display", icon="DOWNARROW_HLT", text="", emboss=False)
+		else:
+			row.prop(mt, "controls_display", icon="RIGHTARROW", text="", emboss=False)
+
+		row.label(text="Control options")
+
+		if mt.controls_display:
+			col.row().label(text="Sensitivty:")
+			sens_row_lrs = col.row(align=True)
+			sens_row_lrs.prop(mt, "sensitivity_location", text="Loc")
+			sens_row_lrs.prop(mt, "sensitivity_rotation", text="Rot")
+			sens_row_lrs.prop(mt, "sensitivity_scale", text="Scale")
+			sens_row_modkeys = col.row(align=True)
+			sens_row_modkeys.prop(mt, "sensitivity_shift")
+			sens_row_modkeys.prop(mt, "sensitivity_alt")
+			col.label(text="")
+			col.row().prop(mt, "select_key", text="Select key")
+			col.row().prop(mt, "select_threshold")
+			col.row().prop(mt, "deselect_nohit_key")
+			col.row().prop(mt, "deselect_always_key")
+			col.row().prop(mt, "deselect_passthrough")
+			col.label(text="For the time being, confirm/cancel")
+			col.label(text="is LMB/RMB or Esc")
 		
 		self.layout.column().operator("view3d.motion_trail_load_defaults")
 		self.layout.column().operator("view3d.motion_trail_save_defaults")
@@ -2557,6 +2569,11 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 	allow_negative_handle_scale: BoolProperty(name="Negative handle scaling",
 			description="Whether to allow scaling handles negatively or not",
 			default=False,
+			)
+
+	controls_display: BoolProperty(name="Control options",
+			description="Display options related to controls",
+			default=True
 			)
 	
 	sensitivity_location: FloatProperty(name="Location sensitivity",

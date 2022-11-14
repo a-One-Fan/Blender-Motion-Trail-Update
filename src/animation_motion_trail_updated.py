@@ -1026,7 +1026,7 @@ def draw_callback(self, context):
 				poss.append((x, y, 0.0))
 				cols.append(color)
 
-
+	# TODO: Do lines using connected tris rather than disconnected line segments
 	if(not (poss == []) and not (cols == [])):
 		colored_line_shader.bind()
 		if mt.path_outline_width > 0.0:

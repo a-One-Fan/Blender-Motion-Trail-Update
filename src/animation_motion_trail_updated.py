@@ -1220,13 +1220,13 @@ def draw_callback(self, context):
 
 	# draw keyframe-numbers
 	if mt.keyframe_numbers:
-		blf.size(0, 12, 72)
+		blf.size(0, mt.keyframe_text_size, 72)
 		blf.color(0, 1.0, 1.0, 0.0, 1.0)
 		for ob, values in self.keyframes.items():
 			for frame, [coords, channels]  in values.items():
 				if frame < limit_min or frame > limit_max:
 					continue
-				blf.position(0, coords[0] + 3, coords[1] + 3, 0)
+				blf.position(0, coords[0] + mt.keyframe_text_offset_x, coords[1] + mt.keyframe_text_offset_y, 0)
 				text = str(frame).split(".")
 				if len(text) == 1:
 					text = text[0]
@@ -1261,7 +1261,7 @@ def draw_callback(self, context):
 		#TODO: less hardcoded text positions?
 		blf.size(0, 12, 130)
 		blf.position(0, 10, 40, 0)
-		blf.color(0, 0.0, 0.0, 0.0, 1.0)
+		blf.color(0, *mt.text_color)
 		blf.draw(0, "Constraints: ")
 
 		blf.size(0, 12, 170)
@@ -1279,7 +1279,7 @@ def draw_callback(self, context):
 		if sum(chans) > 1:
 			blf.size(0, 12, 130)
 			blf.position(0, 10, 80, 0)
-			blf.color(0, 0.0, 0.0, 0.0, 1.0)
+			blf.color(0, *mt.text_color)
 			blf.draw(0, "Working on: ")
 			chosen_chans = self.chosen_chans
 			colors_noyes = [(0.0, 0.0, 0.0, 1.0), (0.0, 1.0, 0.0, 1.0)]
@@ -2314,8 +2314,14 @@ class MotionTrailPanel(bpy.types.Panel):
 			col = col.column(align=True)
 			col.prop(mt, "keyframe_numbers")
 			if mt.keyframe_numbers:
-				col.row().prop(mt, "text_color")
-				col.row().prop(mt, "selected_text_color")
+				text_col_row = col.row(align=True)
+				text_col_row.prop(mt, "text_color", text="Color")
+				text_col_row.prop(mt, "selected_text_color", text="Selected")
+				col.row(align=True).prop(mt, "keyframe_text_size")
+				offset_row = col.row(align=True)
+				offset_row.prop(mt, "keyframe_text_offset_x")
+				offset_row.prop(mt, "keyframe_text_offset_y")
+
 			col.prop(mt, "frame_display")
 			if mt.frame_display:
 				col.row().prop(mt, "frame_color")
@@ -2833,6 +2839,22 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			size=4,
 			subtype='COLOR'
 			)
+	keyframe_text_size: FloatProperty(name="Keyframe text size",
+			description="What size keyframe numbers are",
+			default=12.0,
+			min=0.0,
+			step=1.0
+			)
+	keyframe_text_offset_x: FloatProperty(name="Keyframe text offset X",
+			description="How shifted text is from the keyframe itself, on the X axis",
+			default=9.0,
+			step=1.0
+			)
+	keyframe_text_offset_y: FloatProperty(name="Keyframe text offset Y",
+			description="How shifted text is from the keyframe itself, on the Y axis",
+			default=5.0,
+			step=1.0
+			)
 
 	spine_x_color: FloatVectorProperty(name="X color",
 			description="Color that spines corresponding to X rotation will be colored in",
@@ -2960,7 +2982,8 @@ configurable_props = ["use_depsgraph", "allow_negative_scale", "allow_negative_h
 "keyframe_color", "frame_color", "selection_color", "selection_color_dark", "highlight_color", 
 ["handle_color_loc", "handle_color_rot", "handle_color_scl"], "handle_color_fac", "handle_line_color", "timebead_color", 
 ["sensitivity_location", "sensitivity_rotation", "sensitivity_scale"], "sensitivity_shift", "sensitivity_alt",
-"text_color", "selected_text_color", "path_width", "path_step", "path_before", "path_after",
+"text_color", "selected_text_color", "keyframe_text_size", "keyframe_text_offset_x", "keyframe_text_offset_y",
+"path_width", "path_step", "path_before", "path_after",
 "keyframe_numbers", "frame_display", "handle_display", "handle_length", "handle_direction", "show_spines", "spine_length", "spine_step", "spine_offset",
 ["pXspines", "pYspines", "pZspines"], ["nXspines", "nYspines", "nZspines"], ["spine_x_color", "spine_y_color", "spine_z_color"]]
 			

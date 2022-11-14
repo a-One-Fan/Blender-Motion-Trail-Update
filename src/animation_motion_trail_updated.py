@@ -990,7 +990,7 @@ def draw_callback(self, context):
 	# draw motion path
 	width = mt.path_width
 	#uniform_line_shader = gpu.shader.from_builtin('3D_POLYLINE_UNIFORM_COLOR')
-	colored_line_shader = gpu.shader.from_builtin('3D_POLYLINE_SMOOTH_COLOR')
+	colored_line_shader: gpu.types.GPUShader = gpu.shader.from_builtin('3D_POLYLINE_SMOOTH_COLOR')
 	#colored_points_shader = gpu.shader.from_builtin('2D_FLAT_COLOR')
 	colored_points_shader.uniform_float("ModelViewProjectionMatrix", bpy.context.region_data.perspective_matrix)
 	colored_points_shader.uniform_float("resolution", Vector((bpy.context.area.width, bpy.context.area.height)))
@@ -1032,8 +1032,9 @@ def draw_callback(self, context):
 					prev_path = path[i - 1]
 					halfway = [(x + prev_path[0]) / 2, (y + prev_path[1]) / 2]
 
-					cols.append(color)
-					poss.append((halfway[0], halfway[1], 0.0))
+					# This will "turn off" color interpolation, so to speak.
+					#cols.append(color)
+					#poss.append((halfway[0], halfway[1], 0.0))
 					cols.append(color)
 					poss.append((x, y, 0.0))
 					
@@ -1043,8 +1044,8 @@ def draw_callback(self, context):
 
 					cols.append(color)
 					poss.append((x, y, 0.0))
-					cols.append(color)
-					poss.append((halfway[0], halfway[1], 0.0))
+					#cols.append(color)
+					#poss.append((halfway[0], halfway[1], 0.0))
 			if(not (poss == []) and not (cols == [])):
 				batch = batch_for_shader(colored_line_shader, 'LINE_STRIP', {"pos": poss, "color": cols})
 				batch.draw(colored_line_shader)

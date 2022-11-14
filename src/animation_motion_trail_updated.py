@@ -1291,6 +1291,8 @@ def draw_callback(self, context):
 
 	# restore opengl defaults
 	gpu.state.point_size_set(1.0) # TODO: is this the correct value?
+	# ? gpu.state.blend_set("ALPHA")
+	# TODO: unbind shaders?
 
 def swizzle_constraint(vec, constraint):
 	"""Given a 2D vector and a constraint of kind (a, b, c) where 1 or 2 values are True, swizzle a new 3D vector from the respective coords"""

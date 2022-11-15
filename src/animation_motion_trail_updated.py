@@ -1013,9 +1013,11 @@ def draw_callback(self, context):
 	colored_points_shader.uniform_float("resolution", Vector((bpy.context.area.width, bpy.context.area.height)))
 	colored_points_shader.uniform_float("outline_radius", mt.point_outline_size)
 	colored_points_shader.uniform_float("outline_blur", mt.point_outline_blur)
-	#colored_points_shader.uniform_vector_float("outline_color", mt.point_outline_color)
-	gpu.state.point_size_set(64.0)
-	#gpu.state.depth_mask_set(False)
+
+	radii = {"keyframe": mt.keyframe_size, "timebead": mt.timebead_size, "frame": mt.frame_size, "handle_left": mt.handle_size, "handle_right": mt.handle_size}
+	maxr = max(radii.values())
+	maxr += mt.point_outline_size + mt.highlight_size + mt.point_outline_blur
+	gpu.state.point_size_set(maxr*2.0 + 3.0)
 	gpu.state.blend_set("ALPHA")
 
 	poss = []
@@ -1091,7 +1093,6 @@ def draw_callback(self, context):
 	point_flags = []
 
 	if self.highlighted_coord:
-		radii = {"keyframe": mt.keyframe_size, "timebead": mt.timebead_size, "frame": mt.frame_size, "handle_left": mt.handle_size, "handle_right": mt.handle_size}
 		rad = radii[self.highlighted_coord[1]] + mt.point_outline_size + mt.highlight_size
 		colored_points_shader.bind()
 

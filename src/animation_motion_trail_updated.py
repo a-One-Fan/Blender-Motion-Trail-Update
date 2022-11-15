@@ -2166,9 +2166,6 @@ class MotionTrailOperator(bpy.types.Operator):
 			getter = get_matrix_any_depsgraph if mt.use_depsgraph else get_matrix_any_custom_eval
 			self.cache = MatrixCache(getter)
 
-			for kmi in kmis:
-				kmi.active = False
-
 			MotionTrailOperator.handle_add(self, context)
 			mt.enabled = True
 
@@ -2184,8 +2181,6 @@ class MotionTrailOperator(bpy.types.Operator):
 
 		else:
 			# disable
-			for kmi in kmis:
-				kmi.active = True
 			MotionTrailOperator.handle_remove()
 			mt.enabled = False
 

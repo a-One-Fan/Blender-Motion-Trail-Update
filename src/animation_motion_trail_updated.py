@@ -2219,7 +2219,7 @@ def save_defaults(context):
 	for p in flat_props:
 		current = getattr(context.window_manager.motion_trail, p)
 		setattr(prefs.default_trail_settings, p, current)
-
+# TODO: Saved data doesn't persist after closing blender?!
 class MotionTrailSaveDefaults(bpy.types.Operator):
 	bl_idname="view3d.motion_trail_save_defaults"
 	bl_label="Save Defaults"

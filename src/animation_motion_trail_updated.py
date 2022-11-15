@@ -2564,7 +2564,7 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			)
 	handle_size: FloatProperty(name="Handle size",
 			description="Radius of the point of a handle in pixels",
-			default=2.5,
+			default=2.0,
 			step=0.5
 			)
 	handle_direction: EnumProperty(name="Handle direction",
@@ -2579,13 +2579,13 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			)
 	keyframe_size: FloatProperty(name="Keyframe size",
 			description="Radius in pixels for keyframe points",
-			default=6.0,
+			default=4.0,
 			min=0.0,
 			step=0.5
 			)
 	frame_size: FloatProperty(name="Frame size",
 			description="Radius in pixels for individual frame points",
-			default=2.25,
+			default=1.75,
 			min=0.0,
 			step=0.5
 			)
@@ -2597,7 +2597,7 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			)
 	point_outline_size: FloatProperty(name="Point outline size",
 			description="Radius in pixels for point outlines, extending past the filled color",
-			default=2.25,
+			default=1.75,
 			min=0.0,
 			step=0.5
 			)

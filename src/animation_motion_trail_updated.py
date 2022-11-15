@@ -2453,8 +2453,9 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 
 	def restart_operator(self, context):
 		if self.enabled:
-			bpy.ops.view3d.motion_trail(context)
-			bpy.ops.view3d.motion_trail(context)
+			bpy.ops.screen.animation_cancel(restore_frame=False)
+			bpy.ops.view3d.motion_trail(context, context, False)
+			bpy.ops.view3d.motion_trail(context, context, False)
 
 	# internal use
 	enabled: BoolProperty(default=False)
@@ -2474,8 +2475,7 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 	# visible in user interface
 	use_depsgraph: BoolProperty(name="Use depsgraph",
 		description="Whether to use the depsgraph or not.\nUsing the depsgraph currently has the following ups and downs:\n\n+ Completely accurate motion trails that factor in all constraints, drivers, and so on.\n\n- Constantly resets un-keyframed changes to objects with keyframes.\n- Causes playback to pause when calculating (e.g. while dragging), due to which also...\n- Does not update with the graph editor or others.\n- Less performant",
-		default=False,
-		update=restart_operator
+		default=False
 		)
 
 	frame_display: BoolProperty(name="Frames",

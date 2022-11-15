@@ -70,6 +70,15 @@ def mulscalar(tup, scalar):
 def make_chan(i):
 	return tuple([j == i for j in range(3)])
 
+def get_chani(chans):
+	i = 0
+	while i < len(chans):
+		if chans[i]:
+			return i
+		i += 1
+	if i == len(chans):
+		return -1
+
 def findlist(elem, arr):
 	"""Returns index of elem in arr, -1 if not found"""
 	for i in range(len(arr)):
@@ -1162,6 +1171,7 @@ def draw_callback(self, context):
 						if self.active_handle and \
 						ob == self.active_handle[0] and \
 						side == self.active_handle[2] and \
+						get_chani(self.active_handle[3]) == chan and \
 						abs(frame - self.active_handle[1]) < 1e-4:
 							cols.append(mt.selection_color_dark)
 							cols.append(mt.selection_color_dark)
@@ -1186,6 +1196,7 @@ def draw_callback(self, context):
 						if self.active_handle and \
 						ob == self.active_handle[0] and \
 						side == self.active_handle[2] and \
+						get_chani(self.active_handle[3]) == chan and \
 						abs(frame - self.active_handle[1]) < 1e-4:
 							point_cols.append(mt.selection_color)
 						else:

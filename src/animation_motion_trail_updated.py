@@ -2450,6 +2450,11 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 		if context.area:
 			context.area.tag_redraw()
 
+	def restart_operator(self, context):
+		if self.enabled:
+			bpy.ops.view3d.motion_trail(context)
+			bpy.ops.view3d.motion_trail(context)
+
 	# internal use
 	enabled: BoolProperty(default=False)
 	
@@ -2466,6 +2471,12 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 	handle_type_enabled: BoolProperty(default=False)
 
 	# visible in user interface
+	use_depsgraph: BoolProperty(name="Use depsgraph",
+		description="Whether to use the depsgraph or not.\nUsing the depsgraph currently has the following ups and downs:\n\n+ Completely accurate motion trails that factor in all constraints, drivers, and so on.\n\n- Constantly resets un-keyframed changes to objects with keyframes.\n- Causes playback to pause when calculating (e.g. while dragging), due to which also...\n- Does not update with the graph editor or others.\n- Less performant",
+		default=False,
+		update=restart_operator
+		)
+
 	frame_display: BoolProperty(name="Frames",
 			description="Display individual frames as manipulateable dots.\nClick and drag on one to make a new keyframe",
 			default=False,
@@ -2957,11 +2968,6 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 
 	highlight_do_outline: BoolProperty(name="Highlight outline",
 			description="Whether to draw outlines for the highlight circle",
-			default=False
-			)
-
-	use_depsgraph: BoolProperty(name="Use depsgraph",
-			description="Whether to use the depsgraph or not.\nChanging this takes effect only when motion trails are not active.\n\nUsing the depsgraph currently has the following ups and downs:\n+ Completely accurate motion trails that factor in all constraints, drivers, and so on.\n- Constantly resets un-keyframed changes to objects with keyframes.\n- Does not update with the graph editor or others.\n- Less performant",
 			default=False
 			)
 

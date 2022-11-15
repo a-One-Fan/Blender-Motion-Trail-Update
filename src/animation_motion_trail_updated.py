@@ -893,34 +893,39 @@ def calc_callback_ce(self, context):
 # TODO: Skip world_to_screen for non-clickable coords?
 point_vertex_shader = """
 uniform mat4 ModelViewProjectionMatrix;
-uniform vec2 resolution;
-uniform float radius;
-out vec2 resolution_frag;
-out float radius_frag;
 
 in vec2 pos;
-out vec2 pos_frag;
 in vec4 color;
-out vec4 color_frag;
+in float radius;
+in int flags; 
+
+out vec2 _pos;
+out vec4 _color;
+out float _radius;
+out int _flags;
 
 void main()
 {
-	color_frag = color;
-	pos_frag = pos;
+	_radius = radius;
+	_color = color;
+	_pos = pos;
+	_flags = flags;
 	gl_Position = ModelViewProjectionMatrix * vec4(pos, 0.0, 1.0);
-	//gl_Position = vec4(pos, 0.0, 0.0);
 }
 """
 
 # TODO: Should this code be further optimized?
 point_frag_shader = """
-in vec2 pos_frag;
-in vec4 color_frag;
 uniform vec2 resolution;
-uniform float radius;
 uniform float outline_radius;
 uniform float outline_blur;
 //uniform vec3 outline_color;
+
+in vec2 _pos;
+in vec4 _color;
+in float _radius;
+flat in int _flags;
+
 out vec4 FragColor;
 
 float maprange(float oldmin, float oldmax, float newmin, float newmax, float val)
@@ -938,12 +943,15 @@ float maprangeclamp(float oldmin, float oldmax, float newmin, float newmax, floa
 void main()
 {
 	float maxr = max(resolution.x, resolution.y); // Resizing like this is consistent with how the view behaves when areas are resized
-	float radius_corrected = radius * (maxr / 500.0);
-	float dist = length(gl_FragCoord.xy - pos_frag);
-	
-	float color_fac = maprangeclamp(radius, radius+outline_blur, 0.0, 1.0, dist);
-	float outline_fac = maprangeclamp(radius+outline_radius, radius+outline_radius+outline_blur, 0.0, 1.0, dist);
-	vec4 alpha_corrected = mix(vec4(0.0, 0.0, 0.0, 0.0), color_frag, float(color_frag.a > 0.0));
+	float radius_corrected = _radius * (maxr / 500.0);
+	float do_outline = float(_flags % 2);
+
+	float dist = length(gl_FragCoord.xy - _pos);
+	float o_radius = outline_radius * do_outline; 
+
+	float color_fac = maprangeclamp(_radius, _radius + outline_blur, 0.0, 1.0, dist);
+	float outline_fac = maprangeclamp(_radius + o_radius, _radius + o_radius + outline_blur, 0.0, 1.0, dist);
+	vec4 alpha_corrected = mix(vec4(0.0, 0.0, 0.0, 0.0), _color, float(_color.a > 0.0));
 	vec4 outline_color = vec4(0.0, 0.0, 0.0, 1.0);
     FragColor = mix(alpha_corrected, outline_color, color_fac);
 	FragColor = vec4(FragColor.rgb, mix(FragColor.a, 0.0, outline_fac));
@@ -1077,68 +1085,54 @@ def draw_callback(self, context):
 				poss.clear()
 				cols.clear()
 
+	point_poss = []
+	point_cols = []
+	point_rads = [] # radii is correct but 3-letter thing ending in s is better
+	point_flags = []
+
 	if self.highlighted_coord:
 		radii = {"keyframe": mt.keyframe_size, "timebead": mt.timebead_size, "frame": mt.frame_size, "handle_left": mt.handle_size, "handle_right": mt.handle_size}
-		colored_points_shader.uniform_float("radius", radii[self.highlighted_coord[1]] + mt.point_outline_size + mt.highlight_size)
+		rad = radii[self.highlighted_coord[1]] + mt.point_outline_size + mt.highlight_size
 		colored_points_shader.bind()
-		if not mt.highlight_do_outline:
-			colored_points_shader.uniform_float("outline_radius", 0.0)
 
-		point_poss = [self.highlighted_coord[0]]
-		point_cols = [mt.highlight_color]
-		batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
-		batch.draw(colored_points_shader)
-		point_poss.clear()
-		point_cols.clear()
-		if not mt.highlight_do_outline:
-			colored_points_shader.uniform_float("outline_radius", mt.point_outline_size)
+		point_poss.append(self.highlighted_coord[0])
+		point_cols.append(mt.highlight_color)
+		point_rads.append(rad)
+		point_flags.append(mt.highlight_do_outline)
 
 	# draw frames
 	if mt.frame_display:
-		colored_points_shader.bind()
-		point_poss = []
-		point_cols = []
 		for ob, path in self.paths.items():
 			for x, y, color, frame in path:
 				if frame < limit_min or frame > limit_max:
 					continue
+
+				point_poss.append((x, y))
 				if self.active_frame and ob == self.active_frame[0] \
 				and abs(frame - self.active_frame[1]) < 1e-4:
 					point_cols.append(mt.selection_color)
-					point_poss.append((x, y))
 				else:
-					point_poss.append((x, y))
 					point_cols.append(mt.frame_color)
-			if(not (point_poss == []) and not (point_cols == [])):
-				batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
-				colored_points_shader.uniform_float("radius", mt.frame_size)
-				batch.draw(colored_points_shader)
-				point_poss.clear()
-				point_cols.clear()
+				point_rads.append(mt.frame_size)
+				point_flags.append(True)
 
 	# time beads are shown in timing mode
 	if mt.mode == 'timing':
-		colored_points_shader.uniform_float("radius", 4.0)
-		point_poss = []
-		point_cols = []
 		for ob, values in self.timebeads.items():
 			for frame, [coords, channels] in values.items():
 				if frame < limit_min or frame > limit_max:
 					continue
+
+				point_poss.append((coords[0], coords[1]))
 				if self.active_timebead and \
 				ob == self.active_timebead[0] and \
 				abs(frame - self.active_timebead[1]) < 1e-4:
 					point_cols.append(mt.selection_color)
-					point_poss.append((coords[0], coords[1]))
 				else:
 					point_cols.append(mt.timebead_color)
-					point_poss.append((coords[0], coords[1]))
-			if(not (point_poss == []) and not (point_cols == [])):
-				batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
-				colored_points_shader.uniform_float("radius", mt.timebead_size)
-				batch.draw(colored_points_shader)
-				point_poss.clear()
-				point_cols.clear()
+				point_rads.append(mt.timebead_size)
+				point_flags.append(True)
+
 
 	# handles are only shown in value mode
 	if mt.mode == 'values':
@@ -1180,53 +1174,45 @@ def draw_callback(self, context):
 				cols.clear() #TODO: Less drawcalls? Not a big performance concern, sadly, compared to dg
 
 		# draw handles
-		colored_points_shader.bind()
-		colored_points_shader.uniform_float("radius", mt.handle_size)
-		point_poss = []
-		point_cols = []
 		for chan in range(3):
 			for ob, values in self.handles.items():
 				for frame, sides in values[chan].items():
 					if frame < limit_min or frame > limit_max:
 						continue
+					
 					for side, coords in sides.items():
+						point_poss.append((coords[0], coords[1]))
 						if self.active_handle and \
 						ob == self.active_handle[0] and \
 						side == self.active_handle[2] and \
 						abs(frame - self.active_handle[1]) < 1e-4:
-							point_poss.append((coords[0], coords[1]))
 							point_cols.append(mt.selection_color)
 						else:
-							point_poss.append((coords[0], coords[1]))
 							point_cols.append(colors_cooked[make_chan(chan)])
-		if(not (point_poss == []) and not (point_cols == [])):
-			batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
-			batch.draw(colored_points_shader)
-			point_poss.clear()
-			point_cols.clear()
+						point_rads.append(mt.handle_size)
+						point_flags.append(True)
 
 	# draw keyframes
-	colored_points_shader.bind()
-	colored_points_shader.uniform_float("radius", mt.keyframe_size)
-	point_poss = []
-	point_cols = []
 	for ob, values in self.keyframes.items():
 		for frame, [coords, channels] in values.items():
 			if frame < limit_min or frame > limit_max:
 				continue
+
+			point_poss.append((coords[0], coords[1]))
 			if self.active_keyframe and \
 			ob == self.active_keyframe[0] and \
 			abs(frame - self.active_keyframe[1]) < 1e-4:
-				point_poss.append((coords[0], coords[1]))
 				point_cols.append(mt.selection_color)
 			else:
-				point_poss.append((coords[0], coords[1]))
 				point_cols.append(colors_cooked[channels])
-	if(not (point_poss == []) and not (point_cols == [])):
-		batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols})
-		batch.draw(colored_points_shader)
-		point_poss.clear()
-		point_cols.clear()
+			point_rads.append(mt.keyframe_size)
+			point_flags.append(True)
+	
+
+	colored_points_shader.bind()
+	batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols, "radius": point_rads, "flags": point_flags})
+	batch.draw(colored_points_shader)
+
 
 	# draw keyframe-numbers
 	if mt.keyframe_numbers:

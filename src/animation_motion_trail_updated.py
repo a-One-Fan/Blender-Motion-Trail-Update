@@ -194,6 +194,9 @@ class MatrixCache():
 		if not (frame, obj) in self.__mats:
 			self.__build_entry(frame, obj, context)
 
+	def clear(self):
+		self.__mats = {}
+
 	def get_matrix(self, frame, obj, context) -> Matrix:
 		self.__guarantee_entry(frame, obj, context)
 		return self.__mats[(frame, obj)][0]
@@ -590,7 +593,7 @@ def merge_dicts(dict_list):
 	return final_dict
 
 # callback function that calculates positions of all things that need be drawn
-def calc_callback(self, context, inverse_getter, matrix_getter):
+def calc_callback(self, context):
 	# Remove handler if file was changed and we lose access to self
 	# I'm all ears for a better solution, as __del__ for the modal operator does not call on file change
 	# and there is no special event emitted to the operator for that
@@ -640,7 +643,8 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 		self.highlighted_coord = False # TODO: Highlighted coord persists after its highlighted selectable vanish while playing animation... think of fix?
 	
 	if selection_change or self.drag or mt.force_update:
-		self.cache = MatrixCache(matrix_getter)
+		self.cache.clear()
+		self.cache_inverse.clear()
 
 	self.perspective = context.region_data.perspective_matrix.copy()
 	self.displayed = objects  # store, so it can be checked next time
@@ -811,7 +815,7 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 					for frame, vecs in handle_difs[chan].items():
 
 						# Back to world space?
-						mat = inverse_getter(frame, ob, context)
+						mat = self.cache_inverse.get_matrix(frame, ob, context)
 						vec_left = vecs["left"] @ mat
 						vec_right = vecs["right"] @ mat
 							
@@ -890,14 +894,6 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 		print(traceback.extract_tb(tb))
 		# restore global undo in case of failure (see T52524)
 		#context.preferences.edit.use_global_undo = global_undo
-
-# calc_callback using depsgraph functions
-def calc_callback_dg(self, context):
-	return calc_callback(self, context, get_inverse_parents_depsgraph, get_matrix_any_depsgraph)
-
-# calc_callback using custom evaluation functions
-def calc_callback_ce(self, context):
-	return calc_callback(self, context, get_inverse_parents, get_matrix_any_custom_eval)
 
 # TODO: Skip world_to_screen for non-clickable coords?
 point_vertex_shader = """
@@ -1333,11 +1329,11 @@ def get_keyframes(curves: list[FCurve], frame: float) -> list[tuple[int, Keyfram
 	return res
 
 # change data based on mouse movement
-def drag(self, context: Context, event, inverse_getter):
+def drag(self, context: Context, event):
 	mt: MotionTrailProps = context.window_manager.motion_trail
 	
 	ob, frame, extra, ori_chans = self.getactive()
-	inverse_mat: Matrix = inverse_getter(frame, ob, context)
+	inverse_mat: Matrix = self.cache_inverse.get_matrix(frame, ob, context)
 	#decomposed = inverse_mat.decompose()
 	#inverse_mat = Matrix.LocRotScale(decomposed[0], decomposed[1], Vector((1.0, 1.0, 1.0)))
 		
@@ -1793,7 +1789,7 @@ class MotionTrailOperator(bpy.types.Operator):
 			global global_mtrail_handler_calc
 			global_mtrail_handler_calc = \
 			MotionTrailOperator._handle_calc = bpy.types.SpaceView3D.draw_handler_add(
-				calc_callback_ce, (self, context), 'WINDOW', 'POST_VIEW')
+				calc_callback, (self, context), 'WINDOW', 'POST_VIEW')
 
 			global global_mtrail_handler_update
 			global_mtrail_handler_update = \
@@ -1860,7 +1856,7 @@ class MotionTrailOperator(bpy.types.Operator):
 			mt.handle_update = False
 
 		if mt.use_depsgraph:
-			calc_callback_dg(self, context)
+			calc_callback(self, context)
 
 		#if not context.area or not context.region: or event.type == 'NONE':
 			#context.area.tag_redraw()
@@ -1929,9 +1925,7 @@ class MotionTrailOperator(bpy.types.Operator):
 					else:
 						self.chosen_chans = single_chan(chans, id)
 						
-
-				inverse_getter = get_inverse_parents_depsgraph if mt.use_depsgraph else get_inverse_parents
-				drag(self, context, event, inverse_getter)
+				drag(self, context, event)
 
 			if event.type == 'MOUSEMOVE':
 				# drag
@@ -1961,8 +1955,7 @@ class MotionTrailOperator(bpy.types.Operator):
 
 				self.drag_mouse_accumulate += (currmouse - prevmouse) * sens
 
-				inverse_getter = get_inverse_parents_depsgraph if mt.use_depsgraph else get_inverse_parents
-				drag(self, context, event, inverse_getter)
+				drag(self, context, event)
 
 			if event.type == 'LEFTMOUSE' and event.value == 'PRESS':
 				# finish drag
@@ -1984,10 +1977,7 @@ class MotionTrailOperator(bpy.types.Operator):
 					ob, frame, other, chans = self.active_frame
 					insert_keyframe(frame, ob, chans) # TODO: transforms selector for inserting keyframes
 					mt.force_update = True
-					if mt.use_depsgraph: 
-						calc_callback_dg(self, context) 
-					else: 
-						calc_callback_ce(self, context)
+					calc_callback(self, context) 
 						
 					self.active_keyframe = self.active_frame
 					self.active_frame = False
@@ -2162,6 +2152,8 @@ class MotionTrailOperator(bpy.types.Operator):
 			mt.handle_type_enabled = False
 			getter = get_matrix_any_depsgraph if mt.use_depsgraph else get_matrix_any_custom_eval
 			self.cache = MatrixCache(getter)
+			getter_inverse = get_inverse_parents_depsgraph if mt.use_depsgraph else get_inverse_parents
+			self.cache_inverse = MatrixCache(getter_inverse)
 
 			MotionTrailOperator.handle_add(self, context)
 			mt.enabled = True

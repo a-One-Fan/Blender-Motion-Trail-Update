@@ -2524,7 +2524,7 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			)
 	path_step_drag: IntProperty(name="Drag Step",
 			description="Step size for the frames the motion trail consists of while dragging.\nIncrease to improve dragging performance",
-			default = 3,
+			default = 1,
 			min = 1,
 			soft_max = 30,
 			update=internal_update

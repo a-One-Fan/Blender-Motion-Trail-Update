@@ -1737,6 +1737,7 @@ class MotionTrailOperator(bpy.types.Operator):
 	_handle_calc = None
 	_handle_draw = None
 	_handle_update = None
+	_msgbus_owner_kf = None
 	_timer = None
 
 	drag: bool 
@@ -1806,6 +1807,7 @@ class MotionTrailOperator(bpy.types.Operator):
     			args=(self, context),
     			notify=force_update_callback
 			)
+			MotionTrailOperator._msgbus_owner_kf = global_mtrail_msgbus_owner
 		
 		global global_mtrail_handler_draw
 		global_mtrail_handler_draw = \
@@ -1830,9 +1832,9 @@ class MotionTrailOperator(bpy.types.Operator):
 			except:
 				pass
 
-		if MotionTrailOperator._handle_update is not None:
+		if MotionTrailOperator._msgbus_owner_kf is not None:
 			try:
-				bpy.msgbus.clear_by_owner(global_mtrail_msgbus_owner)
+				bpy.msgbus.clear_by_owner(MotionTrailOperator._msgbus_owner_kf)
 			except:
 				pass
 			
@@ -2187,10 +2189,14 @@ class MotionTrailOperator(bpy.types.Operator):
 			if context.area:
 				context.area.tag_redraw()
 
+			if self._timer:
+				context.window_manager.event_timer_remove(self._timer)
+
 			return {'FINISHED'}
 
 	def cancel(self, context):
-		context.window_manager.event_timer_remove(self._timer)
+		if self._timer:
+			context.window_manager.event_timer_remove(self._timer)
 
 def load_defaults(context):
 	prefs = context.preferences.addons[__name__].preferences

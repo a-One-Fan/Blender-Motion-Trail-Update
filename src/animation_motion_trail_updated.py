@@ -615,7 +615,7 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 	else:
 		selection_change = True
 
-	if self.lock and not selection_change and \
+	if not self.drag and not selection_change and \
 	context.region_data.perspective_matrix == self.perspective and not \
 	mt.force_update and self.last_frame == context.scene.frame_float:
 		return
@@ -639,7 +639,7 @@ def calc_callback(self, context, inverse_getter, matrix_getter):
 	if self.perspective != context.region_data.perspective_matrix:
 		self.highlighted_coord = False # TODO: Highlighted coord persists after its highlighted selectable vanish while playing animation... think of fix?
 	
-	if selection_change or not self.lock or mt.force_update:
+	if selection_change or self.drag or mt.force_update:
 		self.cache = MatrixCache(matrix_getter)
 
 	self.perspective = context.region_data.perspective_matrix.copy()
@@ -1874,14 +1874,12 @@ class MotionTrailOperator(bpy.types.Operator):
 			if (not context.active_object or
 					context.active_object.mode not in ('OBJECT', 'POSE')):
 				self.drag = False
-				self.lock = True
 				mt.force_update = True
 
 			if (event.type in ['ESC', 'RIGHTMOUSE']):
 				# cancel drag
 				context.window.cursor_set('DEFAULT')
 				self.drag = False
-				self.lock = True
 				mt.force_update = True
 				cancel_drag(self, context)
 
@@ -1970,7 +1968,6 @@ class MotionTrailOperator(bpy.types.Operator):
 				# finish drag
 				context.window.cursor_set('DEFAULT')
 				self.drag = False
-				self.lock = True
 				mt.force_update = True
 				bpy.ops.ed.undo_push(message="Confirmed Motion Trail drag")
 
@@ -2008,7 +2005,6 @@ class MotionTrailOperator(bpy.types.Operator):
 				self.drag_mouse_ori = Vector([event.mouse_region_x, event.mouse_region_y])
 				self.drag_mouse_accumulate = Vector((0, 0))
 				self.drag = True
-				self.lock = False
 				self.highlighted_coord = False
 
 				self.constraint_axes = [False, False, False]
@@ -2145,7 +2141,6 @@ class MotionTrailOperator(bpy.types.Operator):
 			self.active_frame = False
 			self.click = {}
 			self.drag = False
-			self.lock = True
 			self.perspective = context.region_data.perspective_matrix
 			self.displayed = []
 			self.paths = {}

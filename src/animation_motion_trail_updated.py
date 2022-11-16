@@ -1103,7 +1103,6 @@ void main()
 tri_line_shader = gpu.types.GPUShader(tri_line_vertex_shader, tri_line_fragment_shader)
 
 # TODO: Thickness multiplier that affects everything
-# TODO: Circle point shader
 # draw in 3d-view
 def draw_callback(self, context):
 	# Remove handler if file was changed and we lose access to self

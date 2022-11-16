@@ -150,6 +150,70 @@ def chop_line(p1: Vector, p2: Vector, amt1, amt2):
 	fac2 = (totlen-amt2)/totlen
 	return (lerp(p1, p2, fac1), lerp(p1, p2, fac2))
 	
+def angle_bisector(central_point: Vector, p1: Vector, p2: Vector): # Lots of normalizing, slow?
+	v1 = central_point - p1
+	v2 = central_point - p2
+	v1.normalize()
+	v2.normalize()
+	summed = v1 + v2
+	if summed.length < 0.001:
+		return Vector((v1.y, -v1.x))
+
+	summed.normalize()
+	
+	return summed
+
+def line_to_tris(points: list[Vector], colors: list[any], width: float) -> tuple[list[Vector], list[any], list[float]]:
+	"""Convert a line strip into a list of triangles, with a supplementary list for how far each point is from the centre"""
+	res_tris = []
+	res_dist = []
+	res_cols = []
+
+	bisectors = [None for i in range(len(points))]
+	normDir = (points[0] - points[1]).normalized()
+	bisectors[0] = Vector((normDir.y, -normDir.x))
+	last = len(points)-1
+	normDir = (points[last] - points[last-1]).normalized()
+	bisectors[last] = Vector((normDir.y, -normDir.x))
+
+	for i in range(1, last):
+		bisectors[i] = angle_bisector(points[i], points[i-1], points[i+1])
+	
+	for i in range(0, last):
+
+		# Bisector direction correction, so that the triangles don't fold over themselves
+		if (bisectors[i] - bisectors[i+1]).length < 1.0:
+			dirs = [(-1, -1), (1, 1)]
+		else:
+			dirs = [(-1, 1), (1, -1)]
+
+		for (dir, dir2) in dirs:
+			res_tris.append(points[i])
+			res_tris.append(points[i] + bisectors[i]*width*dir2)
+			res_tris.append(points[i+1])
+
+			res_cols.append(colors[i])
+			res_cols.append(colors[i])
+			res_cols.append(colors[i+1])
+
+			res_dist.append(0)
+			res_dist.append(width)
+			res_dist.append(0)
+
+			res_tris.append(points[i+1])
+			res_tris.append(points[i] + bisectors[i]*width*dir2)
+			res_tris.append(points[i+1] + bisectors[i+1]*width*dir)
+
+			res_cols.append(colors[i+1])
+			res_cols.append(colors[i])
+			res_cols.append(colors[i+1])
+
+			res_dist.append(0)
+			res_dist.append(width)
+			res_dist.append(width)
+
+	return (res_tris, res_cols, res_dist)
+
 
 # fake fcurve class, used if no fcurve is found for a path
 class fake_fcurve():
@@ -965,6 +1029,55 @@ void main()
 
 colored_points_shader = gpu.types.GPUShader(point_vertex_shader, point_frag_shader)
 
+tri_line_vertex_shader = """
+uniform mat4 ModelViewProjectionMatrix;
+
+in vec2 pos;
+in vec4 color;
+in float line_gradient;
+
+out float _line_gradient;
+out vec4 _color;
+
+void main()
+{
+	_color = color;
+	_line_gradient = line_gradient;
+	gl_Position = ModelViewProjectionMatrix * vec4(pos, 0.0, 1.0);
+}
+"""
+
+tri_line_fragment_shader = """
+#pragma BLENDER_REQUIRE(gpu_shader_colorspace_lib.glsl)
+
+in float _line_gradient;
+in vec4 _color;
+uniform float width;
+
+out vec4 FragColor;
+
+float maprange(float oldmin, float oldmax, float newmin, float newmax, float val)
+{
+	float fac = (val - oldmin) / (oldmax - oldmin);
+	return (newmin * (1.0 - fac) + newmax * fac);
+}
+
+float maprangeclamp(float oldmin, float oldmax, float newmin, float newmax, float val)
+{
+	val = clamp(val, oldmin, oldmax);
+	return maprange(oldmin, oldmax, newmin, newmax, val);
+}
+
+void main()
+{
+	float grad = maprangeclamp(width-1.0, width, 1.0, 0.0, _line_gradient);
+	FragColor = _color * grad;
+	FragColor = blender_srgb_to_framebuffer_space(FragColor);
+}
+"""
+
+tri_line_shader = gpu.types.GPUShader(tri_line_vertex_shader, tri_line_fragment_shader)
+
 # TODO: Thickness multiplier that affects everything
 # TODO: Circle point shader
 # draw in 3d-view
@@ -1036,10 +1149,7 @@ def draw_callback(self, context):
 			for i, [x, y, color, frame] in enumerate(path):
 				if frame < limit_min or frame > limit_max:
 					continue
-				if i != len(path) - 1 and i != 0:
-					poss.append((x, y, 0))
-					cols.append(simple_color)
-				poss.append((x, y, 0))
+				poss.append(Vector((x, y)))
 				cols.append(simple_color)
 
 	else:
@@ -1047,24 +1157,29 @@ def draw_callback(self, context):
 			for i, [x, y, color, frame] in enumerate(path):
 				if frame < limit_min or frame > limit_max:
 					continue
-				if i != len(path) - 1 and i != 0:
-					poss.append((x, y, 0.0))
-					cols.append(color)
-				poss.append((x, y, 0.0))
+				poss.append(Vector((x, y)))
 				cols.append(color)
 
 	# TODO: Do lines using connected tris rather than disconnected line segments
 	if(not (poss == []) and not (cols == [])):
-		colored_line_shader.bind()
-		if mt.path_outline_width > 0.0:
-			cols_black = [(0.0, 0.0, 0.0, 1.0) for i in range(len(cols))]
-			batch_outline = batch_for_shader(colored_line_shader, 'LINES', {"pos": poss, "color": cols_black})
-			colored_line_shader.uniform_float("lineWidth", mt.path_width + mt.path_outline_width)
-			batch_outline.draw(colored_line_shader)
-		
-		batch = batch_for_shader(colored_line_shader, 'LINES', {"pos": poss, "color": cols})
-		colored_line_shader.uniform_float("lineWidth", mt.path_width)
-		batch.draw(colored_line_shader)
+
+		if not mt.path_pretty:
+			colored_line_shader.bind()
+			if mt.path_outline_width > 0.0:
+				cols_black = [(0.0, 0.0, 0.0, 1.0) for i in range(len(cols))]
+				batch_outline = batch_for_shader(colored_line_shader, 'LINES', {"pos": poss, "color": cols_black})
+				colored_line_shader.uniform_float("lineWidth", mt.path_width + mt.path_outline_width)
+				batch_outline.draw(colored_line_shader)
+			batch = batch_for_shader(colored_line_shader, 'LINE_STRIP', {"pos": poss, "color": cols})
+			colored_line_shader.uniform_float("lineWidth", mt.path_width)
+			batch.draw(colored_line_shader)
+		else:
+			tri_pos, tri_cols, tri_grad = line_to_tris(poss, cols, mt.path_width / 2.0)
+			tri_line_shader.bind()
+			tri_line_shader.uniform_float("width", mt.path_width / 2.0)
+			batch = batch_for_shader(tri_line_shader, 'TRIS', {"pos": tri_pos, "color": tri_cols, "line_gradient": tri_grad})
+			batch.draw(tri_line_shader)
+
 		poss.clear()
 		cols.clear()
 
@@ -2297,6 +2412,7 @@ class MotionTrailPanel(bpy.types.Panel):
 				col.row().prop(mt, "accel_color_pos")
 				
 			grouped = col.column(align=True)
+			grouped.prop(mt, "path_pretty")
 			width_row = grouped.row(align=True)
 			width_row.prop(mt, "path_width", text="Width")
 			width_row.prop(mt, "path_outline_width", text="Outline")
@@ -2548,6 +2664,10 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			default=0.0,
 			min=0.0,
 			soft_max=8.0
+			)
+	path_pretty: BoolProperty(name="Pretty path lines",
+			description="Draw prettier but slower lines for the path. Most notably, they do not have gaps inbetween each segment",
+			default=True
 			)
 	timebeads: IntProperty(name="Time beads",
 			description="Number of time beads to display per segment",
@@ -3049,7 +3169,7 @@ configurable_props = ["use_depsgraph", "allow_negative_scale", "allow_negative_h
 "simple_color", "speed_color_min", "speed_color_max", "accel_color_neg", "accel_color_static", "accel_color_pos",
 "keyframe_color", "selection_color", "selection_color_dark", 
 "highlight_color", "highlight_size", "highlight_do_outline",
-["point_color_loc", "point_color_rot", "point_color_scl"], "point_outline_size", "point_outline_blur",
+["point_color_loc", "point_color_rot", "point_color_scl"], "point_outline_size", "point_outline_blur", "path_pretty",
 "keyframe_size", "frame_size", "frame_color",
 "handle_color_fac", "handle_line_color", "handle_size",
 "timebead_size", "timebead_color", 

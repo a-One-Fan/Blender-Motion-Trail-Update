@@ -930,6 +930,7 @@ def calc_callback(self, context):
 			if mt.show_spines:
 
 				spine_step = max(mt.spine_step, step)
+				self.spines[ob] = {}
 
 				for frame in range(range_min, range_max + 1, spine_step):
 					loc = self.cache.get_location(frame, ob, context)
@@ -955,7 +956,7 @@ def calc_callback(self, context):
 						vec.rotate(mt.spine_offset) # Is this slow enough to warrant an if?
 						resLocs.append(world_to_screen(context, loc + vec))
 					
-					self.spines[frame] = (baseLoc, resLocs)
+					self.spines[ob][frame] = (baseLoc, resLocs)
 
 			# add frame positions to click-list
 			if mt.frame_display:
@@ -1200,21 +1201,22 @@ def draw_callback(self, context):
 		colored_line_shader.uniform_float("lineWidth", 2)
 		poss = []
 		cols = []
-		for frame, locs in self.spines.items():
-			if frame < limit_min or frame > limit_max:
-				continue
-			
-			to_use = (mt.pXspines, mt.pYspines, mt.pZspines, mt.nXspines, mt.nYspines, mt.nZspines)
-			to_use_colors = (mt.spine_x_color, mt.spine_y_color, mt.spine_z_color, mt.spine_x_color, mt.spine_y_color, mt.spine_z_color)
-			for i in range(6):
-				if to_use[i]:
-					cols.append(to_use_colors[i])
-					poss.append(Vector((locs[0][0], locs[0][1])))
-					cols.append(to_use_colors[i])
-					poss.append(Vector((locs[1][i][0], locs[1][i][1])))
-					line_converter(poss, cols, mt.path_width, 0.0, for_shader) # TODO: spine width
-					poss.clear()
-					cols.clear()
+		for ob_spines in self.spines.values():
+			for frame, locs in ob_spines.items():
+				if frame < limit_min or frame > limit_max:
+					continue
+				
+				to_use = (mt.pXspines, mt.pYspines, mt.pZspines, mt.nXspines, mt.nYspines, mt.nZspines)
+				to_use_colors = (mt.spine_x_color, mt.spine_y_color, mt.spine_z_color, mt.spine_x_color, mt.spine_y_color, mt.spine_z_color)
+				for i in range(6):
+					if to_use[i]:
+						cols.append(to_use_colors[i])
+						poss.append(Vector((locs[0][0], locs[0][1])))
+						cols.append(to_use_colors[i])
+						poss.append(Vector((locs[1][i][0], locs[1][i][1])))
+						line_converter(poss, cols, mt.path_width, 0.0, for_shader) # TODO: spine width
+						poss.clear()
+						cols.clear()
 
 	point_poss = []
 	point_cols = []

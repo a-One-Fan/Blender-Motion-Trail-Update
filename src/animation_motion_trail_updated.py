@@ -1014,9 +1014,10 @@ uniform mat4 ModelViewProjectionMatrix;
 in vec4 color;
 in vec4 pos_next2;
 in vec4 prevnext;
-in vec3 width_maxwidth_outline;
+in vec3 wmo;
 
-out vec2 width_outline;
+out flat vec2 maxwidth_outline;
+out float width;
 out vec4 _color;
 
 vec2 angle_bisector(vec2 central_point, vec2 p1, vec2 p2)
@@ -1037,7 +1038,10 @@ vec2 angle_bisector(vec2 central_point, vec2 p1, vec2 p2)
 void main()
 {
 	_color = color;
-	_line_gradient = line_gradient;
+	width = wmo.x;
+	maxwidth_outline = wmo.yz;
+	vec2 pos = pos_next2.xy;
+	pos += angle_bisector(pos, prevnext.xy, prevnext.zw) * wmo.x;
 	gl_Position = ModelViewProjectionMatrix * vec4(pos, 0.0, 1.0);
 }
 """
@@ -1045,8 +1049,11 @@ void main()
 tri_line_fragment_shader = """
 #pragma BLENDER_REQUIRE(gpu_shader_colorspace_lib.glsl)
 
-in float _line_gradient;
+in float width;
 in vec4 _color;
+in vec2 maxw_outline;
+
+uniform float blur;
 
 out vec4 FragColor;
 
@@ -1064,8 +1071,11 @@ float maprangeclamp(float oldmin, float oldmax, float newmin, float newmax, floa
 
 void main()
 {
-	float grad = maprangeclamp(width-1.0, width, 1.0, 0.0, _line_gradient);
-	FragColor = _color * grad;
+	float grad = maprangeclamp(maxw_outline.x-blur, maxw_outline.x, 0.0, 1.0, width);
+	float maxtot = maxw_outline.x+maxw_outline.y;
+	float gradoutline = maprangeclamp(maxtot-blur, maxtot, 1.0, 0.0, width);
+	FragColor = mix(_color, vec4(0.0, 0.0, 0.0, 1.0), grad);
+	FragColor *= gradoutline;
 	FragColor = blender_srgb_to_framebuffer_space(FragColor);
 }
 """
@@ -1134,7 +1144,8 @@ def draw_callback(self, context):
 
 	poss = []
 	cols = []
-	cols_outline = []
+	
+	for_shader = ([], [], [], [])
 	
 	if mt.path_style == 'simple':
 		
@@ -1145,6 +1156,9 @@ def draw_callback(self, context):
 					continue
 				poss.append(Vector((x, y)))
 				cols.append(simple_color)
+			line_to_tris(poss, cols, mt.path_width, mt.path_outline_width, for_shader)
+			poss.clear()
+			cols.clear()
 
 	else:
 		for ob, path in self.paths.items():
@@ -1153,29 +1167,9 @@ def draw_callback(self, context):
 					continue
 				poss.append(Vector((x, y)))
 				cols.append(color)
-
-	# TODO: Do lines using connected tris rather than disconnected line segments
-	if(not (poss == []) and not (cols == [])):
-
-		if not mt.path_pretty:
-			colored_line_shader.bind()
-			if mt.path_outline_width > 0.0:
-				cols_black = [(0.0, 0.0, 0.0, 1.0) for i in range(len(cols))]
-				batch_outline = batch_for_shader(colored_line_shader, 'LINES', {"pos": poss, "color": cols_black})
-				colored_line_shader.uniform_float("lineWidth", mt.path_width + mt.path_outline_width)
-				batch_outline.draw(colored_line_shader)
-			batch = batch_for_shader(colored_line_shader, 'LINE_STRIP', {"pos": poss, "color": cols})
-			colored_line_shader.uniform_float("lineWidth", mt.path_width)
-			batch.draw(colored_line_shader)
-		else:
-			tri_pos, tri_cols, tri_grad = line_to_tris(poss, cols, mt.path_width / 2.0)
-			tri_line_shader.bind()
-			tri_line_shader.uniform_float("width", mt.path_width / 2.0)
-			batch = batch_for_shader(tri_line_shader, 'TRIS', {"pos": tri_pos, "color": tri_cols, "line_gradient": tri_grad})
-			batch.draw(tri_line_shader)
-
-		poss.clear()
-		cols.clear()
+			line_to_tris(poss, cols, mt.path_width, mt.path_outline_width, for_shader)
+			poss.clear()
+			cols.clear()
 
 	# Draw rotation spines
 	if mt.show_spines:
@@ -1192,14 +1186,12 @@ def draw_callback(self, context):
 			for i in range(6):
 				if to_use[i]:
 					cols.append(to_use_colors[i])
-					poss.append((locs[0][0], locs[0][1], 0.0))
+					poss.append((locs[0][0], locs[0][1]))
 					cols.append(to_use_colors[i])
-					poss.append((locs[1][i][0], locs[1][i][1], 0.0))
-			if(not (cols == []) and not (poss == [])):
-				batch = batch_for_shader(colored_line_shader, 'LINES', {"pos": poss, "color": cols})
-				batch.draw(colored_line_shader)
-				poss.clear()
-				cols.clear()
+					poss.append((locs[1][i][0], locs[1][i][1]))
+					line_to_tris(poss, cols, mt.path_width, 0.0, for_shader) # TODO: spine width
+					poss.clear()
+					cols.clear()
 
 	point_poss = []
 	point_cols = []
@@ -1263,8 +1255,8 @@ def draw_callback(self, context):
 						continue
 					for side, coords in sides.items():
 						p1 = Vector((self.keyframes[ob][frame][0][0],
-								self.keyframes[ob][frame][0][1], 0.0))
-						p2 = Vector((coords[0], coords[1], 0.0))
+								self.keyframes[ob][frame][0][1]))
+						p2 = Vector((coords[0], coords[1]))
 
 						newp1, newp2 = chop_line(p1, p2, 
 							mt.keyframe_size+mt.point_outline_size/2.0, 
@@ -1283,11 +1275,10 @@ def draw_callback(self, context):
 						else:
 							cols.append(mt.handle_line_color)
 							cols.append(mt.handle_line_color)
-			if(not (cols == []) and not (poss == [])):
-				batch = batch_for_shader(colored_line_shader, 'LINES', {"pos": poss, "color": cols})
-				batch.draw(colored_line_shader)
-				poss.clear()
-				cols.clear() #TODO: Less drawcalls? Not a big performance concern, sadly, compared to dg
+
+						line_to_tris(poss, cols, mt.path_width, 0.0, for_shader) # TODO: handle width?
+						poss.clear()
+						cols.clear()
 
 		# draw handles
 		for chan in range(3):
@@ -1325,6 +1316,11 @@ def draw_callback(self, context):
 			point_rads.append(mt.keyframe_size)
 			point_flags.append(True)
 	
+
+	tri_line_shader.bind()
+	tri_line_shader.uniform_float("blur", 1.0)
+	batch = batch_for_shader(tri_line_shader, 'TRIS', {"pos_next2": for_shader[0], "prevnext": for_shader[1], "color": for_shader[2], "wmo": for_shader[3]})
+	batch.draw(tri_line_shader)
 
 	colored_points_shader.bind()
 	batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols, "radius": point_rads, "flags": point_flags})

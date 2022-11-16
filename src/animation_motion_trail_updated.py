@@ -168,7 +168,7 @@ def line_to_tris(points: list[Vector], colors: list, width: float, outline: floa
 	res_tris = []
 	res_dist = []
 	res_cols = []
-
+	width = width * 0.5 + 0.5
 	bisectors = [None for i in range(len(points))]
 	normDir = (points[0] - points[1]).normalized()
 	bisectors[0] = Vector((normDir.y, -normDir.x))
@@ -1092,8 +1092,9 @@ void main()
 	float grad = maprangeclamp(maxw_outline.x-blur, maxw_outline.x, 0.0, 1.0, width);
 	float maxtot = maxw_outline.x+maxw_outline.y;
 	float gradoutline = maprangeclamp(maxtot-blur, maxtot, 1.0, 0.0, width);
-	FragColor = mix(_color, vec4(0.0, 0.0, 0.0, 1.0), grad);
-	FragColor *= gradoutline;
+	vec4 outline = mix(_color, vec4(0.0, 0.0, 0.0, 1.0), float(maxw_outline.y>0.0));
+	FragColor = mix(_color, outline, grad);
+	FragColor.a *= gradoutline;
 	FragColor = blender_srgb_to_framebuffer_space(FragColor);
 }
 """
@@ -1163,7 +1164,7 @@ def draw_callback(self, context):
 	poss = []
 	cols = []
 	
-	for_shader = ([], [], []) if mt.pretty_lines else ([], [])
+	for_shader = ([], [], []) if mt.pretty_lines else [[], []]
 	line_converter = line_to_tris if mt.pretty_lines else line_strip_to_lines
 	
 	if mt.path_style == 'simple':
@@ -2688,7 +2689,7 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			soft_max=8.0
 			)
 	pretty_lines: BoolProperty(name="Pretty lines",
-			description="Draw prettier lines. Most noticeable at bends in the motion trail with high widths.\nMore performance intensive",
+			description="Draw lines that properly connect between each segment. Noticeable with high widths and strong bends in the motion trail.\nMore performance intensive",
 			default=False
 			)
 	timebeads: IntProperty(name="Time beads",

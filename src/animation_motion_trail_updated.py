@@ -1348,7 +1348,7 @@ def draw_callback(self, context):
 		batch.draw(tri_line_shader)
 	else:
 		if mt.path_outline_width > 0.0:
-			colored_line_shader.uniform_float("lineWidth", mt.path_width + mt.path_outline_width)
+			colored_line_shader.uniform_float("lineWidth", mt.path_width + mt.path_outline_width * 2.0)
 			batch = batch_for_shader(colored_line_shader, 'LINES', {"pos": outline_for_shader[0], "color": [(0.0, 0.0, 0.0, 1.0) for i in range(outline_for_shader[1])]})
 			batch.draw(colored_line_shader)
 

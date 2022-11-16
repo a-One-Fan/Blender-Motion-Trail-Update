@@ -163,7 +163,7 @@ def angle_bisector(central_point: Vector, p1: Vector, p2: Vector): # Lots of nor
 	
 	return summed
 
-def line_to_tris(points: list[Vector], colors: list[any], width: float, outline: float, to_append: tuple[list, list, list]):
+def line_to_tris(points: list[Vector], colors: list, width: float, outline: float, to_append: tuple[list, list, list]):
 	"""Convert a line strip into a list of triangles, with a supplementary list for how far each point is from the centre"""
 	res_tris = []
 	res_dist = []
@@ -214,7 +214,22 @@ def line_to_tris(points: list[Vector], colors: list[any], width: float, outline:
 
 	return
 
+def line_strip_to_lines(points: list[Vector], colors: list, width: float, outline: float, to_append: list[list]):
+	p2 = []
+	c2 = []
+	p2.append(points[0])
+	c2.append(colors[0])
+	for i in range(1, len(points)-1):
+		p2.append(points[i])
+		p2.append(points[i])
+		c2.append(colors[i])
+		c2.append(colors[i])
+	p2.append(points[len(points)-1])
+	c2.append(colors[len(points)-1])
 
+	to_append[0].extend(p2)
+	to_append[1].extend(c2)
+	
 # fake fcurve class, used if no fcurve is found for a path
 class fake_fcurve():
 	def __init__(self, object: Object | PoseBone, index, rotation=False, scale=False):
@@ -1148,7 +1163,8 @@ def draw_callback(self, context):
 	poss = []
 	cols = []
 	
-	for_shader = ([], [], [])
+	for_shader = ([], [], []) if mt.pretty_lines else ([], [])
+	line_converter = line_to_tris if mt.pretty_lines else line_strip_to_lines
 	
 	if mt.path_style == 'simple':
 		
@@ -1159,7 +1175,7 @@ def draw_callback(self, context):
 					continue
 				poss.append(Vector((x, y)))
 				cols.append(simple_color)
-			line_to_tris(poss, cols, mt.path_width, mt.path_outline_width, for_shader)
+			line_converter(poss, cols, mt.path_width, mt.path_outline_width, for_shader)
 			poss.clear()
 			cols.clear()
 
@@ -1170,9 +1186,12 @@ def draw_callback(self, context):
 					continue
 				poss.append(Vector((x, y)))
 				cols.append(color)
-			line_to_tris(poss, cols, mt.path_width, mt.path_outline_width, for_shader)
+			line_converter(poss, cols, mt.path_width, mt.path_outline_width, for_shader)
 			poss.clear()
 			cols.clear()
+
+	if not mt.pretty_lines and mt.path_outline_width > 0.0:
+		outline_for_shader = for_shader.copy()
 
 	# Draw rotation spines
 	if mt.show_spines:
@@ -1192,7 +1211,7 @@ def draw_callback(self, context):
 					poss.append((locs[0][0], locs[0][1]))
 					cols.append(to_use_colors[i])
 					poss.append((locs[1][i][0], locs[1][i][1]))
-					line_to_tris(poss, cols, mt.path_width, 0.0, for_shader) # TODO: spine width
+					line_converter(poss, cols, mt.path_width, 0.0, for_shader) # TODO: spine width
 					poss.clear()
 					cols.clear()
 
@@ -1279,7 +1298,7 @@ def draw_callback(self, context):
 							cols.append(mt.handle_line_color)
 							cols.append(mt.handle_line_color)
 
-						line_to_tris(poss, cols, mt.path_width, 0.0, for_shader) # TODO: handle width?
+						line_converter(poss, cols, mt.path_width, 0.0, for_shader) # TODO: handle width?
 						poss.clear()
 						cols.clear()
 
@@ -1319,11 +1338,21 @@ def draw_callback(self, context):
 			point_rads.append(mt.keyframe_size)
 			point_flags.append(True)
 	
+	if mt.pretty_lines:
+		tri_line_shader.bind()
+		tri_line_shader.uniform_float("blur", 1.0)
+		batch = batch_for_shader(tri_line_shader, 'TRIS', {"pos": for_shader[0], "color": for_shader[1], "wmo": for_shader[2]})
+		batch.draw(tri_line_shader)
+	else:
+		if mt.path_outline_width > 0.0:
+			colored_line_shader.uniform_float("lineWidth", mt.path_width + mt.path_outline_width)
+			batch = batch_for_shader(colored_line_shader, 'LINES', {"pos": outline_for_shader[0], "color": [(0.0, 0.0, 0.0, 1.0) for i in range(len(outline_for_shader[1]))]})
+			batch.draw(colored_line_shader)
 
-	tri_line_shader.bind()
-	tri_line_shader.uniform_float("blur", 1.0)
-	batch = batch_for_shader(tri_line_shader, 'TRIS', {"pos": for_shader[0], "color": for_shader[1], "wmo": for_shader[2]})
-	batch.draw(tri_line_shader)
+		colored_line_shader.bind()
+		colored_line_shader.uniform_float("lineWidth", mt.path_width)
+		batch = batch_for_shader(colored_line_shader, 'LINES', {"pos": for_shader[0], "color": for_shader[1]})
+		batch.draw(colored_line_shader)
 
 	colored_points_shader.bind()
 	batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols, "radius": point_rads, "flags": point_flags})
@@ -2490,6 +2519,7 @@ class MotionTrailPanel(bpy.types.Panel):
 		row.label(text="Generic color options")
 
 		if mt.generic_colors_display:
+			col.prop(mt, "pretty_lines")
 			col.prop(mt, "keyframe_size")
 			col.prop(mt, "point_outline_size")
 			col.prop(mt, "point_outline_blur")
@@ -2656,6 +2686,10 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			default=0.0,
 			min=0.0,
 			soft_max=8.0
+			)
+	pretty_lines: BoolProperty(name="Pretty lines",
+			description="Draw prettier lines. Most noticeable at bends in the motion trail with high widths.\nMore performance intensive",
+			default=False
 			)
 	timebeads: IntProperty(name="Time beads",
 			description="Number of time beads to display per segment",
@@ -3153,17 +3187,17 @@ def compare_ver(tup1, tup2):
 # == END of deleteable code ==
 			
 configurable_props = ["use_depsgraph", "allow_negative_scale", "allow_negative_handle_scale",
-"select_key", "select_threshold", "deselect_nohit_key", "deselect_always_key", "deselect_passthrough", "mode", "path_style", 
-"simple_color", "speed_color_min", "speed_color_max", "accel_color_neg", "accel_color_static", "accel_color_pos",
+"select_key", "select_threshold", "deselect_nohit_key", "deselect_always_key", "deselect_passthrough", "mode", 
+"path_style", "simple_color", "speed_color_min", "speed_color_max", "accel_color_neg", "accel_color_static", "accel_color_pos",
 "keyframe_color", "selection_color", "selection_color_dark", 
 "highlight_color", "highlight_size", "highlight_do_outline",
 ["point_color_loc", "point_color_rot", "point_color_scl"], "point_outline_size", "point_outline_blur",
 "keyframe_size", "frame_size", "frame_color",
-"handle_color_fac", "handle_line_color", "handle_size",
+"handle_color_fac", "handle_line_color", "handle_size", 
 "timebead_size", "timebead_color", 
 ["sensitivity_location", "sensitivity_rotation", "sensitivity_scale"], "sensitivity_shift", "sensitivity_alt",
 "text_color", "selected_text_color", "keyframe_text_size", "keyframe_text_offset_x", "keyframe_text_offset_y",
-"path_width", "path_step", "path_before", "path_after",
+"path_width", "path_step", "path_before", "path_after", "pretty_lines",
 "keyframe_numbers", "frame_display", 
 "handle_display", "handle_length", "handle_size", "handle_direction", 
 "show_spines", "spine_length", "spine_step", "spine_offset",

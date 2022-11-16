@@ -150,69 +150,48 @@ def chop_line(p1: Vector, p2: Vector, amt1, amt2):
 	fac2 = (totlen-amt2)/totlen
 	return (lerp(p1, p2, fac1), lerp(p1, p2, fac2))
 	
-def angle_bisector(central_point: Vector, p1: Vector, p2: Vector): # Lots of normalizing, slow?
-	v1 = central_point - p1
-	v2 = central_point - p2
-	v1.normalize()
-	v2.normalize()
-	summed = v1 + v2
-	if summed.length < 0.001:
-		return Vector((v1.y, -v1.x))
+def line_to_tris(points: list[Vector], colors: list[any], width: float, outline: float, to_append):
 
-	summed.normalize()
+	points2 = [points[0]]
+	points2.extend(points)
+	points2.append(points2[-1])
+	points2.append(points2[-1])
 	
-	return summed
+	for i in range(1, len(points)-1):
+		for dir in [1.0, -1.0]:
+			to_append[0].append((*points2[i], *points2[i+2]))
+			to_append[0].append((*points2[i], *points2[i+2]))
+			to_append[0].append((*points2[i+1], *points2[i+3]))
 
-def line_to_tris(points: list[Vector], colors: list[any], width: float) -> tuple[list[Vector], list[any], list[float]]:
-	"""Convert a line strip into a list of triangles, with a supplementary list for how far each point is from the centre"""
-	res_tris = []
-	res_dist = []
-	res_cols = []
+			to_append[1].append((*points2[i-1], *points2[i+1]))
+			to_append[1].append((*points2[i-1], *points2[i+1]))
+			to_append[1].append((*points2[i], *points2[i+2]))
 
-	bisectors = [None for i in range(len(points))]
-	normDir = (points[0] - points[1]).normalized()
-	bisectors[0] = Vector((normDir.y, -normDir.x))
-	last = len(points)-1
-	normDir = (points[last] - points[last-1]).normalized()
-	bisectors[last] = Vector((normDir.y, -normDir.x))
+			to_append[2].append(colors[i])
+			to_append[2].append(colors[i])
+			to_append[2].append(colors[i+1])
 
-	for i in range(1, last):
-		bisectors[i] = angle_bisector(points[i], points[i-1], points[i+1])
-	
-	for i in range(0, last):
+			to_append[3].append((0.0, width, outline))
+			to_append[3].append((width*dir, width, outline))
+			to_append[3].append((0.0, width, outline))
 
-		# Bisector direction correction, so that the triangles don't fold over themselves
-		if (bisectors[i] - bisectors[i+1]).length < 1.0:
-			dirs = [(-1, -1), (1, 1)]
-		else:
-			dirs = [(-1, 1), (1, -1)]
+			to_append[0].append((*points2[i+1], *points2[i+3]))
+			to_append[0].append((*points2[i], *points2[i+2]))
+			to_append[0].append((*points2[i+1], *points2[i+3]))
 
-		for (dir, dir2) in dirs:
-			res_tris.append(points[i])
-			res_tris.append(points[i] + bisectors[i]*width*dir2)
-			res_tris.append(points[i+1])
+			to_append[1].append((*points2[i], *points2[i+2]))
+			to_append[1].append((*points2[i-1], *points2[i+1]))
+			to_append[1].append((*points2[i], *points2[i+2]))
 
-			res_cols.append(colors[i])
-			res_cols.append(colors[i])
-			res_cols.append(colors[i+1])
+			to_append[2].append(colors[i+1])
+			to_append[2].append(colors[i])
+			to_append[2].append(colors[i+1])
 
-			res_dist.append(0)
-			res_dist.append(width)
-			res_dist.append(0)
+			to_append[3].append((0.0, width, outline))
+			to_append[3].append((width*dir, width, outline))
+			to_append[3].append((width*dir, width, outline))
 
-			res_tris.append(points[i+1])
-			res_tris.append(points[i] + bisectors[i]*width*dir2)
-			res_tris.append(points[i+1] + bisectors[i+1]*width*dir)
-
-			res_cols.append(colors[i+1])
-			res_cols.append(colors[i])
-			res_cols.append(colors[i+1])
-
-			res_dist.append(0)
-			res_dist.append(width)
-			res_dist.append(width)
-
-	return (res_tris, res_cols, res_dist)
+	return
 
 
 # fake fcurve class, used if no fcurve is found for a path
@@ -1032,12 +1011,28 @@ colored_points_shader = gpu.types.GPUShader(point_vertex_shader, point_frag_shad
 tri_line_vertex_shader = """
 uniform mat4 ModelViewProjectionMatrix;
 
-in vec2 pos;
 in vec4 color;
-in float line_gradient;
+in vec4 pos_next2;
+in vec4 prevnext;
+in vec3 width_maxwidth_outline;
 
-out float _line_gradient;
+out vec2 width_outline;
 out vec4 _color;
+
+vec2 angle_bisector(vec2 central_point, vec2 p1, vec2 p2)
+{
+	p1 = central_point - p1;
+	p2 = central_point - p2;
+	p1 = normalize(p1);
+	p2 = normalize(p2);
+
+	vec2 summed = p1 + p2;
+	if (length(summed) < 0.001) {
+		return vec2(p1.y, -p1.x);
+	}
+	
+	return normalize(summed);
+}
 
 void main()
 {
@@ -1052,7 +1047,6 @@ tri_line_fragment_shader = """
 
 in float _line_gradient;
 in vec4 _color;
-uniform float width;
 
 out vec4 FragColor;
 

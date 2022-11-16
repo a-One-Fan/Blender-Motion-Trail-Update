@@ -1209,9 +1209,9 @@ def draw_callback(self, context):
 			for i in range(6):
 				if to_use[i]:
 					cols.append(to_use_colors[i])
-					poss.append((locs[0][0], locs[0][1]))
+					poss.append(Vector((locs[0][0], locs[0][1])))
 					cols.append(to_use_colors[i])
-					poss.append((locs[1][i][0], locs[1][i][1]))
+					poss.append(Vector((locs[1][i][0], locs[1][i][1])))
 					line_converter(poss, cols, mt.path_width, 0.0, for_shader) # TODO: spine width
 					poss.clear()
 					cols.clear()

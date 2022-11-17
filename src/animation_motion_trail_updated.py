@@ -2403,9 +2403,19 @@ class MotionTrailLoadDefaults(bpy.types.Operator):
 	bl_label="Load Defaults"
 	bl_description="Reset all the current settings to match what's in the addon's preferences"
 	
+	def draw(self, context):
+		layout = self.layout
+		col = layout.column()
+		col.label(text="Are you sure?")
+		col.label(text="If not, click off of this dialog box, or ESCape.")
+	
 	def execute(self, context):
 		load_defaults(context)
 		return {'FINISHED'}
+
+	def invoke(self, context, event):
+		wm = context.window_manager
+		return wm.invoke_props_dialog(self)
 
 def save_defaults(context):
 	prefs = context.preferences.addons[__name__].preferences

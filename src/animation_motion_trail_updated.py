@@ -1497,7 +1497,7 @@ def drag(self, context: Context, event):
 		other_side = 1 - side
 		originals = [this_ori_kf[1], this_ori_kf[2]]
 
-		if getattr(kf, sides_type[side]) in ('AUTO', 'AUTO_CLAMPED', 'ANIM_CLAMPED'):
+		if getattr(kf, sides_type[side]) in ('AUTO', 'AUTO_CLAMPED'):
 			kf.handle_left_type = 'ALIGNED'
 			kf.handle_right_type = 'ALIGNED'
 		elif getattr(kf, sides_type[side]) == 'VECTOR':
@@ -1575,8 +1575,8 @@ def drag(self, context: Context, event):
 				dif_left = centre - Vector(this_ori_kf[1])
 				dif_right = centre - Vector(this_ori_kf[2])
 
-				if kf.handle_left_type in ('AUTO', 'AUTO_CLAMPED', 'ANIM_CLAMPED') or \
-					kf.handle_right_type in ('AUTO', 'AUTO_CLAMPED', 'ANIM_CLAMPED'):
+				if kf.handle_left_type in ('AUTO', 'AUTO_CLAMPED') or \
+					kf.handle_right_type in ('AUTO', 'AUTO_CLAMPED'):
 					kf.handle_left_type = 'ALIGNED'
 					kf.handle_right_type = 'ALIGNED'
 

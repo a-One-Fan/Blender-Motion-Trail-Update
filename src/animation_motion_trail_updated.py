@@ -2669,10 +2669,21 @@ class MotionTrailPanel(bpy.types.Panel):
 			col.label(text="For the time being, confirm/cancel")
 			col.label(text="is LMB/RMB or Esc")
 		
-		col = self.layout.column()
-		col.operator("view3d.motion_trail_load_defaults")
-		col.operator("view3d.motion_trail_save_defaults")
-		col.operator("view3d.motion_trail_save_userpref")
+		box = self.layout.box()
+		col = box.column()
+		row = col.row()
+
+		if mt.saveload_display:
+			row.prop(mt, "saveload_display", icon="DOWNARROW_HLT", text="", emboss=False)
+		else:
+			row.prop(mt, "saveload_display", icon="RIGHTARROW", text="", emboss=False)
+
+		row.label(text="Save/load")
+
+		if mt.saveload_display:
+			col.operator("view3d.motion_trail_load_defaults")
+			col.operator("view3d.motion_trail_save_defaults")
+			col.operator("view3d.motion_trail_save_userpref")
 
 DESELECT_WARNING = "Deselection will happen before your click registers to the rest of Blender.\n" +\
 	"This can prevent you from changing the handle type if it's set to left click"
@@ -2860,6 +2871,11 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			min=0.01, # 0.0 breaks range mapping in the shader (min=max) and causes it to flip its output, making the points invisible
 			step=0.1
 			)
+	
+	saveload_display: BoolProperty(name="Save/load",
+			description="Display save and load options",
+			default=True
+	)
 
 	do_location: BoolProperty(name="Do Location",
 			description="Show and work with location keyframes",

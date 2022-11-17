@@ -1492,23 +1492,19 @@ def drag(self, context: Context, event):
 	chosen_chans = self.chosen_chans
 
 	def update_this_handle(kf: Keyframe, side: bool, dif: float, this_ori_kf):
-		sides_type = [kf.handle_left_type, kf.handle_right_type]
+		sides_type = ["handle_left_type", "handle_right_type"]
 		sides = [kf.handle_left, kf.handle_right]
 		other_side = 1 - side
 		originals = [this_ori_kf[1], this_ori_kf[2]]
 
-		if sides_type[side] in ('AUTO', 'AUTO_CLAMPED', 'ANIM_CLAMPED'):
-			sides_type[side] = 'ALIGNED'
-		elif sides_type[side] == 'VECTOR':
-			sides_type[side] = 'FREE'
+		if getattr(kf, sides_type[side]) in ('AUTO', 'AUTO_CLAMPED', 'ANIM_CLAMPED'):
+			kf.handle_left_type = 'ALIGNED'
+			kf.handle_right_type = 'ALIGNED'
+		elif getattr(kf, sides_type[side]) == 'VECTOR':
+			kf.handle_left_type = 'FREE'
+			kf.handle_right_type = 'FREE'
 
 		sides[side][1] = originals[side][1] + dif
-
-		if sides_type[side] == 'ALIGNED' and not kf.co[0] == sides[side][0]: # TODO: Should fcurve.update() be used here?
-			a = (sides[side][1]-kf.co[1]) / (sides[side][0]-kf.co[0]) # a = (y1-y2)/(x1-x2)
-			b = sides[side][1] - a * sides[side][0] # b = y1-ax1
-			
-			sides[other_side][1] = a * sides[other_side][0] + b # y = ax + b
 
 	def quat_transform(oldd: list[float], quat_vals: list[float]):
 		to_eul = Vector(Quaternion(quat_vals).to_euler())
@@ -1553,6 +1549,8 @@ def drag(self, context: Context, event):
 				elif not extra == "left":
 					update_this_handle(kf, 1, d_sens[fcurvi], this_ori_kf)
 
+				all_curves[chan][fcurvi].update()
+
 		elif self.op_type == 2: #If trying to scale, scale keyframe handle/s    Is this if necessary?
 			d_sens = d.copy() * 0.2
 			
@@ -1574,8 +1572,16 @@ def drag(self, context: Context, event):
 				centre = Vector(this_ori_kf[0])
 				dif_left = centre - Vector(this_ori_kf[1])
 				dif_right = centre - Vector(this_ori_kf[2])
+
+				if kf.handle_left_type in ('AUTO', 'AUTO_CLAMPED', 'ANIM_CLAMPED') or \
+					kf.handle_right_type in ('AUTO', 'AUTO_CLAMPED', 'ANIM_CLAMPED'):
+					kf.handle_left_type = 'ALIGNED'
+					kf.handle_right_type = 'ALIGNED'
+
 				if do_left: kf.handle_left[0], kf.handle_left[1] = centre - d_sens[fcurvi] * dif_left
 				if do_right: kf.handle_right[0], kf.handle_right[1] = centre - d_sens[fcurvi] * dif_right
+
+				all_curves[chan][fcurvi].update()
 
 	# change position of all keyframes on timeline
 	elif mt.mode == 'timing' and self.active_timebead: # TODO: potential code merge with below timing if?

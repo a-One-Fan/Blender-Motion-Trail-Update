@@ -165,6 +165,9 @@ def angle_bisector(central_point: Vector, p1: Vector, p2: Vector): # Lots of nor
 
 def line_to_tris(points: list[Vector], colors: list, width: float, outline: float, to_append: tuple[list, list, list]):
 	"""Convert a line strip into a list of triangles, with a supplementary list for how far each point is from the centre"""
+	if len(points) < 2:
+		return
+
 	res_tris = []
 	res_dist = []
 	res_cols = []
@@ -215,6 +218,8 @@ def line_to_tris(points: list[Vector], colors: list, width: float, outline: floa
 	return
 
 def line_strip_to_lines(points: list[Vector], colors: list, width: float, outline: float, to_append: list[list]):
+	if len(points) < 2:
+		return
 	p2 = []
 	c2 = []
 	p2.append(points[0])
@@ -2043,6 +2048,13 @@ class MotionTrailOperator(bpy.types.Operator):
 		MotionTrailOperator._handle_draw = None
 		MotionTrailOperator._handle_update = None
 
+	def caches_set(self, mt):
+		getter = get_matrix_any_depsgraph if mt.use_depsgraph else get_matrix_any_custom_eval
+		self.cache = MatrixCache(getter)
+		getter_inverse = get_inverse_parents_depsgraph if mt.use_depsgraph else get_inverse_parents
+		self.cache_inverse = MatrixCache(getter_inverse)
+
+
 	def modal(self, context, event):
 		# XXX Required, or custom transform.translate will break!
 		# XXX If one disables and re-enables motion trail, modal op will still be running,
@@ -2059,6 +2071,12 @@ class MotionTrailOperator(bpy.types.Operator):
 		if mt.handle_update:
 			set_handle_type(self, context)
 			mt.handle_update = False
+
+		if mt.cache_change:
+			mt.cache_change = False
+			self.caches_set(mt)
+			mt.force_update = True
+			calc_callback(self, context)
 
 		if mt.use_depsgraph:
 			calc_callback(self, context)
@@ -2356,10 +2374,7 @@ class MotionTrailOperator(bpy.types.Operator):
 
 			mt.force_update = True
 			mt.handle_type_enabled = False
-			getter = get_matrix_any_depsgraph if mt.use_depsgraph else get_matrix_any_custom_eval
-			self.cache = MatrixCache(getter)
-			getter_inverse = get_inverse_parents_depsgraph if mt.use_depsgraph else get_inverse_parents
-			self.cache_inverse = MatrixCache(getter_inverse)
+			self.caches_set(mt)
 
 			MotionTrailOperator.handle_add(self, context)
 			mt.enabled = True
@@ -2694,15 +2709,15 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 		if context.area:
 			context.area.tag_redraw()
 
-	def restart_operator(self, context):
+	def restart_operator(self, context: Context):
 		if self.enabled:
-			bpy.ops.screen.animation_cancel(restore_frame=False)
-			bpy.ops.view3d.motion_trail(context, context, False)
-			bpy.ops.view3d.motion_trail(context, context, False)
+			context.window_manager.motion_trail.cache_change = True
 
 	# internal use
 	enabled: BoolProperty(default=False)
-	
+
+	cache_change: BoolProperty(default=False)
+
 	loaded_defaults: BoolProperty(default=False)
 
 	force_update: BoolProperty(name="internal use",

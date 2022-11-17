@@ -2447,6 +2447,26 @@ class MotionTrailSaveDefaults(bpy.types.Operator):
 		wm = context.window_manager
 		return wm.invoke_props_dialog(self)
 
+class MotionTrailSaveUserpref(bpy.types.Operator):
+	bl_idname="view3d.motion_trail_save_userpref"
+	bl_label="Save Preferences"
+	bl_description="Save the current user preferences"
+
+	def draw(self, context):
+		layout = self.layout
+		col = layout.column()
+		col.label(text="Are you sure?")
+		col.label(text="This will also save any other changes done to the user preferences.")
+		col.label(text="If not, click off of this dialog box, or ESCape.")
+	
+	def execute(self, context):
+		bpy.ops.wm.save_userpref()
+		return {'FINISHED'}
+
+	def invoke(self, context, event):
+		wm = context.window_manager
+		return wm.invoke_props_dialog(self)
+
 class MotionTrailPanel(bpy.types.Panel):
 	bl_idname = "VIEW3D_PT_motion_trail"
 	bl_category = "Animation"
@@ -2649,8 +2669,10 @@ class MotionTrailPanel(bpy.types.Panel):
 			col.label(text="For the time being, confirm/cancel")
 			col.label(text="is LMB/RMB or Esc")
 		
-		self.layout.column().operator("view3d.motion_trail_load_defaults")
-		self.layout.column().operator("view3d.motion_trail_save_defaults")
+		col = self.layout.column()
+		col.operator("view3d.motion_trail_load_defaults")
+		col.operator("view3d.motion_trail_save_defaults")
+		col.operator("view3d.motion_trail_save_userpref")
 
 DESELECT_WARNING = "Deselection will happen before your click registers to the rest of Blender.\n" +\
 	"This can prevent you from changing the handle type if it's set to left click"
@@ -3335,6 +3357,7 @@ classes = (
 		MotionTrailPreferences,
 		MotionTrailLoadDefaults,
 		MotionTrailSaveDefaults,
+		MotionTrailSaveUserpref,
 		MotionTrailCheckUpdate,
 		)
 

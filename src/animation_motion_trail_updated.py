@@ -2159,6 +2159,7 @@ class MotionTrailOperator(bpy.types.Operator):
 
 			if event.type == 'LEFTMOUSE' and event.value == 'PRESS':
 				# finish drag
+				get_handle_type(self, self.active_keyframe, self.active_handle) # TODO: not a complete fix for panel UI not updating fast
 				context.window.cursor_set('DEFAULT')
 				self.drag = False
 				mt.force_update = True

@@ -2413,16 +2413,20 @@ def save_defaults(context):
 	for p in flat_props:
 		current = getattr(context.window_manager.motion_trail, p)
 		setattr(prefs.default_trail_settings, p, current)
+
+	#bpy.ops.wm.save_userpref()
+
 # TODO: Saved data doesn't persist after closing blender?!
 class MotionTrailSaveDefaults(bpy.types.Operator):
 	bl_idname="view3d.motion_trail_save_defaults"
-	bl_label="Save Defaults"
-	bl_description="Overwrite the defaults in the addon's preferences with what the current settings are"
+	bl_label="Change Defaults"
+	bl_description="Overwrite the defaults in the addon's preferences with what the current settings are.\nThese changes will not persist if not saved from the user preferences"
 
 	def draw(self, context):
 		layout = self.layout
 		col = layout.column()
-		col.label(text="Are you sure you want to overwrite the defaults?")
+		col.label(text="Are you sure?")
+		col.label(text="Don't forget to save your user preferences!")
 		col.label(text="If not, click off of this dialog box, or ESCape.")
 	
 	def execute(self, context):

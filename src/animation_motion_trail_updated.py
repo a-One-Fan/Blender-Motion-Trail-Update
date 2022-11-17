@@ -1505,6 +1505,8 @@ def drag(self, context: Context, event):
 			kf.handle_right_type = 'FREE'
 
 		sides[side][1] = originals[side][1] + dif
+		if getattr(kf, sides_type[side]) == 'ALIGNED':
+			sides[other_side][1] = originals[other_side][1] - dif
 
 	def quat_transform(oldd: list[float], quat_vals: list[float]):
 		to_eul = Vector(Quaternion(quat_vals).to_euler())

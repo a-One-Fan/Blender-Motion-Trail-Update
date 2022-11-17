@@ -1604,6 +1604,30 @@ def drag(self, context: Context, event):
 
 		new_mapping = FloatMap()
 
+		if mt.retime_old_y:
+			cancel_drag(self, context)
+			retimedy = [[], [], []]
+			for chan in range(len(chosen_chans)):
+				if not chosen_chans[chan]:
+					continue
+
+				for fcurvi, curve in enumerate(all_curves[chan]):
+					retimedy[chan].append({})
+					for j, kf in enumerate(curve.keyframe_points):
+						frame_ori = kf.co[0]
+						
+						if frame_ori <= frame:
+							frame_new = (frame_ori - range_min) * shift_low + range_min
+						else:
+							frame_new = range_max - (range_max - frame_ori) * shift_high
+						
+						frame_new = max(
+									range_min + j, min(frame_new, range_max -
+									(len(curve.keyframe_points) - j) + 1)
+									)
+						retimedy[chan][fcurvi][j] = curve.evaluate(frame_new)
+
+
 		for chan in range(len(chosen_chans)):
 			if not chosen_chans[chan]:
 				continue
@@ -1630,6 +1654,13 @@ def drag(self, context: Context, event):
 					kf_ori = self.keyframes_ori[ob][chan][fcurvi][frame_ori]
 					kf.handle_left[0] = kf_ori[1][0] + d_frame
 					kf.handle_right[0] = kf_ori[2][0] + d_frame
+					if mt.retime_old_y:
+						newy = retimedy[chan][fcurvi][j]
+						ydiff = kf.co[1] - newy
+						kf.co[1] = newy
+						kf.handle_left[1] = kf_ori[1][1] - ydiff
+						kf.handle_right[1] = kf_ori[2][1] - ydiff
+				all_curves[chan][fcurvi].update()
 
 		del self.frame_map
 		self.frame_map = new_mapping
@@ -1689,6 +1720,21 @@ def drag(self, context: Context, event):
 		new_frame = maprange(drag_min, drag_max, range_both[0], range_both[1], drag_amt)
 		d_frame = new_frame - frame_ori
 
+
+		if mt.retime_old_y:
+			cancel_drag(self, context)
+			frame = extra
+			retimedy = [[] for i in range(len(chosen_chans))]
+
+			for chan in range(len(chosen_chans)):
+				if not chosen_chans[chan]:
+					continue
+				
+				kfs = get_keyframes(all_curves[chan], frame)
+				for (fcurvi, kf) in kfs:
+					retimedy[chan].append([])
+					retimedy[chan][fcurvi] = all_curves[chan][fcurvi].evaluate(new_frame)
+
 		for chan in range(len(chosen_chans)):
 			if not chosen_chans[chan]:
 				continue
@@ -1699,6 +1745,13 @@ def drag(self, context: Context, event):
 				kf.co[0] = new_frame
 				kf.handle_left[0] = this_ori_kf[1][0] + d_frame
 				kf.handle_right[0] = this_ori_kf[2][0] + d_frame
+				if mt.retime_old_y:
+					newy = retimedy[chan][fcurvi]
+					ydiff = this_ori_kf[0][1] - newy
+					kf.co[1] = newy
+					kf.handle_left[1] = this_ori_kf[1][1] + ydiff
+					kf.handle_right[1] = this_ori_kf[2][1] + ydiff
+				all_curves[chan][fcurvi].update()
 		
 		del self.frame_map # TODO: is this necessary?
 		self.frame_map = FloatMap()
@@ -1714,13 +1767,13 @@ def cancel_drag(self, context):
 	mt: MotionTrailProps = context.window_manager.motion_trail
 	ob, frame, extra, ori_chans = self.getactive()
 	chosen_chans = self.chosen_chans
-	curves = get_curves(ob)
+	all_curves = get_curves(ob)
 
 	# TODO: Merge these 2 ifs to simplify code
 	# revert change in values of active keyframe and its handles
 	if mt.mode == 'values':
 		chan = findlist(True, chosen_chans) # Only 1 channel is chooseable in values mode
-		kfs = get_keyframes(curves[chan], frame)
+		kfs = get_keyframes(all_curves[chan], frame)
 		for fcurvi, kf in kfs:
 			this_ori_kf = self.keyframes_ori[ob][chan][fcurvi][frame]
 			kf.co[1] = this_ori_kf[0][1]
@@ -1728,6 +1781,7 @@ def cancel_drag(self, context):
 			kf.handle_right[0], kf.handle_right[1] = this_ori_kf[2]
 			kf.handle_left_type = this_ori_kf[3]
 			kf.handle_right_type = this_ori_kf[4]
+			all_curves[chan][fcurvi].update()
 
 	# revert position of all keyframes and handles on timeline
 	elif mt.mode == 'timing':
@@ -1736,7 +1790,7 @@ def cancel_drag(self, context):
 			if not chosen_chans[chan]:
 				continue
 
-			for fcurvi, curve in enumerate(curves[chan]):
+			for fcurvi, curve in enumerate(all_curves[chan]):
 				for kf in curve.keyframe_points:
 					if not self.frame_map.exists(kf.co[0]):
 						continue
@@ -1749,6 +1803,7 @@ def cancel_drag(self, context):
 					kf.handle_right[0], kf.handle_right[1] = this_ori_kf[2]
 					kf.handle_left_type = this_ori_kf[3]
 					kf.handle_right_type = this_ori_kf[4]
+				all_curves[chan][fcurvi].update()
 				
 		if self.active_keyframe:
 			self.active_keyframe = (ob, extra, extra, ori_chans)
@@ -2410,7 +2465,9 @@ class MotionTrailPanel(bpy.types.Panel):
 		box.prop(mt, "mode")
 		# box.prop(mt, "calculate")
 		if mt.mode == 'timing':
-			box.prop(mt, "timebeads")
+			col = box.column()
+			col.prop(mt, "timebeads")
+			col.prop(mt, "retime_old_y")
 		if mt.mode == 'values':
 			col = box.column()
 			col.prop(mt, "allow_negative_scale")
@@ -2608,6 +2665,10 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 	# visible in user interface
 	use_depsgraph: BoolProperty(name="Use depsgraph",
 		description="Whether to use the depsgraph or not.\nUsing the depsgraph currently has the following ups and downs:\n\n+ Completely accurate motion trails that factor in all constraints, drivers, and so on.\n\n- Constantly resets un-keyframed changes to objects with keyframes.\n- Causes playback to pause when calculating (e.g. while dragging), due to which also...\n- Does not update with the graph editor or others.\n- Less performant",
+		default=False
+		)
+	retime_old_y: BoolProperty(name="Position on old Y",
+		description="Whether to put keyframes on the Y of the old f-curve rather than keeping their current Y.\nMay worsen drag performance",
 		default=False
 		)
 

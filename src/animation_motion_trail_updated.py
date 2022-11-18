@@ -1893,8 +1893,7 @@ def set_handle_type(self, context):
 		return (False)
 	new_type = mt.handle_type
 
-	if new_type in ('VECTOR', 'AUTO', 'AUTO_CLAMPED', 'ALIGNED'):
-		side = "both"
+	side = "both"
 
 	all_curves = get_curves(ob)
 	for chan in range(len(chans)):

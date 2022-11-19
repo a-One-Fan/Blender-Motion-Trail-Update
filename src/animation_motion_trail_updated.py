@@ -2079,6 +2079,13 @@ class MotionTrailOperator(bpy.types.Operator):
 			mt.force_update = True
 			calc_callback(self, context)
 
+		if mt.force_deselect:
+			self.active_frame = False
+			self.active_handle = False
+			self.active_keyframe = False
+			self.active_timebead = False
+			mt.force_deselect = False
+
 		if mt.use_depsgraph:
 			calc_callback(self, context)
 
@@ -2708,12 +2715,16 @@ DESELECT_WARNING = "Deselection will happen before your click registers to the r
 class MotionTrailProps(bpy.types.PropertyGroup):
 	def internal_update(self, context):
 		context.window_manager.motion_trail.force_update = True
-		if context.area:
+		if context.area: # TODO: is this necessary?
 			context.area.tag_redraw()
 
 	def restart_operator(self, context: Context):
 		if self.enabled:
 			context.window_manager.motion_trail.cache_change = True
+
+	def internal_update_deselect(self, context):
+		context.window_manager.motion_trail.force_update = True
+		context.window_manager.motion_trail.force_deselect = True
 
 	# internal use
 	enabled: BoolProperty(default=False)
@@ -2726,6 +2737,11 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 		description="Force calc_callback to fully execute",
 		default=False)
 	"""Force calc_callback to fully execute, clearing its cache. Expensive AND will freeze animations when DG is involved!"""
+
+	force_deselect: BoolProperty(
+		default=False
+	)
+	"""Force the motion trail to deselect everything"""
 		
 	handle_update: BoolProperty(default=False)
 	"""Tell the operator itself to update the handles."""
@@ -2773,7 +2789,7 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			("timing", "Timing", "Change position of keyframes on timeline")),
 			description="Enable editing of certain properties in the 3d-view",
 			default='values',
-			update=internal_update
+			update=internal_update_deselect
 			)
 	path_after: IntProperty(name="After",
 			description="Number of frames to show after the current frame, "
@@ -2898,17 +2914,17 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 	do_location: BoolProperty(name="Do Location",
 			description="Show and work with location keyframes",
 			default=True,
-			update=internal_update
+			update=internal_update_deselect
 			)
 	do_rotation: BoolProperty(name="Do Rotation",
 			description="Show and work with rotation keyframes",
 			default=False,
-			update=internal_update
+			update=internal_update_deselect
 			)
 	do_scale: BoolProperty(name="Do Scale",
 			description="Show and work with scale keyframes",
 			default=False,
-			update=internal_update
+			update=internal_update_deselect
 			)
 
 	allow_negative_scale: BoolProperty(name="Negative scaling",

@@ -2074,6 +2074,8 @@ class MotionTrailOperator(bpy.types.Operator):
 		if mt.cache_change:
 			mt.cache_change = False
 			self.caches_set(mt)
+			self.handle_remove()
+			self.handle_add(self, context)
 			mt.force_update = True
 			calc_callback(self, context)
 
@@ -2731,8 +2733,9 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 
 	# visible in user interface
 	use_depsgraph: BoolProperty(name="Use depsgraph",
-		description="Whether to use the depsgraph or not.\nTakes effect when motion trail is not active.\nUsing the depsgraph currently has the following ups and downs:\n\n+ Completely accurate motion trails that factor in all constraints, drivers, and so on.\n\n- Constantly resets un-keyframed changes to objects with keyframes.\n- Causes playback to pause when calculating (e.g. while dragging), due to which also...\n- Does not update with the graph editor or others.\n- Less performant",
-		default=False
+		description="Whether to use the depsgraph or not.\nUsing the depsgraph currently has the following ups and downs:\n\n+ Completely accurate motion trails that factor in all constraints, drivers, and so on.\n\n- Constantly resets un-keyframed changes to objects with keyframes.\n- Causes playback to pause when calculating (e.g. while dragging), due to which also...\n- Does not update with the graph editor or others.\n- Less performant",
+		default=False,
+		update=restart_operator
 		)
 	retime_old_y: BoolProperty(name="Position on old Y",
 		description="Whether to put keyframes on the Y of the old f-curve rather than keeping their current Y.\nMay worsen drag performance",

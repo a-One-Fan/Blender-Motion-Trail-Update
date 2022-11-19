@@ -2527,7 +2527,7 @@ class MotionTrailPanel(bpy.types.Panel):
 		if mt.mode == 'values':
 			col = box.column()
 			col.prop(mt, "allow_negative_scale")
-			col.prop(mt, "allow_negative_handle_scale")
+			#col.prop(mt, "allow_negative_handle_scale")
 
 		box = self.layout.box()
 		col = box.column()
@@ -3330,7 +3330,7 @@ def compare_ver(tup1, tup2):
 
 # == END of deleteable code ==
 			
-configurable_props = ["use_depsgraph", "allow_negative_scale", "allow_negative_handle_scale",
+configurable_props = ["use_depsgraph", "allow_negative_scale", #"allow_negative_handle_scale",
 ["do_location", "do_rotation", "do_scale"], "retime_old_y",
 "select_key", "select_threshold", "deselect_nohit_key", "deselect_always_key", "deselect_passthrough", "mode", 
 "path_style", "simple_color", "speed_color_min", "speed_color_max", "accel_color_neg", "accel_color_static", "accel_color_pos",

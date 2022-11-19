@@ -347,6 +347,9 @@ class FloatMap():
 
 		return (i < len(self.__kvps)) and (abs(key - self.__kvps[i][0]) < self.__eps)
 
+	def items(self):
+		return self.__kvps
+
 	def __setitem__(self, key, newval):
 		i = self.__findi(key)
 		
@@ -622,7 +625,7 @@ def get_original_animation_data(context):
 		keyframes_ori[ob] = [[], [], []]
 		for chan in range(len(curves)):
 			for fcurv in range(len(curves[chan])):
-				keyframes_ori[ob][chan].append({})
+				keyframes_ori[ob][chan].append(FloatMap())
 				kf: Keyframe
 				for kf in curves[chan][fcurv].keyframe_points:
 					keyframes_ori[ob][chan][fcurv][kf.co[0]] = \

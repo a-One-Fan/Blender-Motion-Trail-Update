@@ -2197,7 +2197,6 @@ class MotionTrailOperator(bpy.types.Operator):
 				# finish drag
 				get_handle_type(self, self.active_keyframe, self.active_handle) # TODO: not a complete fix for panel UI not updating fast
 				context.window.cursor_set('DEFAULT')
-				self.frame_map = FloatMap()
 				self.drag = False
 				mt.force_update = True
 				bpy.ops.ed.undo_push(message="Confirmed Motion Trail drag")
@@ -2229,6 +2228,7 @@ class MotionTrailOperator(bpy.types.Operator):
 					self.chosen_chans = single_chan(chans, 0)
 
 				self.loc_ori_ws = self.cache.get_location(frame, ob, context)
+				self.frame_map = FloatMap()
 				self.keyframes_ori = get_original_animation_data(context)
 				self.drag_mouse_ori = Vector([event.mouse_region_x, event.mouse_region_y])
 				self.drag_mouse_accumulate = Vector((0, 0))

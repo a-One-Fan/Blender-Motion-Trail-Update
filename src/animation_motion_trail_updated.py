@@ -23,7 +23,7 @@ bl_info = {
 	"version": (1, 0, 0),
 	"blender": (3, 2, 0),
 	"location": "View3D > Toolbar > Motion Trail tab",
-	"warning": "Support for features not originally present is buggy; NO UNDO!!!",
+	"warning": "Please keep the depsgraph toggle in mind, and remember to save often.",
 	"description": "Display and edit motion trails in the 3D View",
 	"category": "Animation",
 }

@@ -2073,6 +2073,8 @@ class MotionTrailOperator(bpy.types.Operator):
 
 		if mt.cache_change:
 			mt.cache_change = False
+			if mt.use_depsgraph:
+				bpy.ops.ed.undo_push(message="Motion trail enabled depsgraph")
 			self.caches_set(mt)
 			self.handle_remove()
 			self.handle_add(self, context)

@@ -1556,7 +1556,7 @@ def drag(self, context: Context, event):
 
 				if not extra == "right":
 					update_this_handle(kf, 0, d_sens[fcurvi], this_ori_kf)
-				elif not extra == "left":
+				if not extra == "left":
 					update_this_handle(kf, 1, d_sens[fcurvi], this_ori_kf)
 
 				all_curves[chan][fcurvi].update()

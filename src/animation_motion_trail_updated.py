@@ -1870,6 +1870,18 @@ def insert_keyframe(frame: float, ob: Object, chans: list[bool]):
 			
 			c.keyframe_points.insert(frame, y)
 
+def delete_keyframe(frame: float, ob: Object, chans: list[bool]):
+	all_curves = get_curves(ob)
+	for chan in range(len(chans)):
+		if not chans[chan]:
+			continue
+		
+		kfs = get_keyframes(all_curves[chan], frame)
+		for fcurvi, kf in kfs:
+			c = all_curves[chan][fcurvi]
+			c.keyframe_points.remove(kf)
+			c.update()
+
 def handle_update(self, context):
 	mt: MotionTrailProps = context.window_manager.motion_trail
 	mt.handle_update = True
@@ -2324,6 +2336,16 @@ class MotionTrailOperator(bpy.types.Operator):
 				self.active_timebead = False
 				self.active_frame = False
 				mt.handle_type_enabled = False
+
+			elif event.type == 'X' and event.value == 'PRESS': #TODO: hardcoded delete key
+				if self.active_keyframe:
+					ob, frame, extra, chans = self.active_keyframe
+					delete_keyframe(frame, ob, chans)
+					bpy.ops.ed.undo_push(message="Motion trail deleted keyframes")
+					no_passthrough = True
+					self.active_keyframe = None
+					mt.force_update = True
+					calc_callback(self, context)
 
 		if context.area:  # not available if other window-type is fullscreen
 			context.area.tag_redraw()

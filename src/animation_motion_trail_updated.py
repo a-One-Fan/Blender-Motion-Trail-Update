@@ -2461,18 +2461,19 @@ def save_defaults(context):
 # TODO: Saved data doesn't persist after closing blender?!
 class MotionTrailSaveDefaults(bpy.types.Operator):
 	bl_idname="view3d.motion_trail_save_defaults"
-	bl_label="Change Defaults"
-	bl_description="Overwrite the defaults in the addon's preferences with what the current settings are.\nThese changes will not persist if not saved from the user preferences"
+	bl_label="Save Defaults"
+	bl_description="Overwrite the defaults in the addon's preferences with what the current settings are.\nThis will also save the user preferences"
 
 	def draw(self, context):
 		layout = self.layout
 		col = layout.column()
 		col.label(text="Are you sure?")
-		col.label(text="Don't forget to save your user preferences!")
+		col.label(text="This will also save the user preferences!")
 		col.label(text="If not, click off of this dialog box, or ESCape.")
 	
 	def execute(self, context):
 		save_defaults(context)
+		bpy.ops.wm.save_userpref()
 		return {'FINISHED'}
 
 	def invoke(self, context, event):
@@ -2715,7 +2716,7 @@ class MotionTrailPanel(bpy.types.Panel):
 		if mt.saveload_display:
 			col.operator("view3d.motion_trail_load_defaults")
 			col.operator("view3d.motion_trail_save_defaults")
-			col.operator("view3d.motion_trail_save_userpref")
+			#col.operator("view3d.motion_trail_save_userpref")
 
 DESELECT_WARNING = "Deselection will happen before your click registers to the rest of Blender.\n" +\
 	"This can prevent you from changing the handle type if it's set to left click"
@@ -3415,7 +3416,7 @@ classes = (
 		MotionTrailPreferences,
 		MotionTrailLoadDefaults,
 		MotionTrailSaveDefaults,
-		MotionTrailSaveUserpref,
+		#MotionTrailSaveUserpref,
 		MotionTrailCheckUpdate,
 		)
 

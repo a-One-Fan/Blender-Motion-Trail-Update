@@ -713,12 +713,13 @@ def calc_callback(self, context):
 	self.last_frame = context.scene.frame_float
 
 	# dictionaries with key: objectname
-	self.paths = {} 	           # value: list of lists with x, y, color and frame
-	self.keyframes = {}            # value: dict with frame as key and [x,y] as value
-	self.handles = {}    # value: {ob: [{frame: {"left": co, "right":co}, ...} x3], ...}
-	self.timebeads = {}            # value: dict with frame as key and [x,y] as value
-	self.click = {} 	           # value: list of lists with frame, type, loc-vector
-	self.spines = {}               # value: dict with frame as key and [x0,y0, [(x1, y1), (x2,y2), ...]] as values, for 1..6 where xy1,2,3 = +x,+y,+z and x4,5,6 = -x,-y,-z
+	self.paths = {}					# value: list of lists with x, y, color and frame
+	self.keyframes = {}				# value: dict with frame as key and [x,y] as value
+	self.handles = {}    			# value: {ob: [{frame: {"left": co, "right":co}, ...} x3], ...}
+	self.timebeads = {}            	# value: dict with frame as key and [x,y] as value
+	self.click = {}					# value: list of lists with frame, type, loc-vector
+	self.spines = {}				# value: dict with frame as key and [x0,y0, [(x1, y1), (x2,y2), ...]] as values, for 1..6 where xy1,2,3 = +x,+y,+z and x4,5,6 = -x,-y,-z
+	self.unfull = {}				# value: {ob: [[x, y], [[bool, bool, bool], [bool, bool, bool, ...?], ...]] } where each bool denotes whether a keyframe was missing or not, per-transform then per-channel
 	if selection_change:
 		# value: editbone inverted rotation matrix or None
 		self.active_keyframe = False
@@ -816,6 +817,7 @@ def calc_callback(self, context):
 			keyframes = [{}, {}, {}]
 			handle_difs = [{}, {}, {}]
 			kf_time = [[], [], []]
+			kf_unfull = [FloatMap(), FloatMap(), FloatMap()]
 			click = []
 
 			# TODO: should this be called "categories"?
@@ -827,8 +829,8 @@ def calc_callback(self, context):
 
 				quat = len(curves[chan]) == 4
 
-				for fc in curves[chan]:
-					for kf in fc.keyframe_points:
+				for fcurvi in range(len(curves[chan])):
+					for kf in curves[chan][fcurvi].keyframe_points:
 						# handles for values mode
 						if mt.mode == "values":
 							if kf.co[0] not in handle_difs[chan]:
@@ -859,8 +861,8 @@ def calc_callback(self, context):
 									lco = -ldiff.length
 									rco = rdiff.length
 								
-								handle_difs[chan][kf.co[0]]["left"][fc.array_index] = lco
-								handle_difs[chan][kf.co[0]]["right"][fc.array_index] = rco
+								handle_difs[chan][kf.co[0]]["left"][fcurvi] = lco
+								handle_difs[chan][kf.co[0]]["right"][fcurvi] = rco
 
 							else:
 								# !! This code running multiple times might sound bad, but consider the worse scenario in which someone shifted a single quaternion keyframe. This handles it.
@@ -871,6 +873,13 @@ def calc_callback(self, context):
 								handle_difs[chan][kf.co[0]]["left"] = vec
 								handle_difs[chan][kf.co[0]]["right"] = -vec
 
+						# Save fullness for a given frame
+						if mt.report_unfull:
+							if kf_unfull[chan].exists(kf.co[0]):
+								kf_unfull[chan][kf.co[0]][fcurvi] = True
+							else:
+								kf_unfull[chan][kf.co[0]] = [i == fcurvi for i in range(len(curves[chan]))]
+						
 						# keyframes
 						if kf.co[0] in kf_time[chan]:
 							continue
@@ -889,6 +898,31 @@ def calc_callback(self, context):
 
 			for kf_frame, [coords, kf_channels] in self.keyframes[ob].items():
 				click.append( [kf_frame, "keyframe", Vector(coords), kf_channels] )
+
+			if mt.report_unfull:
+				unfull_res = FloatMap()
+				padded_unfull = []
+				for chan in range(len(channels)):
+					if not channels[chan]: 
+						continue
+					for frame, fullness in kf_unfull[chan].items():
+						if sum(fullness) < len(curves[chan]):
+							if not unfull_res.exists(frame):
+								unfull_res[frame] = [None for i in range(len(channels))]
+
+							unfull_res[frame][chan] = fullness
+							
+				for frame, unpadded_unfull in unfull_res.items():
+					for chan in range(len(channels)):
+						if not channels[chan]: 
+							continue
+						if unpadded_unfull[chan] == None and self.keyframes[ob][frame][1][chan]:
+							unpadded_unfull[chan] = [True for i in range(len(curves[chan]))]
+					loc = self.cache.get_location(frame, ob, context)
+					x, y = world_to_screen(context, loc)
+					padded_unfull.append([[x, y], unpadded_unfull])
+				self.unfull[ob] = padded_unfull
+							
 
 			# handles are only shown in value-altering mode
 			if mt.mode == 'values' and mt.handle_display:
@@ -1163,7 +1197,8 @@ def draw_callback(self, context):
 	colored_points_shader.uniform_float("outline_radius", mt.point_outline_size)
 	colored_points_shader.uniform_float("outline_blur", mt.point_outline_blur)
 
-	radii = {"keyframe": mt.keyframe_size, "timebead": mt.timebead_size, "frame": mt.frame_size, "handle_left": mt.handle_size, "handle_right": mt.handle_size}
+	radii = {"keyframe": mt.keyframe_size, "timebead": mt.timebead_size, "frame": mt.frame_size, "handle_left": mt.handle_size, 
+		"handle_right": mt.handle_size, "unfull": mt.report_unfull_size}
 	maxr = max(radii.values())
 	maxr += mt.point_outline_size + mt.highlight_size + mt.point_outline_blur
 	gpu.state.point_size_set(maxr*2.0 + 3.0)
@@ -1347,6 +1382,28 @@ def draw_callback(self, context):
 				point_cols.append(colors_cooked[channels])
 			point_rads.append(mt.keyframe_size)
 			point_flags.append(True)
+
+	if mt.report_unfull:
+		margined_half_size = (mt.report_unfull_size + mt.point_outline_blur / 2.0) / 1.3 # 1.3 for tighter packing
+		margined_kf_size = mt.keyframe_size + mt.point_outline_size + mt.point_outline_blur + margined_half_size * 2.0
+		for ob, unfulls in self.unfull.items():
+			for [x, y], unfull_matrix in unfulls:
+				cols = 0
+
+				for chan, col in enumerate(unfull_matrix):
+					if col == None:
+						continue
+					for i, dot in enumerate(col):
+						new_x = x + margined_kf_size + cols * margined_half_size * 3.0
+						new_y = y + maprange(0, len(col)-1, -margined_half_size * len(col), margined_half_size * len(col), i)
+						point_poss.append([new_x, new_y])
+						if dot:
+							point_cols.append(colors_cooked[make_chan(chan)])
+						else:
+							point_cols.append((0.0, 0.0, 0.0, 1.0))
+						point_rads.append(mt.report_unfull_size)
+						point_flags.append(False)
+					cols += 1
 	
 	if mt.pretty_lines:
 		tri_line_shader.bind()
@@ -2661,6 +2718,12 @@ class MotionTrailPanel(bpy.types.Panel):
 					row.prop(mt, s)
 
 		box = self.layout.box()
+		col = box.column()
+		col.prop(mt, "report_unfull")
+		if mt.report_unfull:
+			col.prop(mt, "report_unfull_size")
+
+		box = self.layout.box()
 		col = box.column(align=True)
 		if mt.mode == 'values':
 			col.prop(mt, "handle_display",
@@ -2756,7 +2819,7 @@ class MotionTrailPanel(bpy.types.Panel):
 			#col.operator("view3d.motion_trail_save_userpref")
 
 DESELECT_WARNING = "Deselection will happen before your click registers to the rest of Blender.\n" +\
-	"This can prevent you from changing the handle type if it's set to left click"
+	"This can prevent you from changing the handle type if it's set to left click" # TODO: remove this
 
 class MotionTrailProps(bpy.types.PropertyGroup):
 	def internal_update(self, context):
@@ -2803,6 +2866,16 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 	retime_old_y: BoolProperty(name="Position on old Y",
 		description="Whether to put keyframes on the Y of the old f-curve rather than keeping their current Y.\nMay worsen drag performance",
 		default=False
+		)
+	report_unfull: BoolProperty(name="Report unfull keyframes",
+		description="Show a display next to motion trail keyframes indicating they're composed of\nless than the 3 real keyframes (4 for quaternion)",
+		default=True
+		)
+	report_unfull_size: FloatProperty(name="Report unfull size",
+		description="Radius of each individual point for the unfull keyframe display",
+		default=3.0,
+		min=0.0,
+		step=0.5
 		)
 
 	frame_display: BoolProperty(name="Frames",
@@ -3403,7 +3476,7 @@ def compare_ver(tup1, tup2):
 # == END of deleteable code ==
 			
 configurable_props = ["use_depsgraph", "allow_negative_scale", #"allow_negative_handle_scale",
-["do_location", "do_rotation", "do_scale"], "retime_old_y",
+["do_location", "do_rotation", "do_scale"], "retime_old_y", "report_unfull", "report_unfull_size",
 "select_key", "select_threshold", "deselect_nohit_key", "deselect_always_key", "deselect_passthrough", "mode", 
 "path_style", "simple_color", "speed_color_min", "speed_color_max", "accel_color_neg", "accel_color_static", "accel_color_pos",
 "keyframe_color", "selection_color", "selection_color_dark", 

@@ -1493,7 +1493,7 @@ def drag(self, context: Context, event):
 			d = swizzle_constraint(self.drag_mouse_accumulate * 0.05, self.constraint_axes)
 		else:
 			d = d * Vector(self.constraint_axes)
-	sensitivities = (mt.sensitivity_location, mt.sensitivity_rotation * 0.3, mt.sensitivity_scale * 0.7)
+	sensitivities = (mt.sensitivity_location, mt.sensitivity_rotation * 0.3, mt.sensitivity_scale * 0.1)
 	d_2d = self.drag_mouse_accumulate
 
 	all_curves = get_curves(ob)
@@ -2954,15 +2954,24 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 	
 	sensitivity_location: FloatProperty(name="Location sensitivity",
 			description="Sensitivity for location-related values",
-			default = 1.0
+			default = 1.0,
+			min=0.0,
+			soft_min=0.01,
+			step=0.15
 			)
 	sensitivity_rotation: FloatProperty(name="Rotation sensitivity",
 			description="Sensitivity for rotation-related values",
-			default = 1.0
+			default = 1.0,
+			min=0.0,
+			soft_min=0.01,
+			step=0.15
 			)
 	sensitivity_scale: FloatProperty(name="Scale sensitivity",
 			description="Sensitivity for scale-related values",
-			default = 1.0
+			default = 1.0,
+			min=0.0,
+			soft_min=0.01,
+			step=0.15
 			)
 	sensitivity_shift: FloatProperty(name="Shift sensitivity",
 			description="Sensitivity while holding shift",

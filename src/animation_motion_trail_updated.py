@@ -1397,7 +1397,7 @@ def draw_callback(self, context):
 						continue
 					for i, dot in enumerate(col):
 						new_x = x + margined_kf_size + cols * margined_half_size * 3.0
-						new_y = y + maprange(0, len(col)-1, -margined_half_size * len(col), margined_half_size * len(col), i)
+						new_y = y + maprange(0, len(col)-1, -margined_half_size * (len(col) * 2 - 3), margined_half_size * (len(col) * 2 - 3), i)
 						point_poss.append([new_x, new_y])
 						if dot:
 							point_cols.append(colors_cooked[make_chan(chan)])

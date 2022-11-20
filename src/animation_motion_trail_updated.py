@@ -2870,7 +2870,7 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 		default=False
 		)
 	report_unfull: BoolProperty(name="Display unfull keyframes",
-		description="Show a display next to motion trail keyframes indicating they're composed of\nless than the 3 real keyframes (4 for quaternion)",
+		description="Show a display next to motion trail keyframes indicating they're composed of\nless than 3 regular keyframes (<4 for quaternion)",
 		default=True
 		)
 	report_unfull_size: FloatProperty(name="Display unfull size",

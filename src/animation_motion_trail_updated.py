@@ -1683,6 +1683,7 @@ def drag(self, context: Context, event):
 			frame_ori = self.frame_map[frame]
 
 		bignum = 1e64 # TODO: is this big number good?
+		margin = 0.1 # To prevent accidentally losing our chosen keyframe when the user drags too close
 
 		range_both = [-bignum, bignum]
 		kf_ob_ori = self.keyframes_ori[ob]
@@ -1693,9 +1694,9 @@ def drag(self, context: Context, event):
 			for fcurvi in range(len(kf_ob_ori[chan])):
 				kfs_ori = self.keyframes_ori[ob][chan][fcurvi]
 				for kf_frame, kf in kfs_ori.items():
-					if kf_frame < frame_ori and kf_frame > range_both[0]:
+					if kf_frame < (frame_ori - margin) and kf_frame > range_both[0]:
 						range_both[0] = kf_frame
-					if kf_frame > frame_ori and kf_frame < range_both[1]:
+					if kf_frame > (frame_ori + margin) and kf_frame < range_both[1]:
 						range_both[1] = kf_frame
 
 		drag_min = -context.region.width
@@ -1704,7 +1705,6 @@ def drag(self, context: Context, event):
 
 		if range_both[0] != range_both[1]: # Drag when there's KFs around
 		
-			margin = 0.1 # To prevent accidentally losing our chosen keyframe when the user drags too close
 			if range_both[0] == -bignum: # Free drag beyond min
 				range_both[0] = frame_ori + (frame_ori - range_both[1]) + margin # + margin so it's centered
 				range_both[1] -= margin
@@ -2196,6 +2196,9 @@ class MotionTrailOperator(bpy.types.Operator):
 			if event.type == 'LEFTMOUSE' and event.value == 'PRESS':
 				# finish drag
 				get_handle_type(self, self.active_keyframe, self.active_handle) # TODO: not a complete fix for panel UI not updating fast
+				if self.active_keyframe:
+					ob, new_frame, frame_ori, ori_chans = self.active_keyframe
+					self.active_keyframe = (ob, new_frame, new_frame, ori_chans)
 				context.window.cursor_set('DEFAULT')
 				self.drag = False
 				mt.force_update = True

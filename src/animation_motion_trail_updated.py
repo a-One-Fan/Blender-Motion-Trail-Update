@@ -2721,7 +2721,7 @@ class MotionTrailPanel(bpy.types.Panel):
 		col = box.column()
 		col.prop(mt, "report_unfull")
 		if mt.report_unfull:
-			col.prop(mt, "report_unfull_size")
+			col.prop(mt, "report_unfull_size", text="Size")
 
 		box = self.layout.box()
 		col = box.column(align=True)
@@ -2867,11 +2867,11 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 		description="Whether to put keyframes on the Y of the old f-curve rather than keeping their current Y.\nMay worsen drag performance",
 		default=False
 		)
-	report_unfull: BoolProperty(name="Report unfull keyframes",
+	report_unfull: BoolProperty(name="Display unfull keyframes",
 		description="Show a display next to motion trail keyframes indicating they're composed of\nless than the 3 real keyframes (4 for quaternion)",
 		default=True
 		)
-	report_unfull_size: FloatProperty(name="Report unfull size",
+	report_unfull_size: FloatProperty(name="Display unfull size",
 		description="Radius of each individual point for the unfull keyframe display",
 		default=3.0,
 		min=0.0,

@@ -719,7 +719,7 @@ def calc_callback(self, context):
 	self.timebeads = {}            	# value: dict with frame as key and [x,y] as value
 	self.click = {}					# value: list of lists with frame, type, loc-vector
 	self.spines = {}				# value: dict with frame as key and [x0,y0, [(x1, y1), (x2,y2), ...]] as values, for 1..6 where xy1,2,3 = +x,+y,+z and x4,5,6 = -x,-y,-z
-	self.unfull = {}				# value: {ob: [[x, y], [[bool, bool, bool], [bool, bool, bool, ...?], ...]] } where each bool denotes whether a keyframe was missing or not, per-transform then per-channel
+	self.unfull = {}				# value: {ob: [frame, [x, y], [[bool, bool, bool], [bool, bool, bool, ...?], ...]] } where each bool denotes whether a keyframe was missing or not, per-transform then per-channel
 	if selection_change:
 		# value: editbone inverted rotation matrix or None
 		self.active_keyframe = False
@@ -920,7 +920,7 @@ def calc_callback(self, context):
 							unpadded_unfull[chan] = [True for i in range(len(curves[chan]))]
 					loc = self.cache.get_location(frame, ob, context)
 					x, y = world_to_screen(context, loc)
-					padded_unfull.append([[x, y], unpadded_unfull])
+					padded_unfull.append([frame, [x, y], unpadded_unfull])
 				self.unfull[ob] = padded_unfull
 							
 
@@ -1387,7 +1387,9 @@ def draw_callback(self, context):
 		margined_half_size = (mt.report_unfull_size + mt.point_outline_blur / 2.0) / 1.3 # 1.3 for tighter packing
 		margined_kf_size = mt.keyframe_size + mt.point_outline_size + mt.point_outline_blur + margined_half_size * 2.0
 		for ob, unfulls in self.unfull.items():
-			for [x, y], unfull_matrix in unfulls:
+			for frame, [x, y], unfull_matrix in unfulls:
+				if frame < limit_min or frame > limit_max:
+					continue
 				cols = 0
 
 				for chan, col in enumerate(unfull_matrix):

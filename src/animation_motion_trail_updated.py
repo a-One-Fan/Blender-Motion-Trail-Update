@@ -1383,9 +1383,11 @@ def draw_callback(self, context):
 			point_rads.append(mt.keyframe_size)
 			point_flags.append(True)
 
+	# Draw unfull keyframe display
 	if mt.report_unfull:
 		margined_half_size = (mt.report_unfull_size + mt.point_outline_blur / 2.0) / 1.3 # 1.3 for tighter packing
 		margined_kf_size = mt.keyframe_size + mt.point_outline_size + mt.point_outline_blur + margined_half_size * 2.0
+		ydir = 1.0 if mt.report_unfull_side == "RIGHT" else -1.0
 		for ob, unfulls in self.unfull.items():
 			for frame, [x, y], unfull_matrix in unfulls:
 				if frame < limit_min or frame > limit_max:
@@ -1396,7 +1398,7 @@ def draw_callback(self, context):
 					if col == None:
 						continue
 					for i, dot in enumerate(col):
-						new_x = x + margined_kf_size + cols * margined_half_size * 3.0
+						new_x = x + (margined_kf_size + cols * margined_half_size * 3.0) * ydir
 						new_y = y + maprange(0, len(col)-1, -margined_half_size * (len(col) * 2 - 3), margined_half_size * (len(col) * 2 - 3), i)
 						point_poss.append([new_x, new_y])
 						if dot:
@@ -2724,6 +2726,9 @@ class MotionTrailPanel(bpy.types.Panel):
 		col.prop(mt, "report_unfull")
 		if mt.report_unfull:
 			col.prop(mt, "report_unfull_size", text="Size")
+			row = col.row()
+			row.label(text="Side:")
+			row.prop(mt, "report_unfull_side", expand=True)
 
 		box = self.layout.box()
 		col = box.column(align=True)
@@ -2878,6 +2883,11 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 		default=3.0,
 		min=0.0,
 		step=0.5
+		)
+	report_unfull_side: EnumProperty(name="Display unfull side",
+		description="Which side to put the unfull grid display on",
+		items=(("LEFT", "Left", ""), ("RIGHT", "Right", "")),
+		default="RIGHT"
 		)
 
 	frame_display: BoolProperty(name="Frames",
@@ -3478,7 +3488,7 @@ def compare_ver(tup1, tup2):
 # == END of deleteable code ==
 			
 configurable_props = ["use_depsgraph", "allow_negative_scale", #"allow_negative_handle_scale",
-["do_location", "do_rotation", "do_scale"], "retime_old_y", "report_unfull", "report_unfull_size",
+["do_location", "do_rotation", "do_scale"], "retime_old_y", "report_unfull", "report_unfull_size", "report_unfull_side",
 "select_key", "select_threshold", "deselect_nohit_key", "deselect_always_key", "deselect_passthrough", "mode", 
 "path_style", "simple_color", "speed_color_min", "speed_color_max", "accel_color_neg", "accel_color_static", "accel_color_pos",
 "keyframe_color", "selection_color", "selection_color_dark", 

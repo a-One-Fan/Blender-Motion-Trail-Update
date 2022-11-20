@@ -3367,7 +3367,7 @@ configurable_props = ["use_depsgraph", "allow_negative_scale", #"allow_negative_
 "timebead_size", "timebead_color", 
 ["sensitivity_location", "sensitivity_rotation", "sensitivity_scale"], "sensitivity_shift", "sensitivity_alt",
 "text_color", "selected_text_color", "keyframe_text_size", "keyframe_text_offset_x", "keyframe_text_offset_y",
-"path_width", "path_step", "path_before", "path_after", "pretty_lines",
+"path_width", "path_outline_width", "path_step", "path_before", "path_after", "pretty_lines",
 "keyframe_numbers", "frame_display", 
 "handle_display", "handle_length", "handle_size", "handle_direction", 
 "show_spines", "spine_length", "spine_step", "spine_offset",

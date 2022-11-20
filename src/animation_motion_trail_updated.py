@@ -814,7 +814,7 @@ def calc_callback(self, context):
 
 
 			# get keyframes and handles
-			keyframes = [{}, {}, {}]
+			keyframes = [FloatMap(), FloatMap(), FloatMap()]
 			handle_difs = [{}, {}, {}]
 			kf_time = [[], [], []]
 			kf_unfull = [FloatMap(), FloatMap(), FloatMap()]

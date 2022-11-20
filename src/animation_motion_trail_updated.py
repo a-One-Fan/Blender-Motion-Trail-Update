@@ -1942,6 +1942,10 @@ def force_update_callback(self, context):
 	
 	context.window_manager.motion_trail.force_update = True
 
+def is_event_key(event: bpy.types.Event, kmi: bpy.types.KeyMapItem):
+	if kmi.any:
+		return event.type == kmi.type
+	return event.type == kmi.type and event.shift == kmi.shift and event.alt == kmi.alt and event.ctrl == kmi.ctrl
 
 global_mtrail_handler_calc = None
 global_mtrail_handler_draw = None
@@ -2103,6 +2107,11 @@ class MotionTrailOperator(bpy.types.Operator):
 			self.active_timebead = False
 			mt.force_deselect = False
 
+		if is_event_key(event, self.undo_kmi):
+			mt.force_update = True
+			calc_callback(self, context)
+			return {'PASS_THROUGH'}
+		
 		if mt.use_depsgraph:
 			calc_callback(self, context)
 
@@ -2363,12 +2372,14 @@ class MotionTrailOperator(bpy.types.Operator):
 		# get clashing keymap items
 		wm = context.window_manager
 		keyconfig = wm.keyconfigs.active
-		kms = [
+		kms: list[bpy.types.KeyMap] = [
 			bpy.context.window_manager.keyconfigs.active.keymaps['3D View'],
-			bpy.context.window_manager.keyconfigs.active.keymaps['Object Mode']
+			bpy.context.window_manager.keyconfigs.active.keymaps['Object Mode'],
+			bpy.context.window_manager.keyconfigs.active.keymaps['Screen']
 			]
 		kmis = []
 		for km in kms:
+			kmi: bpy.types.KeyMapItem
 			for kmi in km.keymap_items:
 				# ??? "and not kmi.properties.texture_space" - why?
 				if kmi.map_type == 'KEYBOARD':
@@ -2381,6 +2392,9 @@ class MotionTrailOperator(bpy.types.Operator):
 				
 					if kmi.idname == "transform.resize": # ! Why the hell did they call it resize and not scale?!
 						scale_key = kmi.type
+
+					if kmi.idname == "ed.undo":
+						self.undo_kmi = kmi
 
 		self.transform_keys = [translate_key, rotate_key, scale_key]
 

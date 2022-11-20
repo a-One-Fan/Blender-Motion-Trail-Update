@@ -1,4 +1,4 @@
-# Before using, please note how the ups and downs of using the dependency graph with this addon.
+# Before using, please note the pros and cons of using the dependency graph with this addon.
  See the Blender artists forum post for more info: https://blenderartists.org/t/updated-version-of-the-old-motion-trail-addon/1395865
  (Also includes further usage instructions)
  

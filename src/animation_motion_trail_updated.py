@@ -2424,6 +2424,7 @@ class MotionTrailOperator(bpy.types.Operator):
 						insert_keyframe(frame, ob, (mt.do_location, mt.do_rotation, mt.do_scale))
 					else:
 						insert_keyframe(frame, ob, chans)
+					bpy.ops.ed.undo_push(message="Motion trail filled keyframes")
 					mt.force_update = True
 					calc_callback(self, context)
 

@@ -2417,6 +2417,16 @@ class MotionTrailOperator(bpy.types.Operator):
 					mt.force_update = True
 					calc_callback(self, context)
 
+			elif event.type == 'F' and event.value == 'PRESS': #TODO: hardcoded frame fill key
+				if self.active_keyframe:
+					ob, frame, extra, chans = self.active_keyframe
+					if event.shift:
+						insert_keyframe(frame, ob, (mt.do_location, mt.do_rotation, mt.do_scale))
+					else:
+						insert_keyframe(frame, ob, chans)
+					mt.force_update = True
+					calc_callback(self, context)
+
 		if context.area:  # not available if other window-type is fullscreen
 			context.area.tag_redraw()
 

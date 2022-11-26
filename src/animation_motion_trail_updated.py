@@ -762,6 +762,57 @@ def bezier_shift_by_fac(p1: Vector, p2: Vector, h1: Vector, h2: Vector, px: floa
 
 	return (newh1, newh2)
 
+def bezier_scale_by_time(p1: Vector, p2: Vector, h1: Vector, h2: Vector, px: float, amt: float, samples = 1000, subsamples = 40):
+	"""Returns new handles (h1, h2) such that the bezier curve has point p unaffected and the rest of the curve's points are moved closer to p by amt amount.
+	h1 and h2 are adjusted minimally, samples denotes how many tries for finding that minimum."""
+	# 0 = (-p + p1 - 2*fac*p1 + p1*fac^2 + p2*fac^2) + h1*(fac-fac^2) + h2*(fac-fac^2)
+	# r = h1*s + h2*s
+	# r/s = h1 + h2
+	# for some facs fac1 and fac2, where fac2 is closer to our point's fac and p is the point at fac1:
+	# (-p + p1 - 2*fac1*p1 + p1*fac1^2 + p2*fac1^2) + oldh1*(fac1-fac1^2) + oldh2*(fac1-fac1^2) = (-p + p1 - 2*fac2*p1 + p1*fac2^2 + p2*fac2^2) + h1*(fac2-fac2^2) + h2*(fac2-fac2^2)
+	# u = h1*s1 + h2*s1
+	# u/s1 = h1 + h2
+	# 
+	
+	#fac = bezier_time_by_x(p1, p2, h1, h2, px)
+	#p = bezier(p1, p2, h1, h2, fac)
+	#r = -p + p1 - p1 * (2.0*fac) + p1*(fac*fac) + p2*(fac*fac)
+	#r = -r
+	#s = fac - fac*fac
+	#rs = r / s
+	fac_ori = bezier_time_by_x(p1, p2, h1, h2, px)
+	p = bezier(p1, p2, h1, h2, fac_ori)
+
+	newh1 = h1.copy()
+	newh2 = h2.copy()
+	amt = 0.02*amt
+	midpoint = maprange(h1.x, h2.x, 0.0, 1.0, px)
+	xmid = lerp(h1.x, h2.x, midpoint)
+	newh1.x = lerp(h1.x, xmid, amt)
+	newh2.x = lerp(h2.x, xmid, amt)
+	fac = bezier_time_by_x(p1, p2, newh1, newh2, px)
+	shrinki = -subsamples
+
+	for i in range(samples): # TODO: better minimizing function? Though this is good enough
+		dif = abs(bezier(p1, p2, newh1, newh2, fac).y - p.y)
+
+		shrink_fac = (0.1/subsamples) * (subsamples-shrinki-1)
+		newnewh1 = newh1.copy()
+		newnewh1.y += shrink_fac
+		newnewh2 = newh2.copy()
+		newnewh2.y += shrink_fac
+		newdif = abs(bezier(p1, p2, newnewh1, newnewh2, fac).y - p.y)
+
+		if dif < newdif:
+			shrinki += 1
+		else:
+			shrinki = -subsamples
+			newh1 = newnewh1
+			newh2 = newnewh2
+
+	return (newh1, newh2)
+
+
 # callback function that calculates positions of all things that need be drawn
 def calc_callback(self, context):
 	# Remove handler if file was changed and we lose access to self
@@ -1654,6 +1705,7 @@ def drag(self, context: Context, event):
 			d = d * Vector(self.constraint_axes)
 	sensitivities = (mt.sensitivity_location, mt.sensitivity_rotation * 0.3, mt.sensitivity_scale * 0.1)
 	d_2d = self.drag_mouse_accumulate
+	d_1d = d_2d.x + d_2d.y
 
 	all_curves = get_curves(ob)
 	chosen_chans = self.chosen_chans
@@ -1728,12 +1780,16 @@ def drag(self, context: Context, event):
 					continue
 				prev_ori_kf = kf_ori[fcurvi][prev_k_frame]
 				next_ori_kf = kf_ori[fcurvi][next_k_frame]
-				newh1, newh2 = bezier_shift_by_fac(Vector(kf_prev.co), Vector(kf_next.co), prev_ori_kf[2], next_ori_kf[1], frame, d_sens[fcurvi])
+				if self.op_type == 2:
+					newh1, newh2 = bezier_scale_by_time(Vector(kf_prev.co), Vector(kf_next.co), prev_ori_kf[2], next_ori_kf[1], frame, d_1d)
+				else:
+					newh1, newh2 = bezier_shift_by_fac(Vector(kf_prev.co), Vector(kf_next.co), prev_ori_kf[2], next_ori_kf[1], frame, d_sens[fcurvi])
 				dif1 = newh1 - prev_ori_kf[2]
 				dif2 = newh2 - next_ori_kf[1]
 				update_this_handle(kf_prev, True, dif1, prev_ori_kf)
 				update_this_handle(kf_next, False, dif2, next_ori_kf)
-				all_curves[chan][fcurvi].update()
+				print(d_1d)
+				#all_curves[chan][fcurvi].update()
 
 			return
 

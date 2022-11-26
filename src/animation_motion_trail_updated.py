@@ -735,11 +735,14 @@ def bezier_shift_by_fac(p1: Vector, p2: Vector, h1: Vector, h2: Vector, px: floa
 	newh2 = rs - newh1
 	shrinki = -subsamples
 
-	for i in range(samples):
+	for i in range(samples): # TODO: better minimizing function? Though this is good enough
 		dif1 = newh1 - h1
 		dif2 = newh2 - h2
 		shrink_fac = (1.0/subsamples) * (subsamples-shrinki-1)
-		if dif1.length_squared > dif2.length_squared:
+		dif1len = dif1.length_squared
+		dif2len = dif2.length_squared
+
+		if dif1len > dif2len:
 			shrunk_dif = dif1 * shrink_fac
 			newnewh1 = h1 + shrunk_dif
 			newnewh2 = rs - newnewh1
@@ -750,7 +753,7 @@ def bezier_shift_by_fac(p1: Vector, p2: Vector, h1: Vector, h2: Vector, px: floa
 
 		newdif1 = newnewh1 - h1
 		newdif2 = newnewh2 - h2
-		if max(newdif1.length_squared, newdif2.length_squared) > max(dif1.length_squared, dif2.length_squared):
+		if max(newdif1.length_squared, newdif2.length_squared) > max(dif1len, dif2len):
 			shrinki += 1
 		else:
 			shrinki = -subsamples

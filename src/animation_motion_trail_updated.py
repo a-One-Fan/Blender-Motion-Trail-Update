@@ -679,6 +679,97 @@ def merge_dicts(dict_list):
 
 	return final_dict
 
+def bezier_time_by_x(p1: Vector, p2: Vector, h1: Vector, h2: Vector, px: float):
+	"""Returns the earliest time on a bezier curve a point with x = px"""
+	# p = (p1 * (1.0-fac) + h1*fac)*(1.0-fac) + fac*(p2 * fac + h2*(1.0-fac))
+	# p = p1*(1.0-fac)^2 + h1*fac - h1*fac^2 + p2*fac^2 + h2*fac - h2*fac^2
+	# p = p1 - 2*fac*p1 + p1*fac^2 + h1*fac - h1*fac^2 + p2*fac^2 + h2*fac - h2*fac^2
+	# 0 = (-p + p1) + fac*(-2p1 + h1 + h2) + fac^2*(p1 - h1 + p2 - h2) 
+
+	a = p1.x - h1.x + p2.x - h2.x
+	b = -2*p1.x + h1.x + h2.x
+	c = -px + p1.x
+	if a == 0:
+		return -c/b
+	d = b*b - 4*a*c
+	
+	facp = (-b + (d ** 0.5).real) / (2.0*a)
+	facn = (-b - (d ** 0.5).real) / (2.0*a)
+	
+	pbounded = facp > 0.0 and facp < 1.0
+	nbounded = facn > 0.0 and facn < 1.0
+	
+	if pbounded and nbounded:
+		return min(facp, facn)
+	if pbounded and not nbounded:
+		return facp
+	if nbounded and not pbounded:
+		return facn
+	
+def bezier(p1, p2, h1, h2, fac):
+	hp1 = lerp(p1, h1, fac)
+	hp2 = lerp(h2, p2, fac)
+	return lerp(hp1, hp2, fac)
+
+
+def bezier_shift_by_fac(p1: Vector, p2: Vector, h1: Vector, h2: Vector, px: float, ydiff: float, samples = 100, subsamples = 10):
+	"""Returns new handles (h1, h2) such that the bezier curve has point p shifted on y with ydiff, and retains its time on the curve.
+	h1 and h2 are adjusted minimally, samples denotes how many tries for finding that minimum."""
+	# p' = p1 - 2*fac*p1 + p1*fac^2 + h1*fac - h1*fac^2 + p2*fac^2 + h2*fac - h2*fac^2
+	# 0 = (-p' + p1 - 2*fac*p1 + p1*fac^2 + p2*fac^2) + h1*(fac-fac^2) + h2*(fac-fac^2)
+	# 0 = r + h1*s + h2*s => -r = h1*s + h2*s
+	# r/s = h1 + h2
+	# Choose an h1 and get h2 from it...
+	# h2 = rs - h1
+	
+	fac = bezier_time_by_x(p1, p2, h1, h2, px)
+	p = bezier(p1, p2, h1, h2, fac)
+	_p = Vector((p.x, p.y+ydiff))
+	r = -_p + p1 - p1 * (2.0*fac) + p1*(fac*fac) + p2*(fac*fac)
+	r = -r
+	s = fac - fac*fac
+	rs = r / s
+
+	# This needs to be deterministic to not jitter while dragging
+	newh1 = h1 + Vector((ydiff, 0.0))
+	newh2 = rs - newh1
+	shrinki = -subsamples
+
+	for i in range(samples):
+		dif1 = newh1 - h1
+		dif2 = newh2 - h2
+		shrink_fac = (1.0/subsamples) * (subsamples-shrinki-1)
+		if dif1.length_squared > dif2.length_squared:
+			shrunk_dif = dif1 * shrink_fac
+			newnewh1 = h1 + shrunk_dif
+			newnewh2 = rs - newnewh1
+		else:
+			shrunk_dif = dif2 * shrink_fac
+			newnewh2 = h2 + shrunk_dif
+			newnewh1 = rs - newnewh2
+
+		newdif1 = newnewh1 - h1
+		newdif2 = newnewh2 - h2
+		#print(dif1, dif2)
+		#print("shrink fac: {} newdif1: {} newdif2: {}".format(shrink_fac, newdif1, newdif2))
+		#print("dif max: new {} vs old {}".format(max(newdif1.length_squared, newdif2.length_squared), max(dif1.length_squared, dif2.length_squared)))
+		#print(newdif1.length_squared, newdif2.length_squared, dif1.length_squared, dif2.length_squared)
+		#print("\n")
+		if max(newdif1.length_squared, newdif2.length_squared) > max(dif1.length_squared, dif2.length_squared):
+			shrinki += 1
+		else:
+			shrinki = -subsamples
+			newh1 = newnewh1
+			newh2 = newnewh2
+
+	#print(rs)
+	#print(dif1, dif2)
+	#print(max(dif1.length, dif2.length))
+
+	#print("\n\n\n")
+
+	return (newh1, newh2)
+
 # callback function that calculates positions of all things that need be drawn
 def calc_callback(self, context):
 	# Remove handler if file was changed and we lose access to self
@@ -1536,6 +1627,21 @@ def get_keyframes(curves: list[FCurve], frame: float) -> list[tuple[int, Keyfram
 	
 	return res
 
+def get_keyframes_pad(curves: list[FCurve], frame: float) -> list[Keyframe | None]:
+	"""Returns a list of [Keyframe | None] for all the keyframes found in the list."""
+	res = []
+	for fcurve in curves:
+		found = False
+		for kf in fcurve.keyframe_points:
+			if abs(kf.co[0] - frame) < 0.0001:
+				res.append(kf)
+				found = True
+				break
+		if not found:
+			res.append(None)
+	
+	return res
+
 # change data based on mouse movement
 def drag(self, context: Context, event):
 	mt: MotionTrailProps = context.window_manager.motion_trail
@@ -1593,6 +1699,41 @@ def drag(self, context: Context, event):
 		kfs = get_keyframes(all_curves[chan], frame)
 		kf_ori = self.keyframes_ori[ob][chan]
 		d_sens = d * sensitivities[chan]
+
+		if self.active_frame: # If trying to grab a frame, adjust handles of 2 neigboring frames
+			bignum = 1e64 # TODO: is this big number good?
+
+			if len(all_curves[chan]) == 4:
+				d_sens = quat_transform(d_sens, [kf_ori[fcurvi][frame][0][1] for fcurvi in range(4)]) # TODO: deduplicate this code?
+
+			prev_k_frame = -bignum
+			next_k_frame = bignum
+			for fcurvi in range(len(all_curves[chan])):
+				for kf in all_curves[chan][fcurvi].keyframe_points:
+					if kf.co[0] > prev_k_frame and kf.co[0] < frame:
+						prev_k_frame = kf.co[0]
+					if kf.co[0] < next_k_frame and kf.co[0] > frame:
+						next_k_frame = kf.co[0]
+			
+			if prev_k_frame == -bignum or next_k_frame == bignum:
+				return
+
+			kfs_prev = get_keyframes_pad(all_curves[chan], prev_k_frame)
+			kfs_next = get_keyframes_pad(all_curves[chan], next_k_frame)
+
+			for fcurvi in range(len(all_curves[chan])):
+				kf_prev = kfs_prev[fcurvi]
+				kf_next = kfs_next[fcurvi]
+				if not kf_prev or not kf_next:
+					continue
+				prev_ori_kf = kf_ori[fcurvi][prev_k_frame]
+				next_ori_kf = kf_ori[fcurvi][next_k_frame]
+				newh1, newh2 = bezier_shift_by_fac(Vector(kf_prev.co), Vector(kf_next.co), prev_ori_kf[2], next_ori_kf[1], frame, d_sens[fcurvi])
+				#print("{}: shift by {}  {}, {} -> {}, {}".format(fcurvi, d_sens[fcurvi], prev_ori_kf[2], next_ori_kf[1], newh1, newh2))
+				kf_prev.handle_right = newh1
+				kf_next.handle_left = newh2
+
+			return
 
 		if self.op_type == 0 and self.active_keyframe: # If trying to grab a keyframe, move keyframe around
 
@@ -1836,48 +1977,31 @@ def drag(self, context: Context, event):
 # revert changes made by dragging
 def cancel_drag(self, context):
 	mt: MotionTrailProps = context.window_manager.motion_trail
-	ob, frame, extra, ori_chans = self.getactive()
+	ob, _frame, extra, ori_chans = self.getactive()
 	chosen_chans = self.chosen_chans
 	all_curves = get_curves(ob)
 
-	# TODO: Merge these 2 ifs to simplify code
-	# revert change in values of active keyframe and its handles
-	if mt.mode == 'values':
-		chan = findlist(True, chosen_chans) # Only 1 channel is chooseable in values mode
-		kfs = get_keyframes(all_curves[chan], frame)
-		for fcurvi, kf in kfs:
-			this_ori_kf = self.keyframes_ori[ob][chan][fcurvi][frame]
-			kf.co[1] = this_ori_kf[0][1]
-			kf.handle_left[0], kf.handle_left[1] = this_ori_kf[1] # TODO: Is writing it like this necessary? I feel assigning a list directly may not work. Test.
-			kf.handle_right[0], kf.handle_right[1] = this_ori_kf[2]
-			kf.handle_left_type = this_ori_kf[3]
-			kf.handle_right_type = this_ori_kf[4]
-			all_curves[chan][fcurvi].update()
+	for chan in range(len(chosen_chans)):
+		if not chosen_chans[chan]:
+			continue
 
-	# revert position of all keyframes and handles on timeline
-	elif mt.mode == 'timing':
-		
-		for chan in range(len(chosen_chans)):
-			if not chosen_chans[chan]:
-				continue
-
-			for fcurvi, curve in enumerate(all_curves[chan]):
-				for kf in curve.keyframe_points:
-					if not self.frame_map.exists(kf.co[0]):
-						continue
-
+		for fcurvi, curve in enumerate(all_curves[chan]):
+			for kf in curve.keyframe_points:
+				if self.frame_map.exists(kf.co[0]):
 					frame = self.frame_map[kf.co[0]]
-					
-					this_ori_kf = self.keyframes_ori[ob][chan][fcurvi][frame]
-					kf.co[0], kf.co[1] = this_ori_kf[0] # See above TODO
-					kf.handle_left[0], kf.handle_left[1] = this_ori_kf[1]
-					kf.handle_right[0], kf.handle_right[1] = this_ori_kf[2]
-					kf.handle_left_type = this_ori_kf[3]
-					kf.handle_right_type = this_ori_kf[4]
-				all_curves[chan][fcurvi].update()
+				else:
+					frame = kf.co[0]
 				
-		if self.active_keyframe:
-			self.active_keyframe = (ob, extra, extra, ori_chans)
+				this_ori_kf = self.keyframes_ori[ob][chan][fcurvi][frame]
+				kf.co[0], kf.co[1] = this_ori_kf[0] # See above TODO
+				kf.handle_left[0], kf.handle_left[1] = this_ori_kf[1]
+				kf.handle_right[0], kf.handle_right[1] = this_ori_kf[2]
+				kf.handle_left_type = this_ori_kf[3]
+				kf.handle_right_type = this_ori_kf[4]
+			all_curves[chan][fcurvi].update()
+			
+	if self.active_keyframe:
+		self.active_keyframe = (ob, extra, extra, ori_chans)
 
 	del self.frame_map
 	self.frame_map = FloatMap()
@@ -2294,16 +2418,6 @@ class MotionTrailOperator(bpy.types.Operator):
 				self.op_type = findlist(event.type, self.transform_keys)
 				self.chosen_channel = 0
 				context.window.cursor_set('SCROLL_XY')
-
-				if self.active_frame:
-					ob, frame, other, chans = self.active_frame
-					insert_keyframe(frame, ob, chans) # TODO: transforms selector for inserting keyframes
-					mt.force_update = True
-					calc_callback(self, context) 
-						
-					self.active_keyframe = self.active_frame
-					self.active_frame = False
-					bpy.ops.ed.undo_push(message="Motion Trail added keyframes")
 				
 				ob, frame, other, chans = self.getactive()
 
@@ -2411,7 +2525,7 @@ class MotionTrailOperator(bpy.types.Operator):
 				if self.active_keyframe:
 					ob, frame, extra, chans = self.active_keyframe
 					delete_keyframe(frame, ob, chans)
-					bpy.ops.ed.undo_push(message="Motion trail deleted keyframes")
+					bpy.ops.ed.undo_push(message="Motion Trail deleted keyframes")
 					no_passthrough = True
 					self.active_keyframe = None
 					mt.force_update = True
@@ -2424,9 +2538,19 @@ class MotionTrailOperator(bpy.types.Operator):
 						insert_keyframe(frame, ob, (mt.do_location, mt.do_rotation, mt.do_scale))
 					else:
 						insert_keyframe(frame, ob, chans)
-					bpy.ops.ed.undo_push(message="Motion trail filled keyframes")
+					bpy.ops.ed.undo_push(message="Motion Trail filled keyframes")
 					mt.force_update = True
 					calc_callback(self, context)
+
+				elif self.active_frame:
+					ob, frame, other, chans = self.active_frame
+					insert_keyframe(frame, ob, chans) # TODO: transforms selector for inserting keyframes
+					mt.force_update = True
+					calc_callback(self, context) 
+						
+					self.active_keyframe = self.active_frame
+					self.active_frame = False
+					bpy.ops.ed.undo_push(message="Motion Trail added new keyframes")
 
 		if context.area:  # not available if other window-type is fullscreen
 			context.area.tag_redraw()

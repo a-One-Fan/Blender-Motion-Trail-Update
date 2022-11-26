@@ -739,7 +739,11 @@ def bezier_shift_by_fac(p1: Vector, p2: Vector, h1: Vector, h2: Vector, px: floa
 		dif1 = newh1 - h1
 		dif2 = newh2 - h2
 		shrink_fac = (1.0/subsamples) * (subsamples-shrinki-1)
-		if dif1.length_squared > dif2.length_squared:
+
+		dif1len = dif1.length_squared
+		dif2len = dif2.length_squared
+
+		if dif1len > dif2len:
 			shrunk_dif = dif1 * shrink_fac
 			newnewh1 = h1 + shrunk_dif
 			newnewh2 = rs - newnewh1
@@ -750,7 +754,7 @@ def bezier_shift_by_fac(p1: Vector, p2: Vector, h1: Vector, h2: Vector, px: floa
 
 		newdif1 = newnewh1 - h1
 		newdif2 = newnewh2 - h2
-		if max(newdif1.length_squared, newdif2.length_squared) > max(dif1.length_squared, dif2.length_squared):
+		if max(newdif1.length_squared, newdif2.length_squared) > max(dif1len, dif2len):
 			shrinki += 1
 		else:
 			shrinki = -subsamples
@@ -1728,6 +1732,9 @@ def drag(self, context: Context, event):
 				newh1, newh2 = bezier_shift_by_fac(Vector(kf_prev.co), Vector(kf_next.co), prev_ori_kf[2], next_ori_kf[1], frame, d_sens[fcurvi])
 				dif1 = newh1 - prev_ori_kf[2]
 				dif2 = newh2 - next_ori_kf[1]
+				weight_vec = Vector((1.0-mt.frame_shift_weight, mt.frame_shift_weight)) * 2.0
+				dif1 *= weight_vec
+				dif2 *= weight_vec
 				update_this_handle(kf_prev, True, dif1, prev_ori_kf)
 				update_this_handle(kf_next, False, dif2, next_ori_kf)
 				all_curves[chan][fcurvi].update()
@@ -2827,6 +2834,7 @@ class MotionTrailPanel(bpy.types.Panel):
 			if mt.frame_display:
 				col.row().prop(mt, "frame_color")
 				col.row().prop(mt, "frame_size")
+				col.row().prop(mt, "frame_shift_weight")
 
 			# Spines
 			col.row().prop(mt, "show_spines")
@@ -3028,6 +3036,13 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			description="Display individual frames as manipulateable dots.\nClick and drag on one to make a new keyframe",
 			default=False,
 			update=internal_update
+			)
+	frame_shift_weight: FloatProperty(name="Frame shift weight",
+			description="Weight for which axis to shifting more while moving a frame, 0 = X, 1 = Y.\nMore intuitively, 1 = more movement and less clumped frames, 0 = less movement and more frame clumping",
+			default=0.5,
+			min=0.001,
+			max=0.999,
+			step=0.04
 			)
 	handle_display: BoolProperty(name="Display",
 			description="Display keyframe handles",
@@ -3628,7 +3643,7 @@ configurable_props = ["use_depsgraph", "allow_negative_scale", #"allow_negative_
 "keyframe_color", "selection_color", "selection_color_dark", 
 "highlight_color", "highlight_size", "highlight_do_outline",
 ["point_color_loc", "point_color_rot", "point_color_scl"], "point_outline_size", "point_outline_blur",
-"keyframe_size", "frame_size", "frame_color",
+"keyframe_size", "frame_size", "frame_color", "frame_shift_weight",
 "handle_color_fac", "handle_line_color", "handle_size", 
 "timebead_size", "timebead_color", 
 ["sensitivity_location", "sensitivity_rotation", "sensitivity_scale"], "sensitivity_shift", "sensitivity_alt",

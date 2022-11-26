@@ -712,7 +712,7 @@ def bezier(p1, p2, h1, h2, fac):
 	return lerp(hp1, hp2, fac)
 
 
-def bezier_shift_by_fac(p1: Vector, p2: Vector, h1: Vector, h2: Vector, px: float, ydiff: float, samples = 100, subsamples = 10):
+def bezier_shift_by_fac(p1: Vector, p2: Vector, h1: Vector, h2: Vector, px: float, ydiff: float, samples = 1000, subsamples = 15):
 	"""Returns new handles (h1, h2) such that the bezier curve has point p shifted on y with ydiff, and retains its time on the curve.
 	h1 and h2 are adjusted minimally, samples denotes how many tries for finding that minimum."""
 	# p' = p1 - 2*fac*p1 + p1*fac^2 + h1*fac - h1*fac^2 + p2*fac^2 + h2*fac - h2*fac^2
@@ -750,23 +750,12 @@ def bezier_shift_by_fac(p1: Vector, p2: Vector, h1: Vector, h2: Vector, px: floa
 
 		newdif1 = newnewh1 - h1
 		newdif2 = newnewh2 - h2
-		#print(dif1, dif2)
-		#print("shrink fac: {} newdif1: {} newdif2: {}".format(shrink_fac, newdif1, newdif2))
-		#print("dif max: new {} vs old {}".format(max(newdif1.length_squared, newdif2.length_squared), max(dif1.length_squared, dif2.length_squared)))
-		#print(newdif1.length_squared, newdif2.length_squared, dif1.length_squared, dif2.length_squared)
-		#print("\n")
 		if max(newdif1.length_squared, newdif2.length_squared) > max(dif1.length_squared, dif2.length_squared):
 			shrinki += 1
 		else:
 			shrinki = -subsamples
 			newh1 = newnewh1
 			newh2 = newnewh2
-
-	#print(rs)
-	#print(dif1, dif2)
-	#print(max(dif1.length, dif2.length))
-
-	#print("\n\n\n")
 
 	return (newh1, newh2)
 
@@ -1666,7 +1655,7 @@ def drag(self, context: Context, event):
 	all_curves = get_curves(ob)
 	chosen_chans = self.chosen_chans
 
-	def update_this_handle(kf: Keyframe, side: bool, dif: float, this_ori_kf):
+	def update_this_handle(kf: Keyframe, side: bool, dif: float | Vector, this_ori_kf):
 		sides_type = ["handle_left_type", "handle_right_type"]
 		sides = [kf.handle_left, kf.handle_right]
 		other_side = 1 - side
@@ -1679,9 +1668,17 @@ def drag(self, context: Context, event):
 			kf.handle_left_type = 'FREE'
 			kf.handle_right_type = 'FREE'
 
-		sides[side][1] = originals[side][1] + dif
+		if type(dif) is float:
+			sides[side][1] = originals[side][1] + dif
+		else:
+			sides[side][0] = originals[side][0] + dif.x
+			sides[side][1] = originals[side][1] + dif.y
 		if getattr(kf, sides_type[side]) == 'ALIGNED':
-			sides[other_side][1] = originals[other_side][1] - dif
+			if type(dif) is float:
+				sides[other_side][1] = originals[other_side][1] - dif
+			else:
+				sides[other_side][0] = originals[other_side][0] - dif.x
+				sides[other_side][1] = originals[other_side][1] - dif.y
 
 	def quat_transform(oldd: list[float], quat_vals: list[float]):
 		to_eul = Vector(Quaternion(quat_vals).to_euler())
@@ -1729,9 +1726,11 @@ def drag(self, context: Context, event):
 				prev_ori_kf = kf_ori[fcurvi][prev_k_frame]
 				next_ori_kf = kf_ori[fcurvi][next_k_frame]
 				newh1, newh2 = bezier_shift_by_fac(Vector(kf_prev.co), Vector(kf_next.co), prev_ori_kf[2], next_ori_kf[1], frame, d_sens[fcurvi])
-				#print("{}: shift by {}  {}, {} -> {}, {}".format(fcurvi, d_sens[fcurvi], prev_ori_kf[2], next_ori_kf[1], newh1, newh2))
-				kf_prev.handle_right = newh1
-				kf_next.handle_left = newh2
+				dif1 = newh1 - prev_ori_kf[2]
+				dif2 = newh2 - next_ori_kf[1]
+				update_this_handle(kf_prev, True, dif1, prev_ori_kf)
+				update_this_handle(kf_next, False, dif2, next_ori_kf)
+				all_curves[chan][fcurvi].update()
 
 			return
 

@@ -20,7 +20,7 @@
 bl_info = {
 	"name": "Motion Trail (update)",
 	"author": "Bart Crouch, Viktor_smg",
-	"version": (1, 0, 1),
+	"version": (1, 0, 2),
 	"blender": (3, 2, 0),
 	"location": "View3D > Toolbar > Motion Trail tab",
 	"warning": "Please keep the depsgraph toggle in mind, and remember to save often.",
@@ -1061,8 +1061,8 @@ in vec4 color;
 in vec3 wmo; // Width, max width, outline
 
 out float width;
-out flat vec2 maxw_outline;
 out vec4 _color;
+out flat vec2 maxw_outline;
 
 void main()
 {
@@ -1078,7 +1078,7 @@ tri_line_fragment_shader = """
 
 in float width;
 in vec4 _color;
-in vec2 maxw_outline;
+in flat vec2 maxw_outline;
 
 uniform float blur;
 

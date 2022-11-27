@@ -20,7 +20,7 @@
 bl_info = {
 	"name": "Motion Trail (update)",
 	"author": "Bart Crouch, Viktor_smg",
-	"version": (1, 0, 2),
+	"version": (1, 0, 3),
 	"blender": (3, 2, 0),
 	"location": "View3D > Toolbar > Motion Trail tab",
 	"warning": "Please keep the depsgraph toggle in mind, and remember to save often.",
@@ -1009,7 +1009,7 @@ void main()
 
 # TODO: Should this code be further optimized?
 point_frag_shader = """
-uniform vec2 resolution;
+//uniform vec2 resolution;
 uniform float outline_radius;
 uniform float outline_blur;
 //uniform vec3 outline_color;
@@ -1035,8 +1035,6 @@ float maprangeclamp(float oldmin, float oldmax, float newmin, float newmax, floa
 
 void main()
 {
-	float maxr = max(resolution.x, resolution.y); // Resizing like this is consistent with how the view behaves when areas are resized
-	float radius_corrected = _radius * (maxr / 500.0);
 	float do_outline = float(_flags % 2);
 
 	float dist = length(gl_FragCoord.xy - _pos);
@@ -1159,7 +1157,7 @@ def draw_callback(self, context):
 	colored_line_shader: gpu.types.GPUShader = gpu.shader.from_builtin('3D_POLYLINE_SMOOTH_COLOR')
 	#colored_points_shader = gpu.shader.from_builtin('2D_FLAT_COLOR')
 	colored_points_shader.uniform_float("ModelViewProjectionMatrix", bpy.context.region_data.perspective_matrix)
-	colored_points_shader.uniform_float("resolution", Vector((bpy.context.area.width, bpy.context.area.height)))
+	#colored_points_shader.uniform_float("resolution", Vector((bpy.context.area.width, bpy.context.area.height)))
 	colored_points_shader.uniform_float("outline_radius", mt.point_outline_size)
 	colored_points_shader.uniform_float("outline_blur", mt.point_outline_blur)
 

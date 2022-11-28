@@ -261,10 +261,10 @@ class fake_fcurve():
 
 
 class MatrixCache():
-	__mats: dict[(float, Object|PoseBone), (Matrix, Vector, Quaternion, Vector)]
-	getter: Callable[[float, Object|PoseBone, Context], Matrix]
+	__mats: dict[(float, Object | PoseBone), (Matrix, Vector, Quaternion, Vector)]
+	getter: Callable[[float, Object | PoseBone, Context], Matrix]
 
-	def __init__(self, _getter: Callable[[float, Object|PoseBone, Context], Matrix]):
+	def __init__(self, _getter: Callable[[float, Object | PoseBone, Context], Matrix]):
 		self.__mats = {}
 		self.getter = _getter
 

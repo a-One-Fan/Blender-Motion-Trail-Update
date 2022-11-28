@@ -1060,7 +1060,7 @@ in vec3 wmo; // Width, max width, outline
 
 out float width;
 out vec4 _color;
-out flat vec2 maxw_outline;
+flat out vec2 maxw_outline;
 
 void main()
 {
@@ -1076,7 +1076,7 @@ tri_line_fragment_shader = """
 
 in float width;
 in vec4 _color;
-in flat vec2 maxw_outline;
+flat in vec2 maxw_outline;
 
 uniform float blur;
 

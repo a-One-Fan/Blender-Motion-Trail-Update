@@ -2712,9 +2712,6 @@ class MotionTrailPanel(bpy.types.Panel):
 			col.operator("view3d.motion_trail_save_defaults")
 			#col.operator("view3d.motion_trail_save_userpref")
 
-DESELECT_WARNING = "Deselection will happen before your click registers to the rest of Blender.\n" +\
-	"This can prevent you from changing the handle type if it's set to left click"
-
 class MotionTrailProps(bpy.types.PropertyGroup):
 	def internal_update(self, context):
 		context.window_manager.motion_trail.force_update = True
@@ -2984,7 +2981,7 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			)
 	deselect_nohit_key: EnumProperty(name="Deselect miss key",
 			description="When your mouse is not over a selectable thing, " +\
-				"pressing this key will deselect.\n" + DESELECT_WARNING,
+				"pressing this key will deselect",
 			items=(
 			("LEFTMOUSE", "Left Mouse Button", ""),
 			("RIGHTMOUSE", "Right Mouse Button", ""),
@@ -2992,7 +2989,7 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			default='RIGHTMOUSE'
 			)
 	deselect_always_key: EnumProperty(name="Deselect always key",
-			description="Pressing this key will always deselect.\n" + DESELECT_WARNING,
+			description="Pressing this key will always deselect",
 			items=(
 			("LEFTMOUSE", "Left Mouse Button", ""),
 			("RIGHTMOUSE", "Right Mouse Button", ""),
@@ -3401,7 +3398,6 @@ class MotionTrailPreferences(bpy.types.AddonPreferences):
 			col.row().label(text="Version not checked yet...")
 		#end of deletable code
 
-		col.label(text=DESELECT_WARNING)
 		col.label(text="Default values for all settings:")
 		col.label(text="")
 		for p in configurable_props:

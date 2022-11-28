@@ -1152,20 +1152,9 @@ def draw_callback(self, context):
 
 		colors_cooked[c] = final
 
-
-	#uniform_line_shader = gpu.shader.from_builtin('3D_POLYLINE_UNIFORM_COLOR')
-	colored_line_shader: gpu.types.GPUShader = gpu.shader.from_builtin('3D_POLYLINE_SMOOTH_COLOR')
-	#colored_points_shader = gpu.shader.from_builtin('2D_FLAT_COLOR')
-	colored_points_shader.uniform_float("ModelViewProjectionMatrix", bpy.context.region_data.perspective_matrix)
-	#colored_points_shader.uniform_float("resolution", Vector((bpy.context.area.width, bpy.context.area.height)))
-	colored_points_shader.uniform_float("outline_radius", mt.point_outline_size)
-	colored_points_shader.uniform_float("outline_blur", mt.point_outline_blur)
-
 	radii = {"keyframe": mt.keyframe_size, "timebead": mt.timebead_size, "frame": mt.frame_size, "handle_left": mt.handle_size, "handle_right": mt.handle_size}
 	maxr = max(radii.values())
 	maxr += mt.point_outline_size + mt.highlight_size + mt.point_outline_blur
-	gpu.state.point_size_set(maxr*2.0 + 3.0)
-	gpu.state.blend_set("ALPHA")
 
 	poss = []
 	cols = []
@@ -1202,8 +1191,6 @@ def draw_callback(self, context):
 
 	# Draw rotation spines
 	if mt.show_spines:
-		colored_line_shader.bind()
-		colored_line_shader.uniform_float("lineWidth", 2)
 		poss = []
 		cols = []
 		for ob_spines in self.spines.values():
@@ -1230,7 +1217,6 @@ def draw_callback(self, context):
 
 	if self.highlighted_coord:
 		rad = radii[self.highlighted_coord[1]] + mt.point_outline_size + mt.highlight_size
-		colored_points_shader.bind()
 
 		point_poss.append(self.highlighted_coord[0])
 		point_cols.append(mt.highlight_color)
@@ -1273,8 +1259,6 @@ def draw_callback(self, context):
 
 	# handles are only shown in value mode
 	if mt.mode == 'values':
-		colored_line_shader.bind()
-		colored_line_shader.uniform_float("lineWidth", 2)
 		poss = []
 		cols = []
 
@@ -1346,13 +1330,18 @@ def draw_callback(self, context):
 			point_rads.append(mt.keyframe_size)
 			point_flags.append(True)
 	
+	gpu.state.point_size_set(maxr*2.0 + 3.0)
+	gpu.state.blend_set("ALPHA")
+
 	if mt.pretty_lines:
 		tri_line_shader.bind()
 		tri_line_shader.uniform_float("blur", 1.0)
 		batch = batch_for_shader(tri_line_shader, 'TRIS', {"pos": for_shader[0], "color": for_shader[1], "wmo": for_shader[2]})
 		batch.draw(tri_line_shader)
 	else:
+		colored_line_shader: gpu.types.GPUShader = gpu.shader.from_builtin('3D_POLYLINE_SMOOTH_COLOR')
 		if mt.path_outline_width > 0.0:
+			colored_line_shader.bind()
 			colored_line_shader.uniform_float("lineWidth", mt.path_width + mt.path_outline_width * 2.0)
 			batch = batch_for_shader(colored_line_shader, 'LINES', {"pos": outline_for_shader[0], "color": [(0.0, 0.0, 0.0, 1.0) for i in range(outline_for_shader[1])]})
 			batch.draw(colored_line_shader)
@@ -1363,9 +1352,11 @@ def draw_callback(self, context):
 		batch.draw(colored_line_shader)
 
 	colored_points_shader.bind()
+	#colored_points_shader.uniform_float("ModelViewProjectionMatrix", bpy.context.region_data.view_matrix)
+	colored_points_shader.uniform_float("outline_radius", mt.point_outline_size)
+	colored_points_shader.uniform_float("outline_blur", mt.point_outline_blur)
 	batch = batch_for_shader(colored_points_shader, 'POINTS', {"pos": point_poss, "color": point_cols, "radius": point_rads, "flags": point_flags})
 	batch.draw(colored_points_shader)
-
 
 	# draw keyframe-numbers
 	if mt.keyframe_numbers:
@@ -1440,9 +1431,9 @@ def draw_callback(self, context):
 				blf.draw(0, chan_texts[i])
 
 	# restore opengl defaults
-	gpu.state.point_size_set(1.0) # TODO: is this the correct value?
 	# ? gpu.state.blend_set("ALPHA")
 	# TODO: unbind shaders?
+	gpu.state.point_size_set(1.0) # TODO: is this the correct value?
 
 def swizzle_constraint(vec, constraint):
 	"""Given a 2D vector and a constraint of kind (a, b, c) where 1 or 2 values are True, swizzle a new 3D vector from the respective coords"""
@@ -2655,7 +2646,11 @@ class MotionTrailPanel(bpy.types.Panel):
 		row.label(text="Generic color options")
 
 		if mt.generic_colors_display:
-			col.prop(mt, "pretty_lines")
+			pretty_lines_row = col.row()
+			pretty_lines_row.prop(mt, "pretty_lines")
+			if bpy.app.version<(3, 4, 0):
+				pretty_lines_row.enabled = False
+				mt.pretty_lines = True
 			col.prop(mt, "keyframe_size")
 			col.prop(mt, "point_outline_size")
 			col.prop(mt, "point_outline_blur")
@@ -2852,7 +2847,7 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			soft_max=8.0
 			)
 	pretty_lines: BoolProperty(name="Pretty lines",
-			description="Draw lines that properly connect between each segment. Noticeable with high widths and strong bends in the motion trail.\nMore performance intensive",
+			description="Draw lines that properly connect between each segment.\nNoticeable with high widths and strong bends in the motion trail.\nMore performance intensive.\nThis option is forced on in Blender versions below 3.4, as currently there seems to be an issue with it off",
 			default=False
 			)
 	timebeads: IntProperty(name="Time beads",

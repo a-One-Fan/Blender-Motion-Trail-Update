@@ -18,10 +18,10 @@
 
 
 bl_info = {
-	"name": "Motion Trail (update)",
+	"name": "Motion Trail (update) (2.93 compatibility version)",
 	"author": "Bart Crouch, Viktor_smg",
 	"version": (1, 0, 4),
-	"blender": (3, 2, 0),
+	"blender": (2, 93, 0),
 	"location": "View3D > Toolbar > Motion Trail tab",
 	"warning": "Please keep the depsgraph toggle in mind, and remember to save often.",
 	"description": "Display and edit motion trails in the 3D View",
@@ -235,9 +235,15 @@ def line_strip_to_lines(points: list[Vector], colors: list, width: float, outlin
 	to_append[0].extend(p2)
 	to_append[1].extend(c2)
 	
+def scalemat(scale):
+	return Matrix([[scale[0], 0, 0, 0], [0, scale[1], 0, 0], [0, 0, scale[2], 0], [0, 0, 0, 1]])
+
+def locrotscale(loc, rot, scale):
+	return Matrix.Translation(loc) @ (rot.to_matrix().to_4x4()) @ scalemat(scale)
+
 # fake fcurve class, used if no fcurve is found for a path
 class fake_fcurve():
-	def __init__(self, object: Object | PoseBone, index, rotation=False, scale=False):
+	def __init__(self, object, index, rotation=False, scale=False):
 		# location
 		if not rotation and not scale:
 			self.loc = object.location[index]
@@ -261,10 +267,8 @@ class fake_fcurve():
 
 
 class MatrixCache():
-	__mats: dict[(float, Object | PoseBone), (Matrix, Vector, Quaternion, Vector)]
-	getter: Callable[[float, Object | PoseBone, Context], Matrix]
 
-	def __init__(self, _getter: Callable[[float, Object | PoseBone, Context], Matrix]):
+	def __init__(self, _getter):
 		self.__mats = {}
 		self.getter = _getter
 
@@ -365,7 +369,7 @@ class FloatMap():
 		return str(self.__kvps)
 		
 
-def get_curves_action(obj: Object | PoseBone, action: Action) -> List[List[FCurve]]:
+def get_curves_action(obj, action: Action) -> List[List[FCurve]]:
 	""" Get f-curves for [[loc], [rot], [scale]] from an Object or PoseBone and an associated action. Rotation fcurves may be 4 if quaternion is used."""
 	locpath = obj.path_from_id("location")
 	rotpath = ""
@@ -397,7 +401,7 @@ def get_curves_action(obj: Object | PoseBone, action: Action) -> List[List[FCurv
 	
 	return curves
 
-def get_curves(obj: Object | PoseBone):
+def get_curves(obj):
 	"""Get f-curves for [[loc], [rot], [scale]] from an Object or PoseBone and its default action. Rotation fcurves may be 4 if quaternion is used. Returns [] if no action."""
 	animDataContainer = obj
 	if type(obj) is PoseBone:
@@ -447,7 +451,7 @@ def world_to_screen(context, vector):
 	return(x, y)
 
 
-def get_matrix_frame(obj: Object | PoseBone, frame, action):
+def get_matrix_frame(obj, frame, action):
 	""" Get a LocRotScale matrix assembled from the respective f-curves for a given frame, for the object or posebone and the given action."""
 
 	curves = get_curves_action(obj, action)
@@ -459,7 +463,7 @@ def get_matrix_frame(obj: Object | PoseBone, frame, action):
 		rot = Euler([c.evaluate(frame) for c in curves[1]])
 	scale = Vector([c.evaluate(frame) for c in curves[2]])
 	
-	return Matrix.LocRotScale(loc, rot, scale)
+	return locrotscale(loc, rot, scale)
 	
 # Get the world-ish matrix for an object, factoring in its parents recursively, if any
 def get_matrix_obj_parents(obj, frame, do_anim=True):
@@ -512,7 +516,7 @@ def get_matrix_bone_parents(pose_bone, frame, do_anim = True):
 	get_matrix_bone_parents_as(pose_bone, frame, do_anim)
 
 # Get the world-ish matrix of a bone or object
-def get_matrix_any_custom_eval(frame: float, thing: Object | PoseBone, do_anim = True) -> Matrix:
+def get_matrix_any_custom_eval(frame: float, thing, do_anim = True) -> Matrix:
 	if type(thing) is PoseBone:
 		return get_matrix_bone_parents(thing, frame, do_anim)
 	return get_matrix_obj_parents(thing, frame, do_anim)
@@ -544,7 +548,7 @@ def evaluate_childof(constraint, frame):
 			for i in range(6, 9):
 				if not bools[i]:
 					disassembledScl[i-6] = zeros[i]
-			mat = Matrix.LocRotScale(disassembledLoc, disassembledRot, disassembledScl)
+			mat = locrotscale(disassembledLoc, disassembledRot, disassembledScl)
 	
 	except Exception as e:
 		print(e)
@@ -569,7 +573,7 @@ def evaluate_constraints(mat, constraints, frame, ob):
 		accumulatedMat = accumulatedMat @ constraintMat
 	return accumulatedMat @ mat
 
-def get_matrix_any_depsgraph(frame: float, target: Object | PoseBone, context: Context) -> Matrix:
+def get_matrix_any_depsgraph(frame: float, target, context: Context) -> Matrix:
 	oldframe = context.scene.frame_float
 	context.scene.frame_float = frame
 
@@ -1470,8 +1474,6 @@ def drag(self, context: Context, event):
 	
 	ob, frame, extra, ori_chans = self.getactive()
 	inverse_mat: Matrix = self.cache_inverse.get_matrix(frame, ob, context)
-	#decomposed = inverse_mat.decompose()
-	#inverse_mat = Matrix.LocRotScale(decomposed[0], decomposed[1], Vector((1.0, 1.0, 1.0)))
 		
 	mouse_ori_world = inverse_mat @ screen_to_world(context, self.drag_mouse_ori)
 	transformed_diff = inverse_mat @ screen_to_world(context, self.drag_mouse_accumulate + self.drag_mouse_ori)
@@ -2712,9 +2714,6 @@ class MotionTrailPanel(bpy.types.Panel):
 			col.operator("view3d.motion_trail_save_defaults")
 			#col.operator("view3d.motion_trail_save_userpref")
 
-DESELECT_WARNING = "Deselection will happen before your click registers to the rest of Blender.\n" +\
-	"This can prevent you from changing the handle type if it's set to left click"
-
 class MotionTrailProps(bpy.types.PropertyGroup):
 	def internal_update(self, context):
 		context.window_manager.motion_trail.force_update = True
@@ -2984,7 +2983,7 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			)
 	deselect_nohit_key: EnumProperty(name="Deselect miss key",
 			description="When your mouse is not over a selectable thing, " +\
-				"pressing this key will deselect.\n" + DESELECT_WARNING,
+				"pressing this key will deselect.\n",
 			items=(
 			("LEFTMOUSE", "Left Mouse Button", ""),
 			("RIGHTMOUSE", "Right Mouse Button", ""),
@@ -2992,7 +2991,7 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			default='RIGHTMOUSE'
 			)
 	deselect_always_key: EnumProperty(name="Deselect always key",
-			description="Pressing this key will always deselect.\n" + DESELECT_WARNING,
+			description="Pressing this key will always deselect.\n",
 			items=(
 			("LEFTMOUSE", "Left Mouse Button", ""),
 			("RIGHTMOUSE", "Right Mouse Button", ""),
@@ -3390,18 +3389,17 @@ class MotionTrailPreferences(bpy.types.AddonPreferences):
 
 		# !! Deletable code part 2
 		col.operator("info.motion_trail_check_update")
+		col.row().label(text="Please update your Blender.")
 		if mt.version_checked[0] or mt.version_checked[1]:
 			if mt.version_checked[0]:
 				col.row().label(text="Current master version: {}.{}.{}".format(*mt.master_version))
-				if compare_ver(bl_info["version"], mt.master_version):
-					col.row().label(text="Please update!")
 			if mt.version_checked[1]:
 				col.row().label(text="Current experimental version: {}.{}.{}".format(*mt.experimental_version))
 		else:
 			col.row().label(text="Version not checked yet...")
 		#end of deletable code
 
-		col.label(text=DESELECT_WARNING)
+		col.label(text="If the motion trail did not refresh when you inserted a new keyframe or otherwise, toggle it off then back on.")
 		col.label(text="Default values for all settings:")
 		col.label(text="")
 		for p in configurable_props:

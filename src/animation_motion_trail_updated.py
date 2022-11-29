@@ -3076,7 +3076,7 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			default=False,
 			update=internal_update
 			)
-	handle_display: BoolProperty(name="Display",
+	handle_display: BoolProperty(name="Handle Display",
 			description="Display keyframe handles",
 			default=True,
 			update=internal_update
@@ -3671,19 +3671,20 @@ def compare_ver(tup1, tup2):
 configurable_props = ["use_depsgraph", "allow_negative_scale", #"allow_negative_handle_scale",
 ["do_location", "do_rotation", "do_scale"], "retime_old_y", "report_unfull", "report_unfull_size", "report_unfull_side",
 "select_key", "select_threshold", "deselect_nohit_key", "deselect_always_key", "deselect_passthrough", "mode", 
-"path_style", "simple_color", "speed_color_min", "speed_color_max", "accel_color_neg", "accel_color_static", "accel_color_pos",
+"path_style", "simple_color", ["speed_color_min", "speed_color_max"], ["accel_color_neg", "accel_color_static", "accel_color_pos"],
 "keyframe_color", "selection_color", "selection_color_dark", 
 "highlight_color", "highlight_size", "highlight_do_outline",
 ["point_color_loc", "point_color_rot", "point_color_scl"], "point_outline_size", "point_outline_blur",
 "keyframe_size", "frame_size", "frame_color",
-"handle_color_fac", "handle_line_color", "handle_size", 
+"handle_color_fac",
 "timebead_size", "timebead_color", 
-["sensitivity_location", "sensitivity_rotation", "sensitivity_scale"], "sensitivity_shift", "sensitivity_alt",
-"text_color", "selected_text_color", "keyframe_text_size", "keyframe_text_offset_x", "keyframe_text_offset_y",
-"path_width", "path_outline_width", "path_step", "path_before", "path_after", "pretty_lines",
-"keyframe_numbers", "frame_display", 
-"handle_display", "handle_length", "handle_size", "handle_direction", 
-"show_spines", "spine_length", "spine_step", "spine_offset",
+["sensitivity_location", "sensitivity_rotation", "sensitivity_scale"], ["sensitivity_shift", "sensitivity_alt"],
+"keyframe_numbers", ["text_color", "selected_text_color"], "keyframe_text_size", 
+["keyframe_text_offset_x", "keyframe_text_offset_y"],
+["path_width", "path_outline_width"], ["path_step", "path_step_drag"], ["path_before", "path_after"], "pretty_lines",
+"frame_display", 
+"handle_display", ["handle_length", "handle_size"], "handle_direction", "handle_line_color",
+"show_spines", ["spine_do_rotation", "spine_do_scale"], "spine_length", "spine_step", "spine_offset",
 ["pXspines", "pYspines", "pZspines"], ["nXspines", "nYspines", "nZspines"], ["spine_x_color", "spine_y_color", "spine_z_color"]]
 			
 class MotionTrailPreferences(bpy.types.AddonPreferences):

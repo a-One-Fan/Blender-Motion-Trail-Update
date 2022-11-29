@@ -1787,12 +1787,14 @@ def drag(self, context: Context, event):
 					newh1, newh2 = bezier_scale_by_time(Vector(kf_prev.co), Vector(kf_next.co), prev_ori_kf[2], next_ori_kf[1], frame, d_1d)
 				else:
 					newh1, newh2 = bezier_shift_by_fac(Vector(kf_prev.co), Vector(kf_next.co), prev_ori_kf[2], next_ori_kf[1], frame, d_sens[fcurvi])
+
+				newh1.x = clamp(kf_prev.co[0], kf_next.co[0], newh1.x)
+				newh2.x = clamp(kf_prev.co[0], kf_next.co[0], newh2.x)
 				dif1 = newh1 - prev_ori_kf[2]
 				dif2 = newh2 - next_ori_kf[1]
 				update_this_handle(kf_prev, True, dif1, prev_ori_kf)
 				update_this_handle(kf_next, False, dif2, next_ori_kf)
-				print(d_1d)
-				#all_curves[chan][fcurvi].update()
+				all_curves[chan][fcurvi].update()
 
 			return
 

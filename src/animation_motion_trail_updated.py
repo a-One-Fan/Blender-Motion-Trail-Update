@@ -3657,15 +3657,6 @@ class MotionTrailCheckUpdate(bpy.types.Operator):
 
 		return {'FINISHED'}
 
-# returns tup1 < tup2
-def compare_ver(tup1, tup2):
-	for i in range(len(tup1)):
-		if tup1[i]<tup2[i]:
-			return True
-		if tup1[i]>tup2[i]:
-			return False
-	return False
-
 # == END of deleteable code ==
 			
 configurable_props = ["use_depsgraph", "allow_negative_scale", #"allow_negative_handle_scale",
@@ -3703,7 +3694,7 @@ class MotionTrailPreferences(bpy.types.AddonPreferences):
 		if mt.version_checked[0] or mt.version_checked[1]:
 			if mt.version_checked[0]:
 				col.row().label(text="Current master version: {}.{}.{}".format(*mt.master_version))
-				if compare_ver(bl_info["version"], mt.master_version):
+				if bl_info["version"] < tuple(mt.master_version):
 					col.row().label(text="Please update!")
 			if mt.version_checked[1]:
 				col.row().label(text="Current experimental version: {}.{}.{}".format(*mt.experimental_version))

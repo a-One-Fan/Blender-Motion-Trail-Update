@@ -1392,19 +1392,35 @@ def draw_callback(self, context):
 
 	# draw frames
 	if mt.frame_display:
-		for ob, path in self.paths.items():
-			for x, y, color, frame in path:
-				if frame < limit_min or frame > limit_max:
+		if self.drag and self.active_frame and mt.frame_hide_drag:
+			for ob, path in self.paths.items():
+				if ob != self.active_frame[0]:
 					continue
+				for x, y, color, frame in path:
+					if frame < limit_min or frame > limit_max or \
+						ob != self.active_frame[0]:
+						continue
 
-				point_poss.append((x, y))
-				if self.active_frame and ob == self.active_frame[0] \
-				and abs(frame - self.active_frame[1]) < 1e-4:
-					point_cols.append(mt.selection_color)
-				else:
-					point_cols.append(mt.frame_color)
-				point_rads.append(mt.frame_size)
-				point_flags.append(True)
+					if abs(frame - self.active_frame[1]) < 1e-4:
+						point_poss.append((x, y))
+						point_cols.append(mt.selection_color)
+						point_rads.append(mt.frame_size)
+						point_flags.append(True)
+						break
+		else:
+			for ob, path in self.paths.items():
+				for x, y, color, frame in path:
+					if frame < limit_min or frame > limit_max:
+						continue
+					
+					point_poss.append((x, y))
+					if self.active_frame and ob == self.active_frame[0] \
+					and abs(frame - self.active_frame[1]) < 1e-4:
+						point_cols.append(mt.selection_color)
+					else:
+						point_cols.append(mt.frame_color)
+					point_rads.append(mt.frame_size)
+					point_flags.append(True)
 
 	# time beads are shown in timing mode
 	if mt.mode == 'timing':
@@ -2873,6 +2889,7 @@ class MotionTrailPanel(bpy.types.Panel):
 			if mt.frame_display:
 				col.row().prop(mt, "frame_color")
 				col.row().prop(mt, "frame_size")
+				col.row().prop(mt, "frame_hide_drag")
 
 			# Spines
 			col.row().prop(mt, "show_spines")
@@ -3075,6 +3092,10 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			description="Display individual frames as manipulateable dots.\nClick and drag on one to make a new keyframe",
 			default=False,
 			update=internal_update
+			)
+	frame_hide_drag: BoolProperty(name="Hide frames during frame drag",
+			description="While dragging a frame, display all but the selected frame,\nto make visualizing speed or acceleration easier",
+			default=True
 			)
 	handle_display: BoolProperty(name="Handle Display",
 			description="Display keyframe handles",
@@ -3666,7 +3687,7 @@ configurable_props = ["use_depsgraph", "allow_negative_scale", #"allow_negative_
 "keyframe_color", "selection_color", "selection_color_dark", 
 "highlight_color", "highlight_size", "highlight_do_outline",
 ["point_color_loc", "point_color_rot", "point_color_scl"], "point_outline_size", "point_outline_blur",
-"keyframe_size", "frame_size", "frame_color",
+"keyframe_size", "frame_size", "frame_color", "frmae_hide_drag",
 "handle_color_fac",
 "timebead_size", "timebead_color", 
 ["sensitivity_location", "sensitivity_rotation", "sensitivity_scale"], ["sensitivity_shift", "sensitivity_alt"],

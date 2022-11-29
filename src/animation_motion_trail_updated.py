@@ -28,7 +28,6 @@ bl_info = {
 	"category": "Animation",
 }
 
-from typing import List
 import gpu
 from gpu_extras.batch import batch_for_shader
 import blf
@@ -365,7 +364,7 @@ class FloatMap():
 		return str(self.__kvps)
 		
 
-def get_curves_action(obj: Object | PoseBone, action: Action) -> List[List[FCurve]]:
+def get_curves_action(obj: Object | PoseBone, action: Action) -> list[list[FCurve]]:
 	""" Get f-curves for [[loc], [rot], [scale]] from an Object or PoseBone and an associated action. Rotation fcurves may be 4 if quaternion is used."""
 	locpath = obj.path_from_id("location")
 	rotpath = ""

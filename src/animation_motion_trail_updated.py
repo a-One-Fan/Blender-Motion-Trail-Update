@@ -3689,7 +3689,7 @@ configurable_props = ["use_depsgraph", "allow_negative_scale", #"allow_negative_
 "keyframe_color", "selection_color", "selection_color_dark", 
 "highlight_color", "highlight_size", "highlight_do_outline",
 ["point_color_loc", "point_color_rot", "point_color_scl"], "point_outline_size", "point_outline_blur",
-"keyframe_size", "frame_size", "frame_color", "frmae_hide_drag",
+"keyframe_size", "frame_size", "frame_color", "frame_hide_drag",
 "handle_color_fac",
 "timebead_size", "timebead_color", 
 ["sensitivity_location", "sensitivity_rotation", "sensitivity_scale"], ["sensitivity_shift", "sensitivity_alt"],

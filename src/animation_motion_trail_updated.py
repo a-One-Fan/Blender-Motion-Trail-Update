@@ -53,6 +53,10 @@ from collections.abc import Callable
 from bpy.types import Object, PoseBone, Context, Action, FCurve, Keyframe
 from mathutils import Matrix, Vector, Quaternion, Euler
 
+
+IS_BLENDER_4 = bpy.app.version > (3, 7, 0)
+POLYLINE_STR = 'POLYLINE_SMOOTH_COLOR' if IS_BLENDER_4 else '3D_POLYLINE_SMOOTH_COLOR'
+
 # Linear interpolation for 4-element tuples
 def lerp4(fac, tup1, tup2):
 	return (* [tup1[i] * fac + tup2[i]*(1.0-fac) for i in range(4)],)
@@ -1526,7 +1530,7 @@ def draw_callback(self, context):
 		batch = batch_for_shader(tri_line_shader, 'TRIS', {"pos": for_shader[0], "color": for_shader[1], "wmo": for_shader[2]})
 		batch.draw(tri_line_shader)
 	else:
-		colored_line_shader: gpu.types.GPUShader = gpu.shader.from_builtin('3D_POLYLINE_SMOOTH_COLOR')
+		colored_line_shader: gpu.types.GPUShader = gpu.shader.from_builtin(POLYLINE_STR)
 		if mt.path_outline_width > 0.0:
 			colored_line_shader.bind()
 			colored_line_shader.uniform_float("lineWidth", mt.path_width + mt.path_outline_width * 2.0)
@@ -1547,7 +1551,8 @@ def draw_callback(self, context):
 
 	# draw keyframe-numbers
 	if mt.keyframe_numbers:
-		blf.size(0, mt.keyframe_text_size, 72)
+
+		blf.size(0, mt.keyframe_text_size)
 		blf.color(0, 1.0, 1.0, 0.0, 1.0)
 		for ob, values in self.keyframes.items():
 			for frame, [coords, channels]  in values.items():
@@ -1586,12 +1591,12 @@ def draw_callback(self, context):
 		ob, frame, thing, chans = self.getactive()
 
 		#TODO: less hardcoded text positions?
-		blf.size(0, 12, 130)
+		blf.size(0, 21)
 		blf.position(0, 10, 40, 0)
 		blf.color(0, *mt.text_color)
 		blf.draw(0, "Constraints: ")
 
-		blf.size(0, 12, 170)
+		blf.size(0, 28)
 		for i in range(3):
 			blf.position(0, 150 + i*30, 40, 0)
 			blf.color(0, *constraint_colors[i][self.constraint_axes[i]])
@@ -1599,12 +1604,12 @@ def draw_callback(self, context):
 
 		if self.constraint_axes[0] or self.constraint_axes[1] or self.constraint_axes[2]:
 			blf.color(0, 0.0, 0.0, 0.0, 1.0)
-			blf.size(0, 12, 100)
+			blf.size(0, 16.6)
 			blf.position(0, 250, 40, 0)
 			blf.draw(0, orient_texts[self.constraint_orientation])
 
 		if sum(chans) > 1:
-			blf.size(0, 12, 130)
+			blf.size(0, 21)
 			blf.position(0, 10, 80, 0)
 			blf.color(0, *mt.text_color)
 			blf.draw(0, "Working on: ")

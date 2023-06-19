@@ -678,7 +678,7 @@ def merge_dicts(dict_list):
 
 	return final_dict
 
-def bezier_time_by_x(p1: Vector, p2: Vector, h1: Vector, h2: Vector, px: float):
+def bezier_time_by_x(p1: Vector, p2: Vector, h1: Vector, h2: Vector, px: float) -> float:
 	"""Returns the earliest time on a bezier curve a point with x = px"""
 	# p = (p1 * (1.0-fac) + h1*fac)*(1.0-fac) + fac*(p2 * fac + h2*(1.0-fac))
 	# p = p1*(1.0-fac)^2 + h1*fac - h1*fac^2 + p2*fac^2 + h2*fac - h2*fac^2
@@ -705,6 +705,8 @@ def bezier_time_by_x(p1: Vector, p2: Vector, h1: Vector, h2: Vector, px: float):
 	if nbounded and not pbounded:
 		return facn
 	
+	return 0
+	
 def bezier(p1, p2, h1, h2, fac):
 	hp1 = lerp(p1, h1, fac)
 	hp2 = lerp(h2, p2, fac)
@@ -720,44 +722,20 @@ def bezier_shift_by_fac(p1: Vector, p2: Vector, h1: Vector, h2: Vector, px: floa
 	# r/s = h1 + h2
 	# Choose an h1 and get h2 from it...
 	# h2 = rs - h1
+	#
 	
 	fac = bezier_time_by_x(p1, p2, h1, h2, px)
-	p = bezier(p1, p2, h1, h2, fac)
-	_p = Vector((p.x, p.y+ydiff))
-	r = -_p + p1 - p1 * (2.0*fac) + p1*(fac*fac) + p2*(fac*fac)
+	p: Vector = bezier(p1, p2, h1, h2, fac)
+	_p = p.y + ydiff
+	r = -_p + p1.y - p1.y * (2.0*fac) + p1.y*(fac*fac) + p2.y*(fac*fac)
 	r = -r
 	s = fac - fac*fac
 	rs = r / s
 
-	# This needs to be deterministic to not jitter while dragging
-	newh1 = h1 + Vector((ydiff, 0.0))
-	newh2 = rs - newh1
-	shrinki = -subsamples
-
-	for i in range(samples): # TODO: better minimizing function? Though this is good enough
-		dif1 = newh1 - h1
-		dif2 = newh2 - h2
-		shrink_fac = (1.0/subsamples) * (subsamples-shrinki-1)
-		dif1len = dif1.length_squared
-		dif2len = dif2.length_squared
-
-		if dif1len > dif2len:
-			shrunk_dif = dif1 * shrink_fac
-			newnewh1 = h1 + shrunk_dif
-			newnewh2 = rs - newnewh1
-		else:
-			shrunk_dif = dif2 * shrink_fac
-			newnewh2 = h2 + shrunk_dif
-			newnewh1 = rs - newnewh2
-
-		newdif1 = newnewh1 - h1
-		newdif2 = newnewh2 - h2
-		if max(newdif1.length_squared, newdif2.length_squared) > max(dif1len, dif2len):
-			shrinki += 1
-		else:
-			shrinki = -subsamples
-			newh1 = newnewh1
-			newh2 = newnewh2
+	newh1y = h1.y + ydiff * (maprange(p1.x, p2.x, 0, 1, px))
+	newh2y = rs - newh1y
+	newh1 = Vector((h1.x, newh1y))
+	newh2 = Vector((h2.x, newh2y))
 
 	return (newh1, newh2)
 

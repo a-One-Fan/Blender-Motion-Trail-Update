@@ -457,7 +457,8 @@ def get_matrix_frame(obj: Object | PoseBone, frame, action):
 	
 	loc = Vector([c.evaluate(frame) for c in curves[0]])
 	if obj.rotation_mode == 'QUATERNION':
-		rot = Quaternion([c.evaluate(frame) for c in curves[1]])
+		rot = Quaternion([c.evaluate(frame) for c in curves[1]]).to_euler()
+		# !!! to_euler is needed to work around a bug with mathutils where using quaternions directly in Matrix.LocRotScale gives an incorrect result
 	else:
 		rot = Euler([c.evaluate(frame) for c in curves[1]])
 	scale = Vector([c.evaluate(frame) for c in curves[2]])

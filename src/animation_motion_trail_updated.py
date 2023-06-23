@@ -558,7 +558,37 @@ def evaluate_childof(constraint, frame):
 	finally:
 		return mat
 			
-constraint_funcs = {'CHILD_OF': evaluate_childof}
+def evaluate_armature(constraint, frame):
+	mat = Matrix()
+	try:
+		bones = []
+		weightSum = 0.0
+		for i in range(len(constraint.targets)):
+			tgt = constraint.targets[i]
+			if tgt.target is None or tgt.subtarget is None:
+				return mat
+			else:
+				bones.append([tgt.target, tgt.subtarget, tgt.weight])
+				weightSum += tgt.weight
+
+		if weightSum == 0.0:
+			return mat
+
+		for i in range(len(bones)):
+			bones[i][2] = bones[i][2] / weightSum
+		
+		for i in range(len(bones)):
+			mat = mat @ get_matrix_bone_parents_as(bones[i][0].pose.bones[bones[i][1]], frame) @ bones[i][0].pose.bones[bones[i][1]].bone.matrix_local.inverted()
+
+	except Exception as e:
+		print(e)
+		tb = sys.exc_info()[-1]
+		print(traceback.extract_tb(tb))
+	
+	finally:
+		return mat
+
+constraint_funcs = {'CHILD_OF': evaluate_childof, 'ARMATURE': evaluate_armature}
 
 # Get matrices from all constraints?
 def evaluate_constraints(mat, constraints, frame, ob):

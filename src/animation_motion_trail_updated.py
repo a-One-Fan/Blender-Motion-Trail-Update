@@ -590,6 +590,14 @@ def evaluate_armature(constraint, frame):
 
 constraint_funcs = {'CHILD_OF': evaluate_childof, 'ARMATURE': evaluate_armature}
 
+def better_matrix_lerp(m1, m2, fac):
+	resmat = Matrix()
+	for i in range(4):
+		for j in range(4):
+			resmat[i][j] = m1[i][j]*(1.0-fac) + m2[i][j]*fac
+	
+	return resmat
+
 # Get matrices from all constraints?
 def evaluate_constraints(mat, constraints, frame, ob):
 	accumulatedMat = Matrix()
@@ -599,7 +607,7 @@ def evaluate_constraints(mat, constraints, frame, ob):
 			continue
 		constraintMat = f(c, frame)
 		if c.influence != 1.0:
-			constraintMat = constraintMat.lerp(Matrix(), 1.0-c.influence)
+			constraintMat = better_matrix_lerp(Matrix(), constraintMat, c.influence)
 		accumulatedMat = accumulatedMat @ constraintMat
 	return accumulatedMat @ mat
 

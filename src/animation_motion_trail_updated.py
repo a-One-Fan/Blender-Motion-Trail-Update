@@ -495,16 +495,21 @@ def get_matrix_bone_parents_as(pose_bone, frame, do_anim = True):
 	else:
 		animMat = Matrix()
 		
-	parentMat = None
-	parentOffsetMat = None
+
+	# NOTE: This code is not correct to how Blender functions.
+	# TODO: Make it be correct?
+
+	parentMat = Matrix()
+	yoffs = Matrix
 	if pose_bone.parent:
 		parentMat = get_matrix_bone_parents_as(pose_bone.parent, frame)
-		parentOffsetMat = pose_bone.parent.bone.matrix_local.inverted() @ pose_bone.bone.matrix_local
-	else:
-		parentMat = Matrix()
-		parentOffsetMat = pose_bone.bone.matrix_local
-		
-	res = parentMat @ parentOffsetMat @ animMat
+		offsetMat = pose_bone.parent.bone.matrix_local.inverted() if pose_bone.parent.bone.use_local_location else Matrix()
+
+	if pose_bone.bone.use_local_location:
+		offsetMat = offsetMat @ pose_bone.bone.matrix_local
+	
+	#/* pose_mat(b) = pose_mat(b-1) * yoffs(b-1) * d_root(b) * bone_mat(b) * chan_mat(b) */
+	res = parentMat @ offsetMat @ animMat
 		
 	if pose_bone.constraints:
 		res = evaluate_constraints(res, pose_bone.constraints, frame, pose_bone)
@@ -578,7 +583,7 @@ def evaluate_armature(constraint, frame):
 			bones[i][2] = bones[i][2] / weightSum
 		
 		for i in range(len(bones)):
-			mat = mat @ get_matrix_bone_parents_as(bones[i][0].pose.bones[bones[i][1]], frame) @ bones[i][0].pose.bones[bones[i][1]].bone.matrix_local.inverted()
+			mat = mat @ get_matrix_bone_parents_as(bones[i][0].pose.bones[bones[i][1]], frame)
 
 	except Exception as e:
 		print(e)

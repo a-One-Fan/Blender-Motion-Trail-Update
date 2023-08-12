@@ -20,7 +20,7 @@
 bl_info = {
 	"name": "Motion Trail (update)",
 	"author": "Bart Crouch, Viktor_smg",
-	"version": (1, 2, 0),
+	"version": (1, 2, 1),
 	"blender": (3, 2, 0),
 	"location": "View3D > Toolbar > Motion Trail tab",
 	"warning": "Please keep the depsgraph toggle in mind, and remember to save often.",
@@ -3632,6 +3632,11 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 			description="Whether to draw outlines for the highlight circle",
 			default=False
 			)
+	
+	panel_name: StringProperty(name="Panel name",
+			description="Name for the panel the Motion Trail settings will be in.\nF3 > Reload scripts, or restart Blender for this to take effect",
+			default="Animation"
+			)
 
 	# !! From here on till the end, this code is structured to be easily deletable; Look for another chunk of deletable code shortly below!
 
@@ -3726,7 +3731,8 @@ configurable_props = ["use_depsgraph", "allow_negative_scale", #"allow_negative_
 "frame_display", 
 "handle_display", ["handle_length", "handle_size"], "handle_direction", "handle_line_color",
 "show_spines", ["spine_do_rotation", "spine_do_scale"], "spine_length", "spine_step", "spine_offset",
-["pXspines", "pYspines", "pZspines"], ["nXspines", "nYspines", "nZspines"], ["spine_x_color", "spine_y_color", "spine_z_color"]]
+["pXspines", "pYspines", "pZspines"], ["nXspines", "nYspines", "nZspines"], ["spine_x_color", "spine_y_color", "spine_z_color"],
+"panel_name"]
 			
 class MotionTrailPreferences(bpy.types.AddonPreferences):
 	bl_idname = __name__
@@ -3765,7 +3771,6 @@ class MotionTrailPreferences(bpy.types.AddonPreferences):
 classes = (
 		MotionTrailProps,
 		MotionTrailOperator,
-		MotionTrailPanel,
 		MotionTrailPreferences,
 		MotionTrailLoadDefaults,
 		MotionTrailSaveDefaults,
@@ -3773,6 +3778,7 @@ classes = (
 		MotionTrailCheckUpdate,
 		)
 
+# Register panel manually to allow renaming it
 
 def register():
 	for cls in classes:
@@ -3781,7 +3787,10 @@ def register():
 	bpy.types.WindowManager.motion_trail = PointerProperty(
 												type=MotionTrailProps
 												)
+	
+	MotionTrailPanel.bl_category = bpy.context.preferences.addons[__name__].preferences.default_trail_settings.panel_name
 
+	bpy.utils.register_class(MotionTrailPanel)
 
 def unregister():
 	MotionTrailOperator.handle_remove()

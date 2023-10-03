@@ -2507,7 +2507,11 @@ class MotionTrailOperator(bpy.types.Operator):
 
 			if not mouse_in_region(event, context): return {'PASS_THROUGH'}
 
-			if (event.type in self.transform_keys and event.value == 'PRESS' and self.getactive()):
+			# Prevent not saving during the modal
+			if event.ctrl and event.type=="S":
+				no_passthrough = False
+
+			elif (event.type in self.transform_keys and event.value == 'PRESS' and self.getactive()):
 				self.op_type = findlist(event.type, self.transform_keys)
 				self.chosen_channel = 0
 				context.window.cursor_set('SCROLL_XY')

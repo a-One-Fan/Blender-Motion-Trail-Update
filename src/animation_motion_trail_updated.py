@@ -2385,6 +2385,9 @@ class MotionTrailOperator(bpy.types.Operator):
 			self.active_timebead = False
 			mt.force_deselect = False
 
+		if is_event_key(event, self.save_kmi):
+			return {'PASS_THROUGH'}
+
 		if is_event_key(event, self.undo_kmi):
 			mt.force_update = True
 			calc_callback(self, context)
@@ -2684,6 +2687,9 @@ class MotionTrailOperator(bpy.types.Operator):
 
 					if kmi.idname == "ed.undo":
 						self.undo_kmi = kmi
+
+					if kmi.idname == "wm.save_mainfile":
+						self.save_kmi = kmi
 
 		self.transform_keys = [translate_key, rotate_key, scale_key]
 

@@ -502,6 +502,7 @@ def get_matrix_bone_parents_as(pose_bone, frame, do_anim = True):
 	# NOTE: This code is not correct to how Blender functions.
 	# TODO: Make it be correct?
 
+	offsetMat = Matrix()
 	parentMat = Matrix()
 	yoffs = Matrix
 	if pose_bone.parent:

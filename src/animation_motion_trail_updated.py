@@ -2675,7 +2675,8 @@ class MotionTrailOperator(bpy.types.Operator):
 		kms: list[bpy.types.KeyMap] = [
 			bpy.context.window_manager.keyconfigs.active.keymaps['3D View'],
 			bpy.context.window_manager.keyconfigs.active.keymaps['Object Mode'],
-			bpy.context.window_manager.keyconfigs.active.keymaps['Screen']
+			bpy.context.window_manager.keyconfigs.active.keymaps['Screen'],
+			bpy.context.window_manager.keyconfigs.active.keymaps['Window'] # Save kmi is here
 			]
 		kmis = []
 		for km in kms:

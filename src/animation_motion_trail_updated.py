@@ -912,12 +912,12 @@ def calc_callback(self, context):
 			if mt.path_before == 0:
 				range_min = scene.frame_start
 			else:
-				range_min = max(scene.frame_start, scene.frame_current - mt.path_before)
+				range_min = max(scene.frame_start if mt.path_limit_scene else float("-inf"), scene.frame_current - mt.path_before)
 
 			if mt.path_after == 0:
 				range_max = scene.frame_end
 			else:
-				range_max = min(scene.frame_end, scene.frame_current + mt.path_after)
+				range_max = min(scene.frame_end if mt.path_limit_scene else float("inf"), scene.frame_current + mt.path_after)
 
 			# get location data of motion path
 			path = []
@@ -2554,7 +2554,7 @@ class MotionTrailOperator(bpy.types.Operator):
 					frame_min = context.scene.frame_start
 				else:
 					frame_min = max(
-								context.scene.frame_start,
+								context.scene.frame_start if mt.path_limit_scene else float("-inf"),
 								context.scene.frame_current -
 								mt.path_before
 								)
@@ -2562,7 +2562,7 @@ class MotionTrailOperator(bpy.types.Operator):
 					frame_max = context.scene.frame_end
 				else:
 					frame_max = min(
-								context.scene.frame_end,
+								context.scene.frame_end if mt.path_limit_scene else float("inf"),
 								context.scene.frame_current +
 								mt.path_after
 								)
@@ -2922,6 +2922,7 @@ class MotionTrailPanel(bpy.types.Panel):
 			row.prop(mt, "path_before")
 			row.prop(mt, "path_after")
 			col = col.column(align=True)
+			col.prop(mt, "path_limit_scene")
 			col.prop(mt, "keyframe_numbers")
 			if mt.keyframe_numbers:
 				text_col_row = col.row(align=True)
@@ -3183,6 +3184,12 @@ class MotionTrailProps(bpy.types.PropertyGroup):
 						"0 = display all",
 			default=50,
 			min=0,
+			update=internal_update
+			)
+	path_limit_scene: BoolProperty(name="Limit to scene frame range",
+			description="Frames outside of the scene frame range will not "
+						"have the motion trail calculated for them",
+			default=True,
 			update=internal_update
 			)
 	path_display: BoolProperty(name="Path options",
@@ -3745,7 +3752,7 @@ configurable_props = ["use_depsgraph", "allow_negative_scale", #"allow_negative_
 ["sensitivity_location", "sensitivity_rotation", "sensitivity_scale"], ["sensitivity_shift", "sensitivity_alt"],
 "keyframe_numbers", ["text_color", "selected_text_color"], "keyframe_text_size", 
 ["keyframe_text_offset_x", "keyframe_text_offset_y"],
-["path_width", "path_outline_width"], ["path_step", "path_step_drag"], ["path_before", "path_after"], "pretty_lines",
+["path_width", "path_outline_width"], ["path_step", "path_step_drag"], ["path_before", "path_after"], "path_limit_scene", "pretty_lines",
 "frame_display", 
 "handle_display", ["handle_length", "handle_size"], "handle_direction", "handle_line_color",
 "show_spines", ["spine_do_rotation", "spine_do_scale"], "spine_length", "spine_step", "spine_offset",

@@ -2222,6 +2222,8 @@ def force_update_callback(self, context):
 	context.window_manager.motion_trail.force_update = True
 
 def is_event_key(event: bpy.types.Event, kmi: bpy.types.KeyMapItem):
+	if event == None or kmi == None:
+		return False
 	if kmi.any:
 		return event.type == kmi.type
 	return event.type == kmi.type and event.shift == kmi.shift and event.alt == kmi.alt and event.ctrl == kmi.ctrl
@@ -2242,6 +2244,11 @@ class MotionTrailOperator(bpy.types.Operator):
 	_handle_update = None
 	_msgbus_owner_kf = None
 	_timer = None
+
+	undo_kmi = None
+	"""Keymap item for the user's undo"""
+	save_kmi = None
+	"""Keymap item for the user's save"""
 
 	drag: bool 
 	"""Whether or not we're dragging"""

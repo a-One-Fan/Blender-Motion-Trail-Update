@@ -256,7 +256,7 @@ class fake_fcurve():
 			self.loc = object.rotation_euler[index]
 		self.keyframe_points = []
 
-	def update():
+	def update(self):
 		return
 
 	def evaluate(self, frame):

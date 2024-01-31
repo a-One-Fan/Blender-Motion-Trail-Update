@@ -20,7 +20,7 @@
 bl_info = {
 	"name": "Motion Trail (update)",
 	"author": "Bart Crouch, Viktor_smg",
-	"version": (1, 2, 4),
+	"version": (1, 2, 5),
 	"blender": (3, 2, 0),
 	"location": "View3D > Toolbar > Motion Trail tab",
 	"warning": "Please keep the depsgraph toggle in mind, and remember to save often.",

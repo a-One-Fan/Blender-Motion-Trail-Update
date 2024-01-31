@@ -2672,13 +2672,7 @@ class MotionTrailOperator(bpy.types.Operator):
 		# get clashing keymap items
 		wm = context.window_manager
 		keyconfig = wm.keyconfigs.active
-		kms: list[bpy.types.KeyMap] = [
-			bpy.context.window_manager.keyconfigs.active.keymaps['3D View'],
-			bpy.context.window_manager.keyconfigs.active.keymaps['Object Mode'],
-			bpy.context.window_manager.keyconfigs.active.keymaps['Screen'],
-			bpy.context.window_manager.keyconfigs.active.keymaps['Window'] # Save kmi is here
-			]
-		kmis = []
+		kms = keyconfig.keymaps
 		for km in kms:
 			kmi: bpy.types.KeyMapItem
 			for kmi in km.keymap_items:

@@ -3800,6 +3800,8 @@ classes = (
 # Register panel manually to allow renaming it
 
 def register():
+	if bpy.app.background:
+		return 
 	for cls in classes:
 		bpy.utils.register_class(cls)
 

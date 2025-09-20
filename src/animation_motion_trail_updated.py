@@ -55,6 +55,8 @@ from mathutils import Matrix, Vector, Quaternion, Euler
 
 
 IS_BLENDER_4 = bpy.app.version > (3, 7, 0)
+IS_BLENDER_VULKAN = bpy.app.version >= (4, 5, 0)
+
 POLYLINE_STR = 'POLYLINE_SMOOTH_COLOR' if IS_BLENDER_4 else '3D_POLYLINE_SMOOTH_COLOR'
 
 # Linear interpolation for 4-element tuples
@@ -1181,7 +1183,7 @@ def calc_callback(self, context):
 		#context.preferences.edit.use_global_undo = global_undo
 
 # TODO: Skip world_to_screen for non-clickable coords?
-point_vertex_shader = """
+point_vertex_shader_pre = """
 uniform mat4 ModelViewProjectionMatrix;
 
 in vec2 pos;
@@ -1193,7 +1195,9 @@ out vec2 _pos;
 out vec4 _color;
 out float _radius;
 flat out int _flags;
+"""
 
+point_vertex_shader = """
 void main()
 {
 	_radius = radius;
@@ -1205,7 +1209,8 @@ void main()
 """
 
 # TODO: Should this code be further optimized?
-point_frag_shader = """
+
+point_frag_shader_pre = """
 //uniform vec2 resolution;
 uniform float outline_radius;
 uniform float outline_blur;
@@ -1217,7 +1222,9 @@ in float _radius;
 flat in int _flags;
 
 out vec4 FragColor;
+"""
 
+point_frag_shader = """
 float maprange(float oldmin, float oldmax, float newmin, float newmax, float val)
 {
 	float fac = (val - oldmin) / (oldmax - oldmin);
@@ -1246,9 +1253,36 @@ void main()
 }
 """
 
-colored_points_shader = gpu.types.GPUShader(point_vertex_shader, point_frag_shader)
+if not IS_BLENDER_VULKAN:
+	colored_points_shader = gpu.types.GPUShader(point_vertex_shader_pre + point_vertex_shader, point_frag_shader_pre + point_frag_shader)
+else:
+	colored_points_info = gpu.types.GPUShaderCreateInfo()
+	colored_points_info.push_constant("MAT4", "ModelViewProjectionMatrix")
+	colored_points_info.push_constant("FLOAT", "outline_radius")
+	colored_points_info.push_constant("FLOAT", "outline_blur")
 
-tri_line_vertex_shader = """
+	colored_points_info.vertex_in(0, "VEC2", "pos")
+	colored_points_info.vertex_in(1, "VEC4", "color")
+	colored_points_info.vertex_in(2, "FLOAT", "radius")
+	colored_points_info.vertex_in(3, "INT", "flags")
+
+	varying_cp = gpu.types.GPUStageInterfaceInfo("varying_cp")
+
+	varying_cp.smooth("VEC2", "_pos")
+	varying_cp.smooth("VEC4", "_color")
+	varying_cp.smooth("FLOAT", "_radius")
+	varying_cp.flat("INT", "_flags")
+
+	colored_points_info.vertex_out(varying_cp)
+
+	colored_points_info.fragment_out(0, "VEC4", "FragColor")
+
+	colored_points_info.vertex_source(point_vertex_shader)
+	colored_points_info.fragment_source(point_frag_shader)
+
+	colored_points_shader = gpu.shader.create_from_info(colored_points_info)
+
+tri_line_vertex_shader_pre = """
 uniform mat4 ModelViewProjectionMatrix;
 
 in vec2 pos;
@@ -1258,7 +1292,9 @@ in vec3 wmo; // Width, max width, outline
 out float width;
 out vec4 _color;
 flat out vec2 maxw_outline;
+"""
 
+tri_line_vertex_shader = """
 void main()
 {
 	_color = color;
@@ -1268,7 +1304,7 @@ void main()
 }
 """
 
-tri_line_fragment_shader = """
+tri_line_fragment_shader_pre = """
 #pragma BLENDER_REQUIRE(gpu_shader_colorspace_lib.glsl)
 
 in float width;
@@ -1278,6 +1314,10 @@ flat in vec2 maxw_outline;
 uniform float blur;
 
 out vec4 FragColor;
+"""
+
+tri_line_fragment_shader = """
+
 
 float maprange(float oldmin, float oldmax, float newmin, float newmax, float val)
 {
@@ -1303,7 +1343,44 @@ void main()
 }
 """
 
-tri_line_shader = gpu.types.GPUShader(tri_line_vertex_shader, tri_line_fragment_shader)
+if not IS_BLENDER_VULKAN:
+	tri_line_shader = gpu.types.GPUShader(tri_line_vertex_shader_pre + tri_line_vertex_shader, tri_line_fragment_shader_pre + tri_line_fragment_shader)
+else:
+	tri_line_info = gpu.types.GPUShaderCreateInfo()
+	tri_line_info.push_constant("MAT4", "ModelViewProjectionMatrix")
+	tri_line_info.push_constant("FLOAT", "blur")
+
+	tri_line_info.vertex_in(0, "VEC2", "pos")
+	tri_line_info.vertex_in(1, "VEC4", "color")
+	tri_line_info.vertex_in(2, "VEC3", "wmo")
+
+	varying_tl = gpu.types.GPUStageInterfaceInfo("varying_tl")
+
+	varying_tl.smooth("FLOAT", "width")
+	varying_tl.smooth("VEC4", "_color")
+	varying_tl.flat("VEC2", "maxw_outline")
+
+	tri_line_info.vertex_out(varying_tl)
+
+	tri_line_info.fragment_out(0, "VEC4", "FragColor")
+
+	# TODO: Docs do not explain how to get blender_srgb_to_framebuffer_space() into the new multibackend GLSL.
+	# However, its code implies it is not necessary.
+	# https://projects.blender.org/blender/blender/src/branch/universal-scene-description/source/blender/gpu/shaders/gpu_shader_colorspace_lib.glsl
+	# This workaround will exist until I figure out if it is or is not necessary to use that function.
+	
+	incomplete_docs_workaround = """
+
+vec4 blender_srgb_to_framebuffer_space(vec4 in_color)
+{
+  return in_color;
+}
+"""
+
+	tri_line_info.vertex_source(tri_line_vertex_shader)
+	tri_line_info.fragment_source(incomplete_docs_workaround + tri_line_fragment_shader)
+
+	tri_line_shader = gpu.shader.create_from_info(tri_line_info)
 
 # TODO: Thickness multiplier that affects everything
 # draw in 3d-view

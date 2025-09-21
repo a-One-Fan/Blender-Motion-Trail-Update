@@ -20,10 +20,12 @@
 bl_info = {
 	"name": "Motion Trail (update)",
 	"author": "Bart Crouch, Viktor_smg",
-	"version": (1, 2, 5),
+	"version": (1, 2, 6),
 	"blender": (3, 2, 0),
 	"location": "View3D > Toolbar > Motion Trail tab",
 	"warning": "Please keep the depsgraph toggle in mind, and remember to save often.",
+	"doc_url": "https://github.com/a-One-Fan/Blender-Motion-Trail-Update/",
+	"tracker_url": "https://blenderartists.org/t/updated-version-of-the-old-motion-trail-addon/1395865",
 	"description": "Display and edit motion trails in the 3D View",
 	"category": "Animation",
 }

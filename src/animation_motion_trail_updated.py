@@ -20,7 +20,7 @@
 bl_info = {
 	"name": "Motion Trail (update)",
 	"author": "Bart Crouch, Viktor_smg",
-	"version": (1, 2, 6),
+	"version": (1, 2, 7),
 	"blender": (3, 2, 0),
 	"location": "View3D > Toolbar > Motion Trail tab",
 	"warning": "Please keep the depsgraph toggle in mind, and remember to save often.",
@@ -57,9 +57,16 @@ from mathutils import Matrix, Vector, Quaternion, Euler
 
 
 IS_BLENDER_4 = bpy.app.version > (3, 7, 0)
+IS_BLENDER_5 = bpy.app.version >= (5, 0, 0)
 IS_BLENDER_VULKAN = bpy.app.version >= (4, 5, 0)
 
 POLYLINE_STR = 'POLYLINE_SMOOTH_COLOR' if IS_BLENDER_4 else '3D_POLYLINE_SMOOTH_COLOR'
+
+def printtb(e: Exception):
+	print(e)
+	print("\n\n\naaa AAA\nAAAAAA\n\n\n")
+	tb = sys.exc_info()[-1]
+	traceback.print_tb(tb)
 
 # Linear interpolation for 4-element tuples
 def lerp4(fac, tup1, tup2):
@@ -269,6 +276,13 @@ class fake_fcurve():
 	def range(self):
 		return([])
 
+def get_fcurves(action):
+	if IS_BLENDER_5:
+		fcurves = action.layers[0].strips[0].channelbag(action.slots[0]).fcurves
+	else:
+		fcurves = action.fcurves
+	
+	return fcurves
 
 class MatrixCache():
 	__mats: dict[(float, Object | PoseBone), (Matrix, Vector, Quaternion, Vector)]
@@ -392,9 +406,10 @@ def get_curves_action(obj: Object | PoseBone, action: Action) -> list[list[FCurv
 	if not quat:
 		rotrange = 3
 	
-	loccurves = [action.fcurves.find(locpath, index=i) for i in range(3)]
-	rotcurves = [action.fcurves.find(rotpath, index=i) for i in range(rotrange)]
-	sclcurves = [action.fcurves.find(sclpath, index=i) for i in range(3)]
+	fcurves = get_fcurves(action)
+	loccurves = [fcurves.find(locpath, index=i) for i in range(3)]
+	rotcurves = [fcurves.find(rotpath, index=i) for i in range(rotrange)]
+	sclcurves = [fcurves.find(sclpath, index=i) for i in range(3)]
 
 	curves = [loccurves, rotcurves, sclcurves]
 	curves_fakes = [(False, False), (obj.rotation_mode, False), (False, True)]
@@ -564,9 +579,7 @@ def evaluate_childof(constraint, frame):
 			mat = Matrix.LocRotScale(disassembledLoc, disassembledRot, disassembledScl)
 	
 	except Exception as e:
-		print(e)
-		tb = sys.exc_info()[-1]
-		print(traceback.extract_tb(tb))
+		printtb(e)
 	
 	finally:
 		return mat
@@ -594,9 +607,7 @@ def evaluate_armature(constraint, frame):
 			mat = mat @ get_matrix_bone_parents_as(bones[i][0].pose.bones[bones[i][1]], frame)
 
 	except Exception as e:
-		print(e)
-		tb = sys.exc_info()[-1]
-		print(traceback.extract_tb(tb))
+		printtb(e)
 	
 	finally:
 		return mat
@@ -1178,9 +1189,7 @@ def calc_callback(self, context):
 		#context.preferences.edit.use_global_undo = global_undo
 
 	except Exception as e:
-		print(e)
-		tb = sys.exc_info()[-1]
-		print(traceback.extract_tb(tb))
+		printtb(e)
 		# restore global undo in case of failure (see T52524)
 		#context.preferences.edit.use_global_undo = global_undo
 
@@ -2224,7 +2233,8 @@ def insert_keyframe(frame: float, ob: Object, chans: list[bool]):
 					data_path = "rotation_quaternion"
 				else:
 					data_path = new_fcurve_paths[chan]
-				c = ob.animation_data.action.fcurves.new(data_path, index=fcurvi)
+				fcurves = get_fcurves(ob.animation_data.action)
+				c = fcurves.new(data_path, index=fcurvi)
 			
 			c.keyframe_points.insert(frame, y)
 
